@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+*/node_modules
+.env
+.env.local
+*.log
+*/logs
+coverage
+.vscode
+.idea
+*.md
+!README.md
+.husky
+.prettierrc
+eslint.config.js

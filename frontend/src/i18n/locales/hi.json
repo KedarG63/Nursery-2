@@ -1,0 +1,60 @@
+{
+  "common": {
+    "appName": "पौध नर्सरी प्रबंधन",
+    "welcome": "स्वागत है",
+    "login": "लॉगिन",
+    "logout": "लॉगआउट",
+    "email": "ईमेल",
+    "password": "पासवर्ड",
+    "submit": "जमा करें",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "view": "देखें",
+    "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "add": "जोड़ें",
+    "create": "बनाएं",
+    "update": "अपडेट करें",
+    "loading": "लोड हो रहा है...",
+    "error": "त्रुटि",
+    "success": "सफलता"
+  },
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "products": "उत्पाद",
+    "skus": "SKU",
+    "inventory": "सूची",
+    "purchases": "खरीद",
+    "orders": "आदेश",
+    "customers": "ग्राहक",
+    "deliveries": "डिलीवरी",
+    "payments": "भुगतान",
+    "reports": "रिपोर्ट"
+  },
+  "auth": {
+    "loginTitle": "साइन इन करें",
+    "loginSubtitle": "अपने खाते तक पहुंचने के लिए अपना विवरण दर्ज करें",
+    "emailRequired": "ईमेल आवश्यक है",
+    "emailInvalid": "अमान्य ईमेल पता",
+    "passwordRequired": "पासवर्ड आवश्यक है",
+    "passwordMinLength": "पासवर्ड कम से कम 8 अक्षर का होना चाहिए",
+    "loginSuccess": "लॉगिन सफल",
+    "loginError": "अमान्य ईमेल या पासवर्ड",
+    "logoutSuccess": "सफलतापूर्वक लॉगआउट"
+  },
+  "dashboard": {
+    "title": "डैशबोर्ड",
+    "ordersToday": "आज के आदेश",
+    "readyLots": "तैयार लॉट",
+    "pendingDeliveries": "लंबित डिलीवरी",
+    "revenueThisMonth": "इस महीने की आय",
+    "recentOrders": "हाल के आदेश",
+    "quickActions": "त्वरित क्रियाएं",
+    "createOrder": "आदेश बनाएं",
+    "addLot": "लॉट जोड़ें",
+    "viewRoutes": "मार्ग देखें",
+    "overduePayments": "अतिदेय भुगतान"
+  }
+}

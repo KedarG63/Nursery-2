@@ -1,0 +1,60 @@
+{
+  "common": {
+    "appName": "Plant Nursery Management",
+    "welcome": "Welcome",
+    "login": "Login",
+    "logout": "Logout",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "search": "Search",
+    "filter": "Filter",
+    "add": "Add",
+    "create": "Create",
+    "update": "Update",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "products": "Products",
+    "skus": "SKUs",
+    "inventory": "Inventory",
+    "purchases": "Purchases",
+    "orders": "Orders",
+    "customers": "Customers",
+    "deliveries": "Deliveries",
+    "payments": "Payments",
+    "reports": "Reports"
+  },
+  "auth": {
+    "loginTitle": "Sign In",
+    "loginSubtitle": "Enter your credentials to access your account",
+    "emailRequired": "Email is required",
+    "emailInvalid": "Invalid email address",
+    "passwordRequired": "Password is required",
+    "passwordMinLength": "Password must be at least 8 characters",
+    "loginSuccess": "Login successful",
+    "loginError": "Invalid email or password",
+    "logoutSuccess": "Logged out successfully"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "ordersToday": "Orders Today",
+    "readyLots": "Ready Lots",
+    "pendingDeliveries": "Pending Deliveries",
+    "revenueThisMonth": "Revenue This Month",
+    "recentOrders": "Recent Orders",
+    "quickActions": "Quick Actions",
+    "createOrder": "Create Order",
+    "addLot": "Add Lot",
+    "viewRoutes": "View Routes",
+    "overduePayments": "Overdue Payments"
+  }
+}

@@ -1,0 +1,17 @@
+# AWS Configuration
+aws_region  = "ap-south-1"
+environment = "staging"
+
+# Database Configuration
+db_username = "postgres"
+db_password = "your-secure-password-here"
+db_name     = "nursery_management"
+
+# EC2 Configuration
+ec2_key_name = "nursery-key"
+
+# SSL Certificate
+ssl_certificate_arn = "arn:aws:acm:ap-south-1:123456789012:certificate/xxx"
+
+# Alerting
+alert_email = "alerts@example.com"
