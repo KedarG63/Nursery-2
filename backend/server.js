@@ -65,7 +65,7 @@ app.use(globalRateLimiter); // Apply global rate limiter to all routes
 // Phase 17: Request logging middleware
 app.use(requestLogger);
 
-// Phase 20: CloudWatch metrics middleware
+// Phase 20: GCP Cloud Monitoring metrics middleware
 const metricsMiddleware = require('./middleware/cloudwatchMetrics');
 app.use(metricsMiddleware);
 
@@ -172,7 +172,7 @@ async function startServer() {
   }
 }
 
-// Phase 20: Graceful shutdown with CloudWatch tracking
+// Phase 20: Graceful shutdown with GCP Monitoring tracking
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received: closing HTTP server');
 

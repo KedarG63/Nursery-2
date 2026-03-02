@@ -147,8 +147,8 @@ async function testPhase17() {
     'REDIS_HOST',
     'REDIS_PORT',
     'LOG_LEVEL',
-    'AWS_REGION',
-    'AWS_S3_BUCKET_NAME'
+    'GCP_PROJECT_ID',
+    'GCP_STORAGE_BUCKET'
   ];
 
   const missingVars = requiredVars.filter(v => !process.env[v]);

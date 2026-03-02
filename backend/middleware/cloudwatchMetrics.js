@@ -2,7 +2,7 @@ const cloudwatch = require('../config/cloudwatch');
 const logger = require('../config/logger');
 
 /**
- * Middleware to track API metrics in CloudWatch
+ * Middleware to track API metrics in GCP Cloud Monitoring
  */
 function metricsMiddleware(req, res, next) {
   const startTime = Date.now();
@@ -12,7 +12,7 @@ function metricsMiddleware(req, res, next) {
     const duration = Date.now() - startTime;
     const endpoint = `${req.method} ${req.route?.path || req.path}`;
 
-    // Send metrics to CloudWatch
+    // Send metrics to GCP Cloud Monitoring
     cloudwatch.trackResponseTime(endpoint, duration, res.statusCode);
 
     // Track errors

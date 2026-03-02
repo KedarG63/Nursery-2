@@ -1,14 +1,10 @@
-const { S3Client } = require('@aws-sdk/client-s3');
+const { Storage } = require('@google-cloud/storage');
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ap-south-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
+const storageClient = new Storage({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: process.env.GCP_KEY_FILE, // omit to use Application Default Credentials
 });
 
-const S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || 'nursery-uploads';
-const S3_REGION = process.env.AWS_REGION || 'ap-south-1';
+const BUCKET_NAME = process.env.GCP_STORAGE_BUCKET || 'nursery-uploads';
 
-module.exports = { s3Client, S3_BUCKET_NAME, S3_REGION };
+module.exports = { storageClient, BUCKET_NAME };

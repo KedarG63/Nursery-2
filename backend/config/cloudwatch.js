@@ -1,34 +1,36 @@
 const logger = require('./logger');
 
-// Conditional CloudWatch import (only in production/staging)
-let CloudWatchClient, PutMetricDataCommand;
-let cloudwatchClient;
+// Conditional GCP Cloud Monitoring import (only in production/staging)
+let MetricServiceClient;
+let monitoringClient;
+
+const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID;
 
 if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
   try {
-    const cloudwatchSDK = require('@aws-sdk/client-cloudwatch');
-    CloudWatchClient = cloudwatchSDK.CloudWatchClient;
-    PutMetricDataCommand = cloudwatchSDK.PutMetricDataCommand;
+    const monitoring = require('@google-cloud/monitoring');
+    MetricServiceClient = monitoring.MetricServiceClient;
 
-    cloudwatchClient = new CloudWatchClient({
-      region: process.env.AWS_REGION || 'ap-south-1'
+    monitoringClient = new MetricServiceClient({
+      projectId: GCP_PROJECT_ID,
+      keyFilename: process.env.GCP_KEY_FILE,
     });
   } catch (error) {
-    logger.warn('CloudWatch SDK not available, metrics will be logged only');
+    logger.warn('GCP Monitoring SDK not available, metrics will be logged only');
   }
 }
 
-const NAMESPACE = 'NurseryManagement';
+const NAMESPACE = 'nursery_management';
 const environment = process.env.NODE_ENV || 'development';
 
-class CloudWatchMetrics {
+class GCPMetrics {
   /**
-   * Send custom metric to CloudWatch
+   * Send custom metric to GCP Cloud Monitoring
    */
   async putMetric(metricName, value, unit = 'Count', dimensions = {}) {
     // In development, just log the metric
     if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'staging') {
-      logger.debug('CloudWatch metric (dev mode)', {
+      logger.debug('GCP metric (dev mode)', {
         metricName,
         value,
         unit,
@@ -37,9 +39,9 @@ class CloudWatchMetrics {
       return;
     }
 
-    // If CloudWatch is not available, just log
-    if (!cloudwatchClient || !PutMetricDataCommand) {
-      logger.debug('CloudWatch metric (SDK not available)', {
+    // If GCP Monitoring is not available, just log
+    if (!monitoringClient || !GCP_PROJECT_ID) {
+      logger.debug('GCP metric (SDK not available)', {
         metricName,
         value,
         unit,
@@ -49,34 +51,38 @@ class CloudWatchMetrics {
     }
 
     try {
-      const params = {
-        Namespace: NAMESPACE,
-        MetricData: [
-          {
-            MetricName: metricName,
-            Value: value,
-            Unit: unit,
-            Timestamp: new Date(),
-            Dimensions: [
-              {
-                Name: 'Environment',
-                Value: environment
-              },
-              ...Object.entries(dimensions).map(([key, val]) => ({
-                Name: key,
-                Value: String(val)
-              }))
-            ]
-          }
-        ]
+      const labels = {
+        environment,
+        ...Object.fromEntries(
+          Object.entries(dimensions).map(([k, v]) => [k, String(v)])
+        ),
       };
 
-      const command = new PutMetricDataCommand(params);
-      await cloudwatchClient.send(command);
+      await monitoringClient.createTimeSeries({
+        name: monitoringClient.projectPath(GCP_PROJECT_ID),
+        timeSeries: [
+          {
+            metric: {
+              type: `custom.googleapis.com/${NAMESPACE}/${metricName}`,
+              labels,
+            },
+            resource: {
+              type: 'global',
+              labels: { project_id: GCP_PROJECT_ID },
+            },
+            points: [
+              {
+                interval: { endTime: { seconds: Math.floor(Date.now() / 1000) } },
+                value: { doubleValue: value },
+              },
+            ],
+          },
+        ],
+      });
 
-      logger.debug('CloudWatch metric sent', { metricName, value });
+      logger.debug('GCP metric sent', { metricName, value });
     } catch (error) {
-      logger.error('Failed to send CloudWatch metric', {
+      logger.error('Failed to send GCP metric', {
         error: error.message,
         metricName,
         value
@@ -167,4 +173,4 @@ class CloudWatchMetrics {
   }
 }
 
-module.exports = new CloudWatchMetrics();
+module.exports = new GCPMetrics();

@@ -6,7 +6,7 @@
  */
 
 const QRCode = require('qrcode');
-const { uploadToS3, isS3Configured } = require('../config/cloudStorage');
+const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage');
 
 /**
  * Generate QR code data for a lot
@@ -65,17 +65,17 @@ const generateQRCode = async (lotData) => {
 
     let qrCodeUrl = null;
 
-    // Upload to S3 if configured
-    if (isS3Configured()) {
+    // Upload to GCP Storage if configured
+    if (isStorageConfigured()) {
       try {
         const fileName = `qr-codes/${lotData.lot_number}.png`;
-        qrCodeUrl = await uploadToS3(qrCodeBuffer, fileName, 'image/png');
+        qrCodeUrl = await uploadToStorage(qrCodeBuffer, fileName, 'image/png');
       } catch (uploadError) {
-        console.error('Failed to upload QR code to S3:', uploadError);
+        console.error('Failed to upload QR code to GCP Storage:', uploadError);
         // Continue without URL if upload fails
       }
     } else {
-      console.warn('S3 not configured. QR code URL will be null.');
+      console.warn('GCP Storage not configured. QR code URL will be null.');
     }
 
     return {

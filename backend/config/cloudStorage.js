@@ -2,108 +2,94 @@
  * Cloud Storage Configuration for QR Code Storage
  * Issue #15: [Inventory] Implement QR code generation for lots
  *
- * Supports AWS S3 for storing QR code images
+ * Supports GCP Cloud Storage for storing QR code images
  */
 
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { Storage } = require('@google-cloud/storage');
 
-// Initialize S3 client
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ap-south-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
+// Initialize GCP Storage client
+const storage = new Storage({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: process.env.GCP_KEY_FILE, // path to service account JSON; omit to use ADC
 });
 
-const AWS_S3_BUCKET = process.env.AWS_S3_BUCKET || 'nursery-qr-codes';
+const GCP_BUCKET = process.env.GCP_STORAGE_BUCKET || 'nursery-qr-codes';
 
 /**
- * Upload file to S3
+ * Upload file to GCP Cloud Storage
  * @param {Buffer} buffer - File buffer
- * @param {string} key - S3 object key (file path)
+ * @param {string} key - Object name (file path within bucket)
  * @param {string} contentType - MIME type
  * @returns {Promise<string>} Public URL of uploaded file
  */
-const uploadToS3 = async (buffer, key, contentType = 'image/png') => {
+const uploadToStorage = async (buffer, key, contentType = 'image/png') => {
   try {
-    const command = new PutObjectCommand({
-      Bucket: AWS_S3_BUCKET,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-      ACL: 'public-read', // Make QR codes publicly accessible
+    const bucket = storage.bucket(GCP_BUCKET);
+    const file = bucket.file(key);
+
+    await file.save(buffer, {
+      contentType,
+      metadata: { cacheControl: 'public, max-age=31536000' },
     });
 
-    await s3Client.send(command);
+    // Make object publicly readable
+    await file.makePublic();
 
-    // Return public URL
-    const publicUrl = `https://${AWS_S3_BUCKET}.s3.${process.env.AWS_REGION || 'ap-south-1'}.amazonaws.com/${key}`;
-    return publicUrl;
+    return `https://storage.googleapis.com/${GCP_BUCKET}/${key}`;
   } catch (error) {
-    console.error('S3 Upload Error:', error);
-    throw new Error(`Failed to upload to S3: ${error.message}`);
+    console.error('GCP Storage Upload Error:', error);
+    throw new Error(`Failed to upload to GCP Storage: ${error.message}`);
   }
 };
 
 /**
- * Get presigned URL for private file download
- * @param {string} key - S3 object key
+ * Get signed URL for private file download
+ * @param {string} key - Object name
  * @param {number} expiresIn - Expiration time in seconds (default: 1 hour)
- * @returns {Promise<string>} Presigned download URL
+ * @returns {Promise<string>} Signed download URL
  */
 const getSignedDownloadUrl = async (key, expiresIn = 3600) => {
   try {
-    const command = new GetObjectCommand({
-      Bucket: AWS_S3_BUCKET,
-      Key: key,
+    const file = storage.bucket(GCP_BUCKET).file(key);
+
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + expiresIn * 1000,
     });
 
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
     return signedUrl;
   } catch (error) {
-    console.error('S3 Signed URL Error:', error);
+    console.error('GCP Storage Signed URL Error:', error);
     throw new Error(`Failed to generate signed URL: ${error.message}`);
   }
 };
 
 /**
- * Delete file from S3
- * @param {string} key - S3 object key
+ * Delete file from GCP Cloud Storage
+ * @param {string} key - Object name
  * @returns {Promise<void>}
  */
-const deleteFromS3 = async (key) => {
+const deleteFromStorage = async (key) => {
   try {
-    const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-    const command = new DeleteObjectCommand({
-      Bucket: AWS_S3_BUCKET,
-      Key: key,
-    });
-
-    await s3Client.send(command);
+    await storage.bucket(GCP_BUCKET).file(key).delete();
   } catch (error) {
-    console.error('S3 Delete Error:', error);
-    throw new Error(`Failed to delete from S3: ${error.message}`);
+    console.error('GCP Storage Delete Error:', error);
+    throw new Error(`Failed to delete from GCP Storage: ${error.message}`);
   }
 };
 
 /**
- * Check if S3 is configured
+ * Check if GCP Storage is configured
  * @returns {boolean}
  */
-const isS3Configured = () => {
-  return !!(
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY &&
-    process.env.AWS_S3_BUCKET
-  );
+const isStorageConfigured = () => {
+  return !!(process.env.GCP_PROJECT_ID && process.env.GCP_STORAGE_BUCKET);
 };
 
 module.exports = {
-  uploadToS3,
+  uploadToStorage,
   getSignedDownloadUrl,
-  deleteFromS3,
-  isS3Configured,
-  s3Client,
+  deleteFromStorage,
+  isStorageConfigured,
+  storageClient: storage,
 };

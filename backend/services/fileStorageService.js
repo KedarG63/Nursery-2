@@ -1,11 +1,9 @@
-const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
-const { s3Client, S3_BUCKET_NAME } = require('../config/aws');
+const { storageClient, BUCKET_NAME } = require('../config/aws');
 
 class FileStorageService {
-  // Upload file to S3 with compression for images
+  // Upload file to GCP Cloud Storage with compression for images
   async uploadFile(file, folder = 'uploads') {
     const fileExtension = file.originalname.split('.').pop();
     const fileName = `${folder}/${uuidv4()}.${fileExtension}`;
@@ -20,39 +18,28 @@ class FileStorageService {
         .toBuffer();
     }
 
-    const command = new PutObjectCommand({
-      Bucket: S3_BUCKET_NAME,
-      Key: fileName,
-      Body: fileBuffer,
-      ContentType: file.mimetype,
-    });
-
-    await s3Client.send(command);
+    const bucket = storageClient.bucket(BUCKET_NAME);
+    await bucket.file(fileName).save(fileBuffer, { contentType: file.mimetype });
 
     return {
       key: fileName,
-      url: `https://${S3_BUCKET_NAME}.s3.amazonaws.com/${fileName}`,
+      url: `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`,
     };
   }
 
   // Generate signed URL for temporary access
   async getSignedUrl(key, expiresIn = 3600) {
-    const command = new GetObjectCommand({
-      Bucket: S3_BUCKET_NAME,
-      Key: key,
+    const file = storageClient.bucket(BUCKET_NAME).file(key);
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + expiresIn * 1000,
     });
-
-    return await getSignedUrl(s3Client, command, { expiresIn });
+    return signedUrl;
   }
 
-  // Delete file from S3
+  // Delete file from GCP Cloud Storage
   async deleteFile(key) {
-    const command = new DeleteObjectCommand({
-      Bucket: S3_BUCKET_NAME,
-      Key: key,
-    });
-
-    await s3Client.send(command);
+    await storageClient.bucket(BUCKET_NAME).file(key).delete();
   }
 }
 
