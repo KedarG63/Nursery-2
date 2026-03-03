@@ -8,6 +8,10 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import CategoryIcon from '@mui/icons-material/Category';
 import LabelIcon from '@mui/icons-material/Label';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import PaymentsIcon from '@mui/icons-material/Payments';
 
 const menuItems = [
   {
@@ -88,6 +92,38 @@ const menuItems = [
     labelKey: 'nav.reports',
     icon: AssessmentIcon,
     path: '/reports',
+    roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'billing-invoices',
+    label: 'Invoices',
+    labelKey: 'nav.invoices',
+    icon: RequestQuoteIcon,
+    path: '/billing/invoices',
+    roles: ['Admin', 'Manager', 'Sales'],
+  },
+  {
+    id: 'billing-vendor-bills',
+    label: 'Vendor Bills',
+    labelKey: 'nav.vendorBills',
+    icon: DescriptionIcon,
+    path: '/billing/vendor-bills',
+    roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'billing-ar-aging',
+    label: 'AR Aging',
+    labelKey: 'nav.arAging',
+    icon: AccountBalanceIcon,
+    path: '/billing/reports/ar-aging',
+    roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'billing-ap-aging',
+    label: 'AP Aging',
+    labelKey: 'nav.apAging',
+    icon: PaymentsIcon,
+    path: '/billing/reports/ap-aging',
     roles: ['Admin', 'Manager'],
   },
 ];

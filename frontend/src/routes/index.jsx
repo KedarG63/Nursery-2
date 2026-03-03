@@ -29,6 +29,13 @@ import RouteManagement from '../pages/Deliveries/RouteManagement';
 import CreateRoute from '../pages/Deliveries/CreateRoute';
 import DriversManagement from '../pages/Deliveries/DriversManagement';
 import LiveTracking from '../pages/Deliveries/LiveTracking';
+import InvoicesList from '../pages/Billing/InvoicesList';
+import InvoiceDetails from '../pages/Billing/InvoiceDetails';
+import CreateInvoice from '../pages/Billing/CreateInvoice';
+import VendorBillsList from '../pages/Billing/VendorBillsList';
+import VendorBillDetails from '../pages/Billing/VendorBillDetails';
+import CustomerAgingReport from '../pages/Billing/CustomerAgingReport';
+import VendorAgingReport from '../pages/Billing/VendorAgingReport';
 
 const AppRoutes = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -94,6 +101,16 @@ const AppRoutes = () => {
         <Route path="deliveries/routes" element={<RouteManagement />} />
         <Route path="deliveries/routes/create" element={<CreateRoute />} />
         <Route path="deliveries/tracking" element={<LiveTracking />} />
+
+        {/* Billing */}
+        <Route path="billing" element={<Navigate to="/billing/invoices" replace />} />
+        <Route path="billing/invoices" element={<InvoicesList />} />
+        <Route path="billing/invoices/create" element={<CreateInvoice />} />
+        <Route path="billing/invoices/:id" element={<InvoiceDetails />} />
+        <Route path="billing/vendor-bills" element={<VendorBillsList />} />
+        <Route path="billing/vendor-bills/:id" element={<VendorBillDetails />} />
+        <Route path="billing/reports/ar-aging" element={<CustomerAgingReport />} />
+        <Route path="billing/reports/ap-aging" element={<VendorAgingReport />} />
       </Route>
 
       {/* Catch all - redirect to home */}

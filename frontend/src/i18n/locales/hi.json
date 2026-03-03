@@ -31,7 +31,11 @@
     "customers": "ग्राहक",
     "deliveries": "डिलीवरी",
     "payments": "भुगतान",
-    "reports": "रिपोर्ट"
+    "reports": "रिपोर्ट",
+    "invoices": "चालान",
+    "vendorBills": "विक्रेता बिल",
+    "arAging": "AR एजिंग",
+    "apAging": "AP एजिंग"
   },
   "auth": {
     "loginTitle": "साइन इन करें",
@@ -43,6 +47,54 @@
     "loginSuccess": "लॉगिन सफल",
     "loginError": "अमान्य ईमेल या पासवर्ड",
     "logoutSuccess": "सफलतापूर्वक लॉगआउट"
+  },
+  "billing": {
+    "title": "बिलिंग",
+    "invoices": "चालान",
+    "vendorBills": "विक्रेता बिल",
+    "arAging": "AR एजिंग रिपोर्ट",
+    "apAging": "AP एजिंग रिपोर्ट",
+    "invoiceNumber": "चालान संख्या",
+    "invoiceDate": "चालान तिथि",
+    "dueDate": "देय तिथि",
+    "status": {
+      "draft": "मसौदा",
+      "issued": "जारी",
+      "partially_paid": "आंशिक भुगतान",
+      "paid": "भुगतान हो गया",
+      "void": "रद्द",
+      "pending": "लंबित",
+      "partial": "आंशिक"
+    },
+    "createInvoice": "चालान बनाएं",
+    "issueInvoice": "चालान जारी करें",
+    "voidInvoice": "चालान रद्द करें",
+    "downloadPDF": "PDF डाउनलोड करें",
+    "applyPayment": "भुगतान लागू करें",
+    "lineItems": "लाइन आइटम",
+    "description": "विवरण",
+    "quantity": "मात्रा",
+    "unitPrice": "इकाई मूल्य",
+    "discount": "छूट",
+    "lineTotal": "लाइन कुल",
+    "taxRate": "कर दर",
+    "taxAmount": "कर राशि",
+    "subtotal": "उप-योग",
+    "totalDiscount": "कुल छूट",
+    "totalTax": "GST",
+    "totalAmount": "कुल राशि",
+    "paidAmount": "भुगतान राशि",
+    "balanceDue": "शेष देय",
+    "termsAndConditions": "नियम और शर्तें",
+    "aging": {
+      "current": "वर्तमान",
+      "days1_30": "1–30 दिन",
+      "days31_60": "31–60 दिन",
+      "days61_90": "61–90 दिन",
+      "over90": "90+ दिन",
+      "totalOutstanding": "कुल बकाया",
+      "noDueDate": "देय तिथि नहीं"
+    }
   },
   "dashboard": {
     "title": "डैशबोर्ड",

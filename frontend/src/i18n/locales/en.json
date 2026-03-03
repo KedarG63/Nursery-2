@@ -31,7 +31,11 @@
     "customers": "Customers",
     "deliveries": "Deliveries",
     "payments": "Payments",
-    "reports": "Reports"
+    "reports": "Reports",
+    "invoices": "Invoices",
+    "vendorBills": "Vendor Bills",
+    "arAging": "AR Aging",
+    "apAging": "AP Aging"
   },
   "auth": {
     "loginTitle": "Sign In",
@@ -43,6 +47,54 @@
     "loginSuccess": "Login successful",
     "loginError": "Invalid email or password",
     "logoutSuccess": "Logged out successfully"
+  },
+  "billing": {
+    "title": "Billing",
+    "invoices": "Invoices",
+    "vendorBills": "Vendor Bills",
+    "arAging": "AR Aging Report",
+    "apAging": "AP Aging Report",
+    "invoiceNumber": "Invoice Number",
+    "invoiceDate": "Invoice Date",
+    "dueDate": "Due Date",
+    "status": {
+      "draft": "Draft",
+      "issued": "Issued",
+      "partially_paid": "Partially Paid",
+      "paid": "Paid",
+      "void": "Void",
+      "pending": "Pending",
+      "partial": "Partial"
+    },
+    "createInvoice": "Create Invoice",
+    "issueInvoice": "Issue Invoice",
+    "voidInvoice": "Void Invoice",
+    "downloadPDF": "Download PDF",
+    "applyPayment": "Apply Payment",
+    "lineItems": "Line Items",
+    "description": "Description",
+    "quantity": "Quantity",
+    "unitPrice": "Unit Price",
+    "discount": "Discount",
+    "lineTotal": "Line Total",
+    "taxRate": "Tax Rate",
+    "taxAmount": "Tax Amount",
+    "subtotal": "Subtotal",
+    "totalDiscount": "Total Discount",
+    "totalTax": "GST",
+    "totalAmount": "Total Amount",
+    "paidAmount": "Paid Amount",
+    "balanceDue": "Balance Due",
+    "termsAndConditions": "Terms & Conditions",
+    "aging": {
+      "current": "Current",
+      "days1_30": "1–30 Days",
+      "days31_60": "31–60 Days",
+      "days61_90": "61–90 Days",
+      "over90": "90+ Days",
+      "totalOutstanding": "Total Outstanding",
+      "noDueDate": "No Due Date"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
