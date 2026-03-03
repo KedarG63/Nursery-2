@@ -37,13 +37,15 @@ const CustomersTable = ({ customers, onEdit, onDelete, loading }) => {
   };
 
   const getCustomerTypeColor = (type) => {
-    switch (type?.toLowerCase()) {
-      case 'wholesale':
+    switch (type) {
+      case 'farmer':
         return 'primary';
-      case 'retail':
+      case 'retailer':
         return 'success';
-      case 'distributor':
+      case 'home_gardener':
         return 'secondary';
+      case 'institutional':
+        return 'warning';
       default:
         return 'default';
     }

@@ -44,7 +44,7 @@ const customerSchema = z.object({
     .regex(/^[0-9]{10}$/, 'WhatsApp number must be 10 digits')
     .optional()
     .or(z.literal('')),
-  customer_type: z.enum(['Retail', 'Wholesale', 'Distributor']),
+  customer_type: z.enum(['farmer', 'retailer', 'home_gardener', 'institutional']),
   credit_limit: z.number().min(0, 'Credit limit cannot be negative'),
   credit_days: z
     .number()
@@ -74,7 +74,7 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
       email: '',
       phone: '',
       whatsapp_number: '',
-      customer_type: 'Retail',
+      customer_type: 'retailer',
       credit_limit: 0,
       credit_days: 30,
       whatsapp_opt_in: false,
@@ -106,7 +106,7 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
         email: customer.email || '',
         phone: customer.phone || '',
         whatsapp_number: customer.whatsapp_number || '',
-        customer_type: customer.customer_type || 'Retail',
+        customer_type: customer.customer_type || 'retailer',
         credit_limit: customer.credit_limit || 0,
         credit_days: customer.credit_days || 30,
         whatsapp_opt_in: customer.whatsapp_opt_in || false,
@@ -194,9 +194,10 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
               <FormControl fullWidth>
                 <InputLabel>Customer Type *</InputLabel>
                 <Select {...register('customer_type')} label="Customer Type *" required>
-                  <MenuItem value="Retail">Retail</MenuItem>
-                  <MenuItem value="Wholesale">Wholesale</MenuItem>
-                  <MenuItem value="Distributor">Distributor</MenuItem>
+                  <MenuItem value="farmer">Farmer</MenuItem>
+                  <MenuItem value="retailer">Retailer</MenuItem>
+                  <MenuItem value="home_gardener">Home Gardener</MenuItem>
+                  <MenuItem value="institutional">Institutional</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

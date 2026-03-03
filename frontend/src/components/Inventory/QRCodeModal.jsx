@@ -19,6 +19,7 @@ import {
   Print as PrintIcon,
 } from '@mui/icons-material';
 import dayjs from 'dayjs';
+import api from '../../utils/api';
 import lotService from '../../services/lotService';
 
 const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
@@ -41,16 +42,9 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
   const loadQRCode = async () => {
     setLoading(true);
     try {
-      const url = lotService.getQRCodeUrl(lotId);
-
-      // Fetch the image as a blob to ensure authentication works
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to load QR code');
-      }
-
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
+      // Use api instance so the Authorization: Bearer header is sent automatically
+      const response = await api.get(`/api/lots/${lotId}/qr`, { responseType: 'blob' });
+      const objectUrl = window.URL.createObjectURL(response.data);
       setQrCodeUrl(objectUrl);
     } catch (error) {
       console.error('Failed to load QR code:', error);

@@ -21,6 +21,7 @@ import {
 import { useSelector } from 'react-redux';
 import { canEdit, canDelete } from '../../utils/roleCheck';
 import skuService from '../../services/skuService';
+import { formatCurrency } from '../../utils/formatters';
 
 const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
   const { user } = useSelector((state) => state.auth);
@@ -149,13 +150,13 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
               </TableCell>
               <TableCell align="right">
                 <Typography variant="body2" fontWeight="medium">
-                  ${parseFloat(sku.price).toFixed(2)}
+                  {formatCurrency(sku.price)}
                 </Typography>
               </TableCell>
               {(userRole === 'Admin' || userRole === 'Manager') && (
                 <TableCell align="right">
                   <Typography variant="body2" color="textSecondary">
-                    ${parseFloat(sku.cost).toFixed(2)}
+                    {formatCurrency(sku.cost)}
                   </Typography>
                 </TableCell>
               )}

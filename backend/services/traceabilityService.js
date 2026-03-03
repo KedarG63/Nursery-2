@@ -224,8 +224,8 @@ const checkAndAllocateSeed = async (productId, skuId, seedsNeeded, client) => {
       FROM seed_purchases sp
       JOIN vendors v ON sp.vendor_id = v.id
       WHERE sp.product_id = $1
-        AND ($2::uuid IS NULL OR sp.sku_id = $2)
-        AND sp.inventory_status = 'available'
+        AND ($2::uuid IS NULL OR sp.sku_id IS NULL OR sp.sku_id = $2)
+        AND sp.inventory_status IN ('available', 'low_stock')
         AND sp.expiry_date > CURRENT_DATE
         AND sp.seeds_remaining >= $3
         AND sp.deleted_at IS NULL
