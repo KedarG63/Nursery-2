@@ -303,6 +303,12 @@ const createCustomer = async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating customer:', error);
+    if (error.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        error: 'A customer with this phone number already exists'
+      });
+    }
     res.status(500).json({
       success: false,
       error: 'Failed to create customer',

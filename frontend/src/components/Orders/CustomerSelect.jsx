@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { Warning as WarningIcon, DirectionsWalk as WalkInIcon } from '@mui/icons-material';
 import PropTypes from 'prop-types';
+import { toast } from 'react-toastify';
 import { getCustomers, getCustomer, createCustomer, createAddress } from '../../services/customerService';
 import { formatCurrency, formatPhone } from '../../utils/formatters';
 
@@ -81,18 +82,30 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
 
       if (!walkIn) {
         // Create the walk-in customer with a default nursery pickup address
-        const created = await createCustomer({
-          name: WALK_IN_NAME,
-          customer_type: 'retailer',
-          phone: '+919999999999',
-          credit_limit: 0,
-          credit_days: 1,
-          notes: 'Auto-created for one-time / cash walk-in sales',
-          addresses: [NURSERY_PICKUP_ADDRESS],
-        });
-        // createCustomer returns { success, data: { id, name, ... }, message }
-        walkIn = created.data || created.customer || created;
-        setCustomers((prev) => [...prev, walkIn]);
+        try {
+          const created = await createCustomer({
+            name: WALK_IN_NAME,
+            customer_type: 'retailer',
+            phone: '+919999999999',
+            credit_limit: 0,
+            credit_days: 1,
+            notes: 'Auto-created for one-time / cash walk-in sales',
+            addresses: [NURSERY_PICKUP_ADDRESS],
+          });
+          // createCustomer returns { success, data: { id, name, ... }, message }
+          walkIn = created.data || created.customer || created;
+          setCustomers((prev) => [...prev, walkIn]);
+        } catch (createErr) {
+          // 409 = duplicate phone (walk-in was previously created, possibly soft-deleted)
+          // Re-search without deleted_at filter via a broader query
+          const retry = await getCustomers({ search: WALK_IN_NAME, limit: 10 });
+          const retryFound = (retry.data || retry.customers || []).find(
+            (c) => c.name.toLowerCase() === WALK_IN_NAME.toLowerCase()
+          );
+          if (!retryFound) throw createErr;
+          walkIn = retryFound;
+          setCustomers((prev) => (prev.find((c) => c.id === walkIn.id) ? prev : [...prev, walkIn]));
+        }
       } else {
         // Existing walk-in customer: ensure they have at least one address
         const fullResponse = await getCustomer(walkIn.id);
@@ -107,6 +120,7 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
       onCustomerSelect(walkIn);
     } catch (error) {
       console.error('Failed to set walk-in customer:', error);
+      toast.error(error?.error || error?.message || 'Failed to set up walk-in customer');
     } finally {
       setWalkInLoading(false);
     }
