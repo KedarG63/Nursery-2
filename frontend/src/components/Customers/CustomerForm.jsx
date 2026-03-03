@@ -45,6 +45,7 @@ const customerSchema = z.object({
     .optional()
     .or(z.literal('')),
   customer_type: z.enum(['farmer', 'retailer', 'home_gardener', 'institutional']),
+  // User enters 10 digits; +91 is prepended automatically on submit
   credit_limit: z.number().min(0, 'Credit limit cannot be negative'),
   credit_days: z
     .number()
@@ -104,8 +105,9 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
       reset({
         name: customer.name || '',
         email: customer.email || '',
-        phone: customer.phone || '',
-        whatsapp_number: customer.whatsapp_number || '',
+        // Strip +91 prefix so the 10-digit input field shows correctly
+        phone: (customer.phone || '').replace(/^\+91/, ''),
+        whatsapp_number: (customer.whatsapp_number || '').replace(/^\+91/, ''),
         customer_type: customer.customer_type || 'retailer',
         credit_limit: customer.credit_limit || 0,
         credit_days: customer.credit_days || 30,
@@ -138,7 +140,12 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
       data.addresses[0].is_default = true;
     }
 
-    onSubmit(data);
+    // Prepend +91 country code — DB constraint requires +91XXXXXXXXXX format
+    onSubmit({
+      ...data,
+      phone: `+91${data.phone}`,
+      whatsapp_number: data.whatsapp_number ? `+91${data.whatsapp_number}` : `+91${data.phone}`,
+    });
   };
 
   /**
@@ -208,9 +215,10 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
                 label="Phone"
                 {...register('phone')}
                 error={!!errors.phone}
-                helperText={errors.phone?.message}
+                helperText={errors.phone?.message || '10-digit mobile number'}
                 required
                 inputProps={{ maxLength: 10 }}
+                InputProps={{ startAdornment: <span style={{ marginRight: 4, color: '#666' }}>+91</span> }}
               />
             </Grid>
 
@@ -231,8 +239,9 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
                 label="WhatsApp Number"
                 {...register('whatsapp_number')}
                 error={!!errors.whatsapp_number}
-                helperText={errors.whatsapp_number?.message}
+                helperText={errors.whatsapp_number?.message || 'Leave blank to use same as phone'}
                 inputProps={{ maxLength: 10 }}
+                InputProps={{ startAdornment: <span style={{ marginRight: 4, color: '#666' }}>+91</span> }}
               />
             </Grid>
 

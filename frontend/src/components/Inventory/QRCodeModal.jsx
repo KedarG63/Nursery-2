@@ -85,7 +85,7 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
         },
       }}
     >
-      <DialogTitle>
+      <DialogTitle className="no-print">
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">QR Code - Lot {lotNumber}</Typography>
           <IconButton onClick={onClose} className="no-print">
@@ -116,29 +116,28 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
             </Box>
           ) : (
             <>
-              {/* QR Code Image */}
+              {/* QR Code Image — shows in both screen and print */}
               <Card
-                sx={{
-                  width: '100%',
-                  maxWidth: 400,
-                  boxShadow: 3,
-                }}
+                className="qr-print-area"
+                sx={{ width: '100%', maxWidth: 400, boxShadow: 3 }}
               >
                 <CardMedia
                   component="img"
                   image={qrCodeUrl}
                   alt={`QR Code for Lot ${lotNumber}`}
-                  sx={{
-                    width: '100%',
-                    height: 'auto',
-                    objectFit: 'contain',
-                  }}
+                  sx={{ width: '100%', height: 'auto', objectFit: 'contain' }}
                 />
+                {/* Lot number shown below QR — visible on sticker for human reference */}
+                <Box sx={{ textAlign: 'center', py: 1 }}>
+                  <Typography variant="caption" fontFamily="monospace" fontWeight="bold">
+                    {lotNumber}
+                  </Typography>
+                </Box>
               </Card>
 
-              {/* Lot Details */}
+              {/* Lot Details — screen only, hidden when printing */}
               {lotDetails && (
-                <Box sx={{ width: '100%', mt: 2 }}>
+                <Box className="no-print" sx={{ width: '100%', mt: 2 }}>
                   <Typography variant="h6" gutterBottom>
                     Lot Details
                   </Typography>
@@ -293,8 +292,17 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
       <style>
         {`
           @media print {
-            .no-print {
-              display: none !important;
+            /* Hide everything that is not the QR card */
+            .no-print { display: none !important; }
+            body * { visibility: hidden; }
+            .qr-print-area, .qr-print-area * { visibility: visible; }
+            .qr-print-area {
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              width: 7cm;
+              box-shadow: none !important;
             }
           }
         `}

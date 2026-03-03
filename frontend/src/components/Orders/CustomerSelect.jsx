@@ -5,20 +5,25 @@ import {
   TextField,
   Typography,
   Alert,
-  Chip
+  Chip,
+  Button,
+  Divider,
 } from '@mui/material';
-import { Warning as WarningIcon } from '@mui/icons-material';
+import { Warning as WarningIcon, DirectionsWalk as WalkInIcon } from '@mui/icons-material';
 import PropTypes from 'prop-types';
-import { getCustomers } from '../../services/customerService';
+import { getCustomers, createCustomer } from '../../services/customerService';
 import { formatCurrency, formatPhone } from '../../utils/formatters';
 
 /**
  * Customer Selection Component for Order Wizard
  * Step 1: Select customer for the order
  */
+const WALK_IN_NAME = 'Walk-in Customer';
+
 const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [walkInLoading, setWalkInLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
   /**
@@ -39,6 +44,52 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
 
     fetchCustomers();
   }, []);
+
+  /**
+   * Find or create the walk-in customer and auto-select it
+   */
+  const handleWalkIn = async () => {
+    setWalkInLoading(true);
+    try {
+      // Check if walk-in customer already exists in loaded list
+      let walkIn = customers.find(
+        (c) => c.name.toLowerCase() === WALK_IN_NAME.toLowerCase()
+      );
+
+      if (!walkIn) {
+        // Search via API in case it exists but wasn't loaded
+        const response = await getCustomers({ search: WALK_IN_NAME, limit: 5 });
+        const found = (response.data || response.customers || []).find(
+          (c) => c.name.toLowerCase() === WALK_IN_NAME.toLowerCase()
+        );
+        if (found) {
+          walkIn = found;
+          setCustomers((prev) => [...prev, found]);
+        }
+      }
+
+      if (!walkIn) {
+        // Create the walk-in customer for the first time
+        const created = await createCustomer({
+          name: WALK_IN_NAME,
+          customer_type: 'retailer',
+          phone: '+919999999999',
+          email: null,
+          credit_limit: 0,
+          credit_days: 1,
+          notes: 'Auto-created for one-time / cash walk-in sales',
+        });
+        walkIn = created.customer || created;
+        setCustomers((prev) => [...prev, walkIn]);
+      }
+
+      onCustomerSelect(walkIn);
+    } catch (error) {
+      console.error('Failed to set walk-in customer:', error);
+    } finally {
+      setWalkInLoading(false);
+    }
+  };
 
   /**
    * Get credit status for customer
@@ -111,6 +162,19 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
           )}
           noOptionsText="No customers found"
         />
+
+        <Divider sx={{ my: 2 }}>or</Divider>
+
+        <Button
+          variant="outlined"
+          color="secondary"
+          startIcon={<WalkInIcon />}
+          onClick={handleWalkIn}
+          disabled={walkInLoading}
+          fullWidth
+        >
+          {walkInLoading ? 'Setting up...' : 'Walk-in / Cash Customer'}
+        </Button>
       </Box>
 
       {/* Selected Customer Details */}
