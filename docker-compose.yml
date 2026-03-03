@@ -81,18 +81,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: builder
     container_name: nursery-frontend
-    environment:
-      VITE_API_URL: http://localhost:5000/api
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "8080:80"
     depends_on:
       - backend
-    command: npm run dev -- --host 0.0.0.0
     networks:
       - nursery-network
 
