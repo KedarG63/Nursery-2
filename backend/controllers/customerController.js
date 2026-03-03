@@ -269,8 +269,8 @@ const createCustomer = async (req, res) => {
         await client.query(
           `INSERT INTO customer_addresses (
             customer_id, address_line1, address_line2, city, state, pincode,
-            is_default, created_by, updated_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+            is_default
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             customer.id,
             address.address_line1,
@@ -279,7 +279,6 @@ const createCustomer = async (req, res) => {
             address.state,
             address.pincode,
             isDefault,
-            req.user.id
           ]
         );
       }

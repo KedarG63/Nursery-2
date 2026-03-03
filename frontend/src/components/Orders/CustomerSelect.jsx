@@ -74,7 +74,6 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
           name: WALK_IN_NAME,
           customer_type: 'retailer',
           phone: '+919999999999',
-          email: null,
           credit_limit: 0,
           credit_days: 1,
           notes: 'Auto-created for one-time / cash walk-in sales',

@@ -719,9 +719,12 @@ const downloadQRCode = async (req, res) => {
     const { id } = req.params;
 
     const lotResult = await pool.query(
-      `SELECT l.lot_number, l.qr_code, l.qr_code_url, l.created_at, s.sku_code
+      `SELECT l.lot_number, l.qr_code_url, l.created_at, s.sku_code,
+              sp.lot_number AS seed_lot_number, v.name AS vendor_name
        FROM lots l
        JOIN skus s ON l.sku_id = s.id
+       LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
+       LEFT JOIN vendors v ON v.id = sp.vendor_id
        WHERE l.id = $1 AND l.deleted_at IS NULL`,
       [id]
     );
@@ -735,19 +738,20 @@ const downloadQRCode = async (req, res) => {
 
     const lot = lotResult.rows[0];
 
-    // If S3 URL exists, redirect to it
+    // If cloud storage URL exists, redirect to it
     if (lot.qr_code_url) {
       return res.redirect(lot.qr_code_url);
     }
 
-    // Otherwise, generate QR code on-the-fly
+    // Always regenerate from current lot data using up-to-date format
+    const { generateQRData } = require('../utils/qrCodeGenerator');
     const QRCode = require('qrcode');
-    const qrData = lot.qr_code || JSON.stringify({
+    const qrData = generateQRData({
       lot_number: lot.lot_number,
       sku_code: lot.sku_code,
       created_date: lot.created_at,
-      type: 'lot',
-      version: '1.0',
+      seed_lot_number: lot.seed_lot_number,
+      vendor_name: lot.vendor_name,
     });
 
     // Generate QR code as PNG buffer
