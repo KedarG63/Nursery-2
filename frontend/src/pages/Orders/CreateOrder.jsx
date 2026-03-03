@@ -86,6 +86,7 @@ const CreateOrder = () => {
       return;
     }
 
+
     setActiveStep((prev) => prev + 1);
   };
 
@@ -101,6 +102,16 @@ const CreateOrder = () => {
    */
   const handleCustomerSelect = (customer) => {
     setOrderData((prev) => ({ ...prev, customer }));
+  };
+
+  /**
+   * Handle walk-in customer name — prepend to order notes
+   */
+  const handleWalkInName = (name) => {
+    setOrderData((prev) => ({
+      ...prev,
+      notes: name ? `Walk-in: ${name}` : prev.notes,
+    }));
   };
 
   /**
@@ -241,6 +252,7 @@ const CreateOrder = () => {
           <CustomerSelect
             selectedCustomer={orderData.customer}
             onCustomerSelect={handleCustomerSelect}
+            onWalkInName={handleWalkInName}
           />
         );
       case 1:

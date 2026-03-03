@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { Warning as WarningIcon, DirectionsWalk as WalkInIcon } from '@mui/icons-material';
 import PropTypes from 'prop-types';
-import { getCustomers, createCustomer } from '../../services/customerService';
+import { getCustomers, getCustomer, createCustomer, createAddress } from '../../services/customerService';
 import { formatCurrency, formatPhone } from '../../utils/formatters';
 
 /**
@@ -20,10 +20,21 @@ import { formatCurrency, formatPhone } from '../../utils/formatters';
  */
 const WALK_IN_NAME = 'Walk-in Customer';
 
-const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
+// Default nursery pickup address used for walk-in customers
+const NURSERY_PICKUP_ADDRESS = {
+  address_line1: 'Nursery Counter / Pickup',
+  city: 'Local Pickup',
+  state: 'Maharashtra',
+  pincode: '411001',
+  is_default: true,
+};
+
+const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [walkInLoading, setWalkInLoading] = useState(false);
+  const [walkInName, setWalkInName] = useState('');
+  const [showWalkInName, setShowWalkInName] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
   /**
@@ -69,7 +80,7 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
       }
 
       if (!walkIn) {
-        // Create the walk-in customer for the first time
+        // Create the walk-in customer with a default nursery pickup address
         const created = await createCustomer({
           name: WALK_IN_NAME,
           customer_type: 'retailer',
@@ -77,17 +88,33 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
           credit_limit: 0,
           credit_days: 1,
           notes: 'Auto-created for one-time / cash walk-in sales',
+          addresses: [NURSERY_PICKUP_ADDRESS],
         });
-        walkIn = created.customer || created;
+        // createCustomer returns { success, data: { id, name, ... }, message }
+        walkIn = created.data || created.customer || created;
         setCustomers((prev) => [...prev, walkIn]);
+      } else {
+        // Existing walk-in customer: ensure they have at least one address
+        const fullResponse = await getCustomer(walkIn.id);
+        const fullData = fullResponse.data || fullResponse;
+        const existingAddresses = fullData.addresses || [];
+        if (existingAddresses.length === 0) {
+          await createAddress({ customer_id: walkIn.id, ...NURSERY_PICKUP_ADDRESS });
+        }
       }
 
+      setShowWalkInName(true);
       onCustomerSelect(walkIn);
     } catch (error) {
       console.error('Failed to set walk-in customer:', error);
     } finally {
       setWalkInLoading(false);
     }
+  };
+
+  const handleWalkInNameChange = (e) => {
+    setWalkInName(e.target.value);
+    if (onWalkInName) onWalkInName(e.target.value);
   };
 
   /**
@@ -174,6 +201,18 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
         >
           {walkInLoading ? 'Setting up...' : 'Walk-in / Cash Customer'}
         </Button>
+
+        {showWalkInName && (
+          <TextField
+            fullWidth
+            label="Walk-in Customer Name (optional)"
+            placeholder="e.g. Ramesh Sharma"
+            value={walkInName}
+            onChange={handleWalkInNameChange}
+            sx={{ mt: 2 }}
+            helperText="Enter the customer's name for this sale record"
+          />
+        )}
       </Box>
 
       {/* Selected Customer Details */}
@@ -206,7 +245,8 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect }) => {
 
 CustomerSelect.propTypes = {
   selectedCustomer: PropTypes.object,
-  onCustomerSelect: PropTypes.func.isRequired
+  onCustomerSelect: PropTypes.func.isRequired,
+  onWalkInName: PropTypes.func,
 };
 
 export default CustomerSelect;

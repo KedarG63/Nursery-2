@@ -720,7 +720,7 @@ const downloadQRCode = async (req, res) => {
 
     const lotResult = await pool.query(
       `SELECT l.lot_number, l.qr_code_url, l.created_at, s.sku_code,
-              sp.lot_number AS seed_lot_number, v.name AS vendor_name
+              sp.seed_lot_number, v.vendor_name
        FROM lots l
        JOIN skus s ON l.sku_id = s.id
        LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
