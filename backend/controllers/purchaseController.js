@@ -49,9 +49,9 @@ const createPurchase = async (req, res) => {
     const sequence = String(parseInt(countResult.rows[0].count) + 1).padStart(4, '0');
     const purchase_number = `PUR-${dateStr}-${sequence}`;
 
-    // Verify vendor exists
+    // Verify vendor exists and get payment terms
     const vendorCheck = await client.query(
-      'SELECT id FROM vendors WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT id, payment_terms FROM vendors WHERE id = $1 AND deleted_at IS NULL',
       [vendor_id]
     );
 
@@ -62,6 +62,8 @@ const createPurchase = async (req, res) => {
         message: 'Vendor not found',
       });
     }
+
+    const vendorPaymentTerms = vendorCheck.rows[0].payment_terms || 30;
 
     // Verify product exists
     const productCheck = await client.query(
@@ -77,6 +79,12 @@ const createPurchase = async (req, res) => {
       });
     }
 
+    // Calculate due_date from purchase_date + vendor payment_terms (days)
+    const baseDateForDue = purchase_date ? new Date(purchase_date) : new Date();
+    const dueDateObj = new Date(baseDateForDue);
+    dueDateObj.setDate(dueDateObj.getDate() + vendorPaymentTerms);
+    const due_date = dueDateObj.toISOString().split('T')[0];
+
     // Insert purchase (computed fields handled by trigger)
     const insertResult = await client.query(
       `INSERT INTO seed_purchases (
@@ -85,10 +93,10 @@ const createPurchase = async (req, res) => {
         shipping_cost, tax_amount, other_charges,
         germination_rate, purity_percentage, expiry_date, purchase_date,
         invoice_number, invoice_date, storage_location, storage_conditions,
-        notes, quality_notes, created_by, updated_by
+        notes, quality_notes, due_date, created_by, updated_by
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20, $21, $22, $22
+        $16, $17, $18, $19, $20, $21, $22, $23, $23
       ) RETURNING *`,
       [
         purchase_number, vendor_id, product_id, sku_id, seed_lot_number,
@@ -96,7 +104,7 @@ const createPurchase = async (req, res) => {
         shipping_cost, tax_amount, other_charges,
         germination_rate, purity_percentage, expiry_date, purchase_date,
         invoice_number, invoice_date, storage_location, storage_conditions,
-        notes, quality_notes, userId,
+        notes, quality_notes, due_date, userId,
       ]
     );
 

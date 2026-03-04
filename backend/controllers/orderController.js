@@ -389,6 +389,7 @@ const listOrders = async (req, res) => {
     const {
       customer_id,
       status,
+      search,
       order_date_from,
       order_date_to,
       delivery_date_from,
@@ -414,6 +415,11 @@ const listOrders = async (req, res) => {
       const statuses = status.split(',').map((s) => s.trim().toLowerCase());
       params.push(statuses);
       whereClauses.push(`o.status = ANY($${params.length})`);
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      whereClauses.push(`(o.order_number ILIKE $${params.length} OR c.name ILIKE $${params.length})`);
     }
 
     // Filter for orders with outstanding balance
@@ -449,10 +455,11 @@ const listOrders = async (req, res) => {
       : 'order_date';
     const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-    // Count total
+    // Count total (join customers so search on c.name works)
     const countQuery = `
       SELECT COUNT(*) as total
       FROM orders o
+      JOIN customers c ON o.customer_id = c.id
       WHERE ${whereClause}
     `;
     const countResult = await pool.query(countQuery, params);

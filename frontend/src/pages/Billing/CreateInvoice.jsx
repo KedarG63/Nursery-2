@@ -41,16 +41,13 @@ const CreateInvoice = () => {
   const [terms, setTerms] = useState('');
   const [issueNow, setIssueNow] = useState(false);
 
-  // Search orders
-  const handleOrderSearch = useCallback(async (value) => {
-    if (!value || value.length < 2) { setOrderOptions([]); return; }
+  // Load orders for invoice selection (all billable statuses)
+  const loadOrders = useCallback(async (searchValue) => {
     setLoadingOrders(true);
     try {
-      const result = await getOrders({
-        search: value,
-        status: 'confirmed,preparing,ready,dispatched,delivered',
-        limit: 20,
-      });
+      const params = { limit: 50, status: 'pending,confirmed,preparing,ready,dispatched,delivered' };
+      if (searchValue && searchValue.length >= 2) params.search = searchValue;
+      const result = await getOrders(params);
       setOrderOptions(result.data || []);
     } catch {
       setOrderOptions([]);
@@ -58,6 +55,11 @@ const CreateInvoice = () => {
       setLoadingOrders(false);
     }
   }, []);
+
+  // Trigger search on input change
+  const handleOrderSearch = useCallback((value) => {
+    loadOrders(value);
+  }, [loadOrders]);
 
   // When order is selected: fetch its items and default due date
   const handleSelectOrder = async (order) => {
@@ -181,6 +183,7 @@ const CreateInvoice = () => {
           <Autocomplete
             options={orderOptions}
             getOptionLabel={(o) => `${o.order_number} — ${o.customer_name || ''} (${o.status})`}
+            onOpen={() => loadOrders('')}
             onInputChange={(_, value) => handleOrderSearch(value)}
             onChange={(_, value) => handleSelectOrder(value)}
             loading={loadingOrders}

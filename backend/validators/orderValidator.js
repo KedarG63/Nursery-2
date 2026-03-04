@@ -43,23 +43,17 @@ const validateCreateOrder = (req, res, next) => {
     errors.push('customer_id must be a valid UUID');
   }
 
-  if (!delivery_address_id) {
-    errors.push('delivery_address_id is required');
-  } else if (!isValidUUID(delivery_address_id)) {
+  // Optional for walk-in / counter pickup orders
+  if (delivery_address_id && !isValidUUID(delivery_address_id)) {
     errors.push('delivery_address_id must be a valid UUID');
   }
 
-  if (!delivery_date) {
-    errors.push('delivery_date is required');
-  } else {
+  if (delivery_date) {
     const deliveryDateObj = new Date(delivery_date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     if (isNaN(deliveryDateObj.getTime())) {
       errors.push('delivery_date must be a valid date');
-    } else if (deliveryDateObj < today) {
-      errors.push('delivery_date must be today or in the future');
     }
   }
 
@@ -200,10 +194,10 @@ const validateListOrders = (req, res, next) => {
     errors.push('customer_id must be a valid UUID');
   }
 
-  // Validate status if provided (can be comma-separated)
+  // Validate status if provided (can be comma-separated, case-insensitive)
   if (status) {
     const statuses = status.split(',');
-    const invalidStatuses = statuses.filter((s) => !ORDER_STATUSES.includes(s.trim()));
+    const invalidStatuses = statuses.filter((s) => !ORDER_STATUSES.includes(s.trim().toLowerCase()));
     if (invalidStatuses.length > 0) {
       errors.push(`Invalid status values: ${invalidStatuses.join(', ')}`);
     }
