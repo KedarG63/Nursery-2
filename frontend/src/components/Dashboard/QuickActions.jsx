@@ -1,7 +1,8 @@
 import { Card, CardContent, Typography, Button, Box } from '@mui/material';
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
-import AddBoxIcon from '@mui/icons-material/AddBox';
-import RouteIcon from '@mui/icons-material/Route';
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import PaymentIcon from '@mui/icons-material/Payment';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../../hooks/useAuth';
 
@@ -19,24 +20,31 @@ const QuickActions = () => {
       roles: ['Admin', 'Manager', 'Sales'],
     },
     {
-      id: 'add-lot',
-      label: 'Add Lot',
-      icon: AddBoxIcon,
-      color: 'secondary',
-      path: '/inventory/lots/new',
+      id: 'new-purchase',
+      label: 'New Purchase',
+      icon: ShoppingBagIcon,
+      color: 'warning',
+      path: '/purchases/new',
       roles: ['Admin', 'Manager', 'Warehouse'],
     },
     {
-      id: 'view-routes',
-      label: 'View Routes',
-      icon: RouteIcon,
-      color: 'info',
-      path: '/deliveries/routes',
-      roles: ['Admin', 'Manager', 'Delivery'],
+      id: 'record-payment',
+      label: 'Payments',
+      icon: PaymentIcon,
+      color: 'success',
+      path: '/payments',
+      roles: ['Admin', 'Manager'],
+    },
+    {
+      id: 'invoices',
+      label: 'Invoices',
+      icon: RequestQuoteIcon,
+      color: 'secondary',
+      path: '/billing/invoices',
+      roles: ['Admin', 'Manager', 'Sales'],
     },
   ];
 
-  // Filter actions based on user roles
   const filteredActions = actions.filter((action) => {
     if (!user || !user.roles) return false;
     return action.roles.some((role) => user.roles.includes(role));
@@ -48,7 +56,7 @@ const QuickActions = () => {
         <Typography variant="h6" gutterBottom>
           Quick Actions
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1 }}>
           {filteredActions.map((action) => {
             const Icon = action.icon;
             return (
@@ -58,7 +66,8 @@ const QuickActions = () => {
                 color={action.color}
                 startIcon={<Icon />}
                 onClick={() => navigate(action.path)}
-                sx={{ flexGrow: 1 }}
+                fullWidth
+                sx={{ justifyContent: 'flex-start', py: 1 }}
               >
                 {action.label}
               </Button>

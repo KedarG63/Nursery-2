@@ -87,14 +87,6 @@ const menuItems = [
     roles: ['Admin', 'Manager'],
   },
   {
-    id: 'reports',
-    label: 'Reports',
-    labelKey: 'nav.reports',
-    icon: AssessmentIcon,
-    path: '/reports',
-    roles: ['Admin', 'Manager'],
-  },
-  {
     id: 'billing-invoices',
     label: 'Invoices',
     labelKey: 'nav.invoices',

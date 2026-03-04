@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Grid, Typography, Box, CircularProgress, Alert } from '@mui/material';
+import { Grid, Typography, Box, CircularProgress, Alert, Card, CardActionArea, CardContent } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import PaymentsIcon from '@mui/icons-material/Payments';
 
 import KPICard from '../../components/Dashboard/KPICard';
 import RecentOrders from '../../components/Dashboard/RecentOrders';
@@ -12,9 +17,17 @@ import QuickActions from '../../components/Dashboard/QuickActions';
 import dashboardService from '../../services/dashboardService';
 import useAuth from '../../hooks/useAuth';
 
+const REPORT_LINKS = [
+  { label: 'Sales Report',    icon: AssessmentIcon,    path: '/reports',                    color: '#1976d2' },
+  { label: 'AR Aging',        icon: AccountBalanceIcon, path: '/billing/reports/ar-aging',  color: '#388e3c' },
+  { label: 'AP Aging',        icon: PaymentsIcon,       path: '/billing/reports/ap-aging',  color: '#f57c00' },
+  { label: 'Invoices',        icon: RequestQuoteIcon,   path: '/billing/invoices',           color: '#7b1fa2' },
+];
+
 const Dashboard = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [kpis, setKpis] = useState({
@@ -34,11 +47,12 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
 
-      // Use new overview endpoint (Phase 21)
-      const response = await dashboardService.getOverview();
-      const { data } = response;
+      const [overviewResponse, ordersData] = await Promise.all([
+        dashboardService.getOverview(),
+        dashboardService.getRecentOrders(5),
+      ]);
 
-      // Extract KPIs
+      const { data } = overviewResponse;
       setKpis({
         ordersToday: data.kpis?.activeOrders || 0,
         readyLots: data.kpis?.readyLots || 0,
@@ -46,15 +60,13 @@ const Dashboard = () => {
         revenueThisMonth: data.kpis?.monthlyRevenue || 0,
       });
 
-      // Extract recent orders from order insights
-      setRecentOrders(data.orderInsights?.readinessTimeline?.slice(0, 10) || []);
+      setRecentOrders(ordersData.orders || []);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
-      // Fallback to legacy API if new endpoint fails
       try {
         const [kpisData, ordersData] = await Promise.all([
           dashboardService.getKPIs(),
-          dashboardService.getRecentOrders(10),
+          dashboardService.getRecentOrders(5),
         ]);
         setKpis(kpisData);
         setRecentOrders(ordersData.orders || []);
@@ -69,14 +81,7 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '60vh',
-        }}
-      >
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <CircularProgress />
       </Box>
     );
@@ -94,52 +99,26 @@ const Dashboard = () => {
         </Typography>
       </Box>
 
-      {/* Error Alert */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {/* KPI Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <KPICard
-            title={t('dashboard.ordersToday')}
-            value={kpis.ordersToday}
-            icon={ShoppingCartIcon}
-            color="primary"
-          />
+          <KPICard title={t('dashboard.ordersToday')} value={kpis.ordersToday} icon={ShoppingCartIcon} color="primary" />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <KPICard
-            title={t('dashboard.readyLots')}
-            value={kpis.readyLots}
-            icon={InventoryIcon}
-            color="secondary"
-          />
+          <KPICard title={t('dashboard.readyLots')} value={kpis.readyLots} icon={InventoryIcon} color="secondary" />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <KPICard
-            title={t('dashboard.pendingDeliveries')}
-            value={kpis.pendingDeliveries}
-            icon={LocalShippingIcon}
-            color="info"
-          />
+          <KPICard title={t('dashboard.pendingDeliveries')} value={kpis.pendingDeliveries} icon={LocalShippingIcon} color="info" />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <KPICard
-            title={t('dashboard.revenueThisMonth')}
-            value={kpis.revenueThisMonth}
-            icon={AttachMoneyIcon}
-            color="success"
-            format="currency"
-          />
+          <KPICard title={t('dashboard.revenueThisMonth')} value={kpis.revenueThisMonth} icon={CurrencyRupeeIcon} color="success" format="currency" />
         </Grid>
       </Grid>
 
       {/* Recent Orders and Quick Actions */}
-      <Grid container spacing={3}>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={8}>
           <RecentOrders orders={recentOrders} />
         </Grid>
@@ -147,6 +126,32 @@ const Dashboard = () => {
           <QuickActions />
         </Grid>
       </Grid>
+
+      {/* Reports Section */}
+      <Box sx={{ mb: 1 }}>
+        <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Reports</Typography>
+        <Grid container spacing={2}>
+          {REPORT_LINKS.map((r) => {
+            const Icon = r.icon;
+            return (
+              <Grid item xs={6} sm={3} key={r.path}>
+                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                  <CardActionArea onClick={() => navigate(r.path)} sx={{ p: 2 }}>
+                    <CardContent sx={{ p: '0 !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Box sx={{ bgcolor: r.color + '18', borderRadius: 1.5, p: 1, display: 'flex' }}>
+                        <Icon sx={{ color: r.color, fontSize: 22 }} />
+                      </Box>
+                      <Typography variant="body2" fontWeight={600} color="text.primary">
+                        {r.label}
+                      </Typography>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </Box>
     </Box>
   );
 };
