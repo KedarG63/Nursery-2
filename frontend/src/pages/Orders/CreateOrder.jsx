@@ -76,12 +76,14 @@ const CreateOrder = () => {
       return;
     }
 
-    if (activeStep === 2 && !orderData.deliveryAddress) {
+    const isWalkIn = orderData.customer?.name === 'Walk-in Customer';
+
+    if (activeStep === 2 && !isWalkIn && !orderData.deliveryAddress) {
       toast.error('Please select a delivery address');
       return;
     }
 
-    if (activeStep === 2 && !orderData.deliveryDate) {
+    if (activeStep === 2 && !isWalkIn && !orderData.deliveryDate) {
       toast.error('Please select a delivery date');
       return;
     }
@@ -204,8 +206,9 @@ const CreateOrder = () => {
    * Handle order submission
    */
   const handleSubmit = async () => {
-    // Check availability before submitting
-    if (!availabilityChecked) {
+    const isWalkIn = orderData.customer?.name === 'Walk-in Customer';
+    // Walk-in orders skip availability check (immediate counter sale)
+    if (!isWalkIn && !availabilityChecked) {
       toast.error('Please check availability before submitting the order');
       return;
     }
@@ -215,8 +218,8 @@ const CreateOrder = () => {
 
       const payload = {
         customer_id: orderData.customer.id,
-        delivery_address_id: orderData.deliveryAddress.id,
-        delivery_date: orderData.deliveryDate,
+        delivery_address_id: orderData.deliveryAddress?.id || null,
+        delivery_date: orderData.deliveryDate || null,
         delivery_slot: orderData.deliverySlot,
         payment_type: orderData.paymentMethod,
         items: orderData.items.map((item) => ({
@@ -291,7 +294,7 @@ const CreateOrder = () => {
                 variant="outlined"
                 color="primary"
                 onClick={handleCheckAvailability}
-                disabled={loading || !orderData.deliveryDate || orderData.items.length === 0}
+                disabled={loading || orderData.items.length === 0}
                 fullWidth
               >
                 {loading ? 'Checking...' : 'Check Availability'}

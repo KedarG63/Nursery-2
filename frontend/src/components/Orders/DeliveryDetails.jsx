@@ -13,9 +13,12 @@ import {
   FormControlLabel,
   Radio,
   FormLabel,
+  Alert,
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import customerService from '../../services/customerService';
+
+const WALK_IN_NAME = 'Walk-in Customer';
 
 /**
  * Delivery Details Component
@@ -23,6 +26,7 @@ import customerService from '../../services/customerService';
  * Issue #57: Order creation wizard - Step 3
  */
 const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot, onDeliveryChange }) => {
+  const isWalkIn = customer?.name === WALK_IN_NAME;
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -77,71 +81,82 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
       </Typography>
 
       <Grid container spacing={3}>
-        {/* Delivery Address */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>Delivery Address *</InputLabel>
-              <Select
-                value={deliveryAddress?.id || ''}
-                onChange={handleAddressChange}
-                label="Delivery Address *"
-                disabled={loading || addresses.length === 0}
-              >
-                {addresses.map((address) => (
-                  <MenuItem key={address.id} value={address.id}>
-                    <Box>
-                      <Typography variant="body1">
-                        {address.address_line1}
-                        {address.is_default && (
-                          <Typography component="span" color="primary" sx={{ ml: 1, fontSize: '0.75rem' }}>
-                            (Default)
-                          </Typography>
-                        )}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {address.address_line2 && `${address.address_line2}, `}
-                        {address.city}, {address.state} - {address.pincode}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {addresses.length === 0 && !loading && (
-              <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-                No addresses found for this customer. Please add an address in the customer profile.
-              </Typography>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Selected Address Preview */}
-        {deliveryAddress && (
+        {/* Walk-in: counter pickup — no address needed */}
+        {isWalkIn ? (
           <Grid item xs={12}>
-            <Paper sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Selected Address:
-              </Typography>
-              <Typography variant="body2">
-                {deliveryAddress.address_line1}
-              </Typography>
-              {deliveryAddress.address_line2 && (
-                <Typography variant="body2">
-                  {deliveryAddress.address_line2}
-                </Typography>
-              )}
-              <Typography variant="body2">
-                {deliveryAddress.city}, {deliveryAddress.state} - {deliveryAddress.pincode}
-              </Typography>
-              {deliveryAddress.phone && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Phone: {deliveryAddress.phone}
-                </Typography>
-              )}
-            </Paper>
+            <Alert severity="info">
+              Walk-in / counter pickup — no delivery address required. Customer collects at nursery.
+            </Alert>
           </Grid>
+        ) : (
+          <>
+            {/* Delivery Address */}
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Delivery Address *</InputLabel>
+                  <Select
+                    value={deliveryAddress?.id || ''}
+                    onChange={handleAddressChange}
+                    label="Delivery Address *"
+                    disabled={loading || addresses.length === 0}
+                  >
+                    {addresses.map((address) => (
+                      <MenuItem key={address.id} value={address.id}>
+                        <Box>
+                          <Typography variant="body1">
+                            {address.address_line1}
+                            {address.is_default && (
+                              <Typography component="span" color="primary" sx={{ ml: 1, fontSize: '0.75rem' }}>
+                                (Default)
+                              </Typography>
+                            )}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {address.address_line2 && `${address.address_line2}, `}
+                            {address.city}, {address.state} - {address.pincode}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {addresses.length === 0 && !loading && (
+                  <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                    No addresses found for this customer. Please add an address in the customer profile.
+                  </Typography>
+                )}
+              </Paper>
+            </Grid>
+
+            {/* Selected Address Preview */}
+            {deliveryAddress && (
+              <Grid item xs={12}>
+                <Paper sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Selected Address:
+                  </Typography>
+                  <Typography variant="body2">
+                    {deliveryAddress.address_line1}
+                  </Typography>
+                  {deliveryAddress.address_line2 && (
+                    <Typography variant="body2">
+                      {deliveryAddress.address_line2}
+                    </Typography>
+                  )}
+                  <Typography variant="body2">
+                    {deliveryAddress.city}, {deliveryAddress.state} - {deliveryAddress.pincode}
+                  </Typography>
+                  {deliveryAddress.phone && (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      Phone: {deliveryAddress.phone}
+                    </Typography>
+                  )}
+                </Paper>
+              </Grid>
+            )}
+          </>
         )}
 
         {/* Delivery Date */}
@@ -149,14 +164,14 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
           <TextField
             fullWidth
             type="date"
-            label="Delivery Date *"
+            label={isWalkIn ? 'Sale Date (optional)' : 'Delivery Date *'}
             value={deliveryDate || ''}
             onChange={handleDateChange}
             InputLabelProps={{
               shrink: true,
             }}
             inputProps={{
-              min: minDate,
+              min: isWalkIn ? undefined : minDate,
             }}
           />
         </Grid>

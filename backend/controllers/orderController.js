@@ -60,19 +60,21 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // 2. Validate delivery address belongs to customer
-    const addressResult = await client.query(
-      `SELECT id
-       FROM customer_addresses
-       WHERE id = $1 AND customer_id = $2 AND deleted_at IS NULL`,
-      [delivery_address_id, customer_id]
-    );
+    // 2. Validate delivery address belongs to customer (optional for walk-in/counter orders)
+    if (delivery_address_id) {
+      const addressResult = await client.query(
+        `SELECT id
+         FROM customer_addresses
+         WHERE id = $1 AND customer_id = $2 AND deleted_at IS NULL`,
+        [delivery_address_id, customer_id]
+      );
 
-    if (addressResult.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Delivery address not found or does not belong to customer',
-      });
+      if (addressResult.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Delivery address not found or does not belong to customer',
+        });
+      }
     }
 
     // 3. Fetch SKU details and calculate subtotal
@@ -541,7 +543,7 @@ const getOrderById = async (orderId) => {
        ca.state, ca.pincode, ca.landmark
      FROM orders o
      JOIN customers c ON o.customer_id = c.id
-     JOIN customer_addresses ca ON o.delivery_address_id = ca.id
+     LEFT JOIN customer_addresses ca ON o.delivery_address_id = ca.id
      WHERE o.id = $1 AND o.deleted_at IS NULL`,
     [orderId]
   );
