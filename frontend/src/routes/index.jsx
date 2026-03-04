@@ -29,6 +29,7 @@ import RouteManagement from '../pages/Deliveries/RouteManagement';
 import CreateRoute from '../pages/Deliveries/CreateRoute';
 import DriversManagement from '../pages/Deliveries/DriversManagement';
 import LiveTracking from '../pages/Deliveries/LiveTracking';
+import UsersList from '../pages/Users/UsersList';
 import InvoicesList from '../pages/Billing/InvoicesList';
 import InvoiceDetails from '../pages/Billing/InvoiceDetails';
 import CreateInvoice from '../pages/Billing/CreateInvoice';
@@ -101,6 +102,9 @@ const AppRoutes = () => {
         <Route path="deliveries/routes" element={<RouteManagement />} />
         <Route path="deliveries/routes/create" element={<CreateRoute />} />
         <Route path="deliveries/tracking" element={<LiveTracking />} />
+
+        {/* User Management */}
+        <Route path="users" element={<UsersList />} />
 
         {/* Billing */}
         <Route path="billing" element={<Navigate to="/billing/invoices" replace />} />

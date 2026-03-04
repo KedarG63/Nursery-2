@@ -12,6 +12,7 @@ import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 
 const menuItems = [
   {
@@ -117,6 +118,14 @@ const menuItems = [
     icon: PaymentsIcon,
     path: '/billing/reports/ap-aging',
     roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    labelKey: 'nav.users',
+    icon: ManageAccountsIcon,
+    path: '/users',
+    roles: ['Admin'],
   },
 ];
 

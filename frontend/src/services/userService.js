@@ -17,9 +17,32 @@ const userService = {
     return response.data;
   },
 
-  /**
-   * Create a new driver
-   */
+  createUser: async ({ email, password, full_name, phone, role }) => {
+    const response = await api.post('/users', { email, password, full_name, phone, role });
+    return response.data;
+  },
+
+  updateUser: async (id, { full_name, phone }) => {
+    const response = await api.put(`/users/${id}`, { full_name, phone });
+    return response.data;
+  },
+
+  updateRole: async (id, role) => {
+    const response = await api.put(`/users/${id}/role`, { role });
+    return response.data;
+  },
+
+  resetPassword: async (id, newPassword) => {
+    const response = await api.put(`/users/${id}/reset-password`, { new_password: newPassword });
+    return response.data;
+  },
+
+  toggleStatus: async (id, status) => {
+    const response = await api.put(`/users/${id}/status`, { status });
+    return response.data;
+  },
+
+  // Legacy — kept for DriversManagement page compatibility
   createDriver: async (driverData) => {
     const response = await api.post('/users', {
       email: driverData.email,

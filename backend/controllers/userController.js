@@ -269,10 +269,116 @@ const deleteUser = async (req, res) => {
   }
 };
 
+/**
+ * Update user role
+ * PUT /api/users/:id/role
+ * Access: Admin only
+ */
+const updateRole = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ success: false, message: 'Role is required' });
+    }
+
+    const userCheck = await client.query(
+      'SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL', [id]
+    );
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const roleResult = await client.query('SELECT id FROM roles WHERE name = $1', [role]);
+    if (roleResult.rows.length === 0) {
+      return res.status(400).json({ success: false, message: `Role '${role}' not found` });
+    }
+
+    await client.query('BEGIN');
+    await client.query('DELETE FROM user_roles WHERE user_id = $1', [id]);
+    await client.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [id, roleResult.rows[0].id]);
+    await client.query('COMMIT');
+
+    res.status(200).json({ success: true, message: 'Role updated successfully' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating role:', error);
+    res.status(500).json({ success: false, message: 'Failed to update role', error: error.message });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reset user password (Admin only)
+ * PUT /api/users/:id/reset-password
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { new_password } = req.body;
+
+    if (!new_password || new_password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    const result = await pool.query(
+      'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL RETURNING id',
+      [hashedPassword, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ success: false, message: 'Failed to reset password', error: error.message });
+  }
+};
+
+/**
+ * Toggle user status (activate / deactivate)
+ * PUT /api/users/:id/status
+ * Access: Admin only
+ */
+const toggleStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status must be 'active' or 'inactive'" });
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL RETURNING id, status',
+      [status, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Status updated', status: result.rows[0].status });
+  } catch (error) {
+    console.error('Error toggling status:', error);
+    res.status(500).json({ success: false, message: 'Failed to update status', error: error.message });
+  }
+};
+
 module.exports = {
   getUsers,
   getUsersByRole,
   createUser,
   updateUser,
   deleteUser,
+  updateRole,
+  resetPassword,
+  toggleStatus,
 };

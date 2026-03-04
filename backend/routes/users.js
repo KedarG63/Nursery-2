@@ -47,4 +47,25 @@ router.put('/:id', authorize(['Admin', 'Manager']), userController.updateUser);
  */
 router.delete('/:id', authorize(['Admin']), userController.deleteUser);
 
+/**
+ * PUT /api/users/:id/role
+ * Update user's role
+ * Access: Admin only
+ */
+router.put('/:id/role', authorize(['Admin']), userController.updateRole);
+
+/**
+ * PUT /api/users/:id/reset-password
+ * Reset user password
+ * Access: Admin only
+ */
+router.put('/:id/reset-password', authorize(['Admin']), userController.resetPassword);
+
+/**
+ * PUT /api/users/:id/status
+ * Activate or deactivate a user
+ * Access: Admin only
+ */
+router.put('/:id/status', authorize(['Admin']), userController.toggleStatus);
+
 module.exports = router;
