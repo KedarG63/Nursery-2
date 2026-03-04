@@ -5,7 +5,7 @@
  * Manages sales invoices, invoice items, applied payments, and AR reports.
  */
 
-const { pool } = require('../config/database');
+const pool = require('../config/database');
 const db = require('../utils/db');
 const logger = require('../config/logger');
 const { generateInvoiceHTML } = require('../services/invoiceService');

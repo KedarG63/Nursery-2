@@ -13,12 +13,12 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 
 const COLUMNS = [
   { key: 'vendor_name',       label: 'Vendor' },
-  { key: 'no_due_date',       label: 'No Due Date', money: true },
-  { key: 'current_due',       label: 'Current',     money: true },
-  { key: 'aged_1_30',         label: '1–30 Days',   money: true },
-  { key: 'aged_31_60',        label: '31–60 Days',  money: true },
-  { key: 'aged_61_90',        label: '61–90 Days',  money: true },
-  { key: 'aged_over_90',      label: '90+ Days',    money: true },
+  { key: 'no_due_date',       label: 'No Due Date',     money: true },
+  { key: 'current_due',       label: 'Overdue',         money: true, alert: true },
+  { key: 'aged_1_30',         label: 'Due 0–30 Days',   money: true },
+  { key: 'aged_31_60',        label: 'Due 31–60 Days',  money: true },
+  { key: 'aged_61_90',        label: 'Due 61–90 Days',  money: true },
+  { key: 'aged_over_90',      label: 'Due 90+ Days',    money: true },
   { key: 'total_outstanding', label: 'Total Outstanding', money: true },
 ];
 
@@ -53,22 +53,22 @@ const VendorAgingReport = () => {
       'Vendor Code': r.vendor_code,
       'Vendor': r.vendor_name,
       'No Due Date': parseFloat(r.no_due_date || 0),
-      'Current': parseFloat(r.current_due || 0),
-      '1-30 Days': parseFloat(r.aged_1_30 || 0),
-      '31-60 Days': parseFloat(r.aged_31_60 || 0),
-      '61-90 Days': parseFloat(r.aged_61_90 || 0),
-      '90+ Days': parseFloat(r.aged_over_90 || 0),
+      'Overdue': parseFloat(r.current_due || 0),
+      'Due 0-30 Days': parseFloat(r.aged_1_30 || 0),
+      'Due 31-60 Days': parseFloat(r.aged_31_60 || 0),
+      'Due 61-90 Days': parseFloat(r.aged_61_90 || 0),
+      'Due 90+ Days': parseFloat(r.aged_over_90 || 0),
       'Total Outstanding': parseFloat(r.total_outstanding || 0),
     }));
     data.push({
       'Vendor Code': '',
       'Vendor': 'TOTAL',
       'No Due Date': totals.no_due_date,
-      'Current': totals.current_due,
-      '1-30 Days': totals.aged_1_30,
-      '31-60 Days': totals.aged_31_60,
-      '61-90 Days': totals.aged_61_90,
-      '90+ Days': totals.aged_over_90,
+      'Overdue': totals.current_due,
+      'Due 0-30 Days': totals.aged_1_30,
+      'Due 31-60 Days': totals.aged_31_60,
+      'Due 61-90 Days': totals.aged_61_90,
+      'Due 90+ Days': totals.aged_over_90,
       'Total Outstanding': totals.total_outstanding,
     });
 
@@ -160,7 +160,7 @@ const VendorAgingReport = () => {
                       <TableCell key={col.key} align={col.money ? 'right' : 'left'}>
                         {col.money
                           ? (parseFloat(row[col.key] || 0) > 0
-                              ? (col.key === 'total_outstanding'
+                              ? (col.key === 'total_outstanding' || col.key === 'current_due'
                                   ? <Typography variant="body2" fontWeight={700} color="error.main">{formatCurrency(row[col.key])}</Typography>
                                   : formatCurrency(row[col.key]))
                               : <Typography variant="body2" color="text.disabled">—</Typography>)

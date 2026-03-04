@@ -6,7 +6,7 @@
  * The `due_date` column was added in migration 1763000000003.
  */
 
-const { pool } = require('../config/database');
+const pool = require('../config/database');
 const db = require('../utils/db');
 const logger = require('../config/logger');
 
@@ -263,12 +263,12 @@ const getAgingReport = async (req, res, next) => {
          v.vendor_code,
          v.vendor_name,
          v.contact_person,
-         COALESCE(SUM(CASE WHEN sp.due_date IS NULL THEN (sp.grand_total - sp.amount_paid) END), 0)                                           AS no_due_date,
-         COALESCE(SUM(CASE WHEN sp.due_date IS NOT NULL AND ($1::date - sp.due_date) <= 0 THEN (sp.grand_total - sp.amount_paid) END), 0)     AS current_due,
-         COALESCE(SUM(CASE WHEN ($1::date - sp.due_date) BETWEEN 1 AND 30 THEN (sp.grand_total - sp.amount_paid) END), 0)                    AS aged_1_30,
-         COALESCE(SUM(CASE WHEN ($1::date - sp.due_date) BETWEEN 31 AND 60 THEN (sp.grand_total - sp.amount_paid) END), 0)                   AS aged_31_60,
-         COALESCE(SUM(CASE WHEN ($1::date - sp.due_date) BETWEEN 61 AND 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                   AS aged_61_90,
-         COALESCE(SUM(CASE WHEN ($1::date - sp.due_date) > 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                               AS aged_over_90,
+         COALESCE(SUM(CASE WHEN sp.due_date IS NULL THEN (sp.grand_total - sp.amount_paid) END), 0)                                                   AS no_due_date,
+         COALESCE(SUM(CASE WHEN sp.due_date IS NOT NULL AND sp.due_date < $1::date THEN (sp.grand_total - sp.amount_paid) END), 0)                   AS current_due,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 0 AND 30 THEN (sp.grand_total - sp.amount_paid) END), 0)                            AS aged_1_30,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 31 AND 60 THEN (sp.grand_total - sp.amount_paid) END), 0)                           AS aged_31_60,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 61 AND 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                           AS aged_61_90,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) > 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                                       AS aged_over_90,
          SUM(sp.grand_total - sp.amount_paid) AS total_outstanding
        FROM vendors v
        JOIN seed_purchases sp ON sp.vendor_id = v.id
