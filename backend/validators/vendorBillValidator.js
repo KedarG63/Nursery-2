@@ -3,7 +3,7 @@
  * Phase 23: Billing & Accounting
  */
 
-const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer'];
+const PAYMENT_METHODS = ['cash', 'cheque', 'upi', 'bank_transfer'];
 
 const isValidDate = (v) => {
   if (!v) return false;
@@ -27,7 +27,7 @@ const validateUpdateDueDate = (req, res, next) => {
 
 const validateRecordVendorPayment = (req, res, next) => {
   const errors = [];
-  const { amount, payment_method, payment_date } = req.body;
+  const { amount, payment_method, payment_date, transaction_reference } = req.body;
 
   const amt = Number(amount);
   if (amount === undefined || amount === null || isNaN(amt) || amt <= 0) {
@@ -38,6 +38,9 @@ const validateRecordVendorPayment = (req, res, next) => {
   }
   if (!payment_date || !isValidDate(payment_date)) {
     errors.push('payment_date is required and must be a valid date');
+  }
+  if (!transaction_reference || String(transaction_reference).trim() === '') {
+    errors.push('transaction_reference is required (receipt number, cheque number, or transaction ID)');
   }
 
   if (errors.length > 0) {

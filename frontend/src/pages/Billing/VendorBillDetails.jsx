@@ -20,7 +20,14 @@ import { getVendorBill, updateDueDate, recordPayment } from '../../services/vend
 import BillingStatusBadge from '../../components/Billing/BillingStatusBadge';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
-const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer'];
+const PAYMENT_METHODS = ['cash', 'cheque', 'upi', 'bank_transfer'];
+
+const REFERENCE_LABELS = {
+  cash:          'Receipt Number *',
+  cheque:        'Cheque Number *',
+  upi:           'UPI Transaction ID / UTR *',
+  bank_transfer: 'Bank Reference / UTR *',
+};
 
 const VendorBillDetails = () => {
   const { id } = useParams();
@@ -87,6 +94,10 @@ const VendorBillDetails = () => {
     if (isNaN(amt) || amt <= 0) { setPaymentError('Amount must be > 0'); return; }
     const balance = parseFloat(bill.balance_due || 0);
     if (amt > balance + 0.01) { setPaymentError(`Amount exceeds balance due (${formatCurrency(balance)})`); return; }
+    if (!paymentData.transaction_reference || paymentData.transaction_reference.trim() === '') {
+      setPaymentError(`${REFERENCE_LABELS[paymentData.payment_method].replace(' *', '')} is required`);
+      return;
+    }
 
     setSubmittingPayment(true);
     try {
@@ -263,11 +274,17 @@ const VendorBillDetails = () => {
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <TextField
-                  label="Reference"
+                  label={REFERENCE_LABELS[paymentData.payment_method]}
                   size="small"
                   fullWidth
+                  required
                   value={paymentData.transaction_reference}
                   onChange={(e) => setPaymentData({ ...paymentData, transaction_reference: e.target.value })}
+                  placeholder={
+                    paymentData.payment_method === 'cash' ? 'e.g. REC-2026-001' :
+                    paymentData.payment_method === 'cheque' ? 'e.g. 123456' :
+                    'e.g. UTR123456789'
+                  }
                 />
               </Grid>
               <Grid item xs={12}>
@@ -313,7 +330,7 @@ const VendorBillDetails = () => {
                 {bill.payments.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>{formatDate(p.payment_date)}</TableCell>
-                    <TableCell>{p.payment_method?.replace('_', ' ').toUpperCase()}</TableCell>
+                    <TableCell>{p.payment_method?.replace(/_/g, ' ').toUpperCase()}</TableCell>
                     <TableCell>{p.transaction_reference || '—'}</TableCell>
                     <TableCell>{p.recorded_by_name || '—'}</TableCell>
                     <TableCell align="right"><Typography fontWeight={600} color="success.main">{formatCurrency(p.amount)}</Typography></TableCell>
