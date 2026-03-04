@@ -101,25 +101,25 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
                 sx={{
                   borderRadius: 2,
                   mx: 1,
-                  mb: 0.25,
+                  mb: 0.5,
                   py: 1,
                   px: 1.5,
                   width: 'auto',
                   transition: 'all 0.15s ease',
                   '&.Mui-selected': {
-                    backgroundColor: 'rgba(139,184,154,0.18)',
-                    borderLeft: '3px solid #8BB89A',
-                    pl: '9px',
-                    '&:hover': { backgroundColor: 'rgba(139,184,154,0.22)' },
+                    backgroundColor: '#2E5D44',
+                    borderLeft: '4px solid #8DD4A0',
+                    pl: '8px',
+                    '&:hover': { backgroundColor: '#356A4F' },
                   },
-                  '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.06)',
+                  '&:not(.Mui-selected):hover': {
+                    backgroundColor: 'rgba(255,255,255,0.07)',
                   },
                 }}
               >
                 <ListItemIcon sx={{
                   minWidth: 36,
-                  color: isActive ? '#8BB89A' : 'rgba(200,225,208,0.65)',
+                  color: isActive ? '#8DD4A0' : 'rgba(232,240,232,0.7)',
                   transition: 'color 0.15s ease',
                   '& svg': { fontSize: '1.15rem' },
                 }}>
@@ -129,9 +129,10 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
                   primary={t(item.labelKey)}
                   primaryTypographyProps={{
                     fontSize: '0.875rem',
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? '#C8E6CC' : 'rgba(200,225,208,0.8)',
+                    fontWeight: isActive ? 700 : 500,
+                    color: isActive ? '#FFFFFF' : 'rgba(232,240,232,0.82)',
                     transition: 'all 0.15s ease',
+                    letterSpacing: isActive ? '0.01em' : 'normal',
                   }}
                 />
               </ListItemButton>
