@@ -47,7 +47,11 @@ const Header = ({ onMenuClick, onDesktopMenuClick }) => {
             flexShrink: 0,
           }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M12 22C12 22 11 18 8 14C5 10 3 8 3 6C3 4 5 2 8 2C10 2 11.5 3 12 4C12.5 3 14 2 16 2C19 2 21 4 21 6C21 8 19 10 16 14C13 18 12 22 12 22Z" fill="#4A7C59"/>
+              <path d="M12 20.5 C11.7 16.5 12.3 12.5 12 5.5" stroke="#4A7C59" strokeWidth="1.6" strokeLinecap="round"/>
+              <path d="M8.5 20.5 L15.5 20.5" stroke="#4A7C59" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M12 15.5 C9.5 14.5 7 12 6.5 9 C9.5 8.5 12 11.5 12 15.5Z" fill="#4A7C59"/>
+              <path d="M12 11.5 C14.5 10.5 17 8 17.5 5 C14.5 4.5 12 7.5 12 11.5Z" fill="#4A7C59"/>
+              <circle cx="12" cy="4" r="1.4" fill="#4A7C59"/>
             </svg>
           </Box>
           <Typography

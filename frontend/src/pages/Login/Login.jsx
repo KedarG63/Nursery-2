@@ -26,24 +26,46 @@ const loginSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-const BotanicalSVG = () => (
+const SaplingSVG = () => (
   <svg viewBox="0 0 400 500" fill="none" xmlns="http://www.w3.org/2000/svg"
     style={{ width: '100%', maxWidth: 340, opacity: 0.2 }}>
-    <path d="M200 480 C200 480 198 380 202 260 C205 160 195 80 200 20" stroke="#A8D5B5" strokeWidth="3" strokeLinecap="round"/>
-    <path d="M200 300 C200 300 140 270 100 220 C70 180 80 130 120 140 C160 150 200 210 200 300Z" fill="#7AAB8A"/>
-    <path d="M200 280 C200 280 260 250 300 195 C330 150 320 100 280 115 C240 130 200 200 200 280Z" fill="#5E8F6D"/>
-    <path d="M200 380 C200 380 155 355 125 315 C102 280 110 245 140 255 C170 265 200 320 200 380Z" fill="#8BB89A"/>
-    <path d="M200 360 C200 360 245 335 275 292 C298 258 290 223 260 235 C230 247 200 308 200 360Z" fill="#6FA080"/>
-    <path d="M200 180 C200 180 168 162 148 135 C132 112 140 88 162 96 C184 104 200 148 200 180Z" fill="#9FC4AB"/>
-    <path d="M200 160 C200 160 232 142 252 114 C268 90 260 66 238 75 C216 84 200 128 200 160Z" fill="#75A888"/>
-    <path d="M200 420 C200 420 170 440 150 460 C135 475 138 490 155 488 C172 486 200 465 200 420Z" fill="#8BB89A"/>
-    <path d="M200 420 C200 420 230 440 250 460 C265 475 262 490 245 488 C228 486 200 465 200 420Z" fill="#75A888"/>
-    <path d="M200 300 C185 270 155 245 120 230" stroke="#5E8F6D" strokeWidth="1.2" strokeLinecap="round" opacity="0.6"/>
-    <path d="M200 280 C215 250 245 228 280 215" stroke="#4A7C59" strokeWidth="1.2" strokeLinecap="round" opacity="0.6"/>
-    <circle cx="155" cy="120" r="3" fill="#A8D5B5" opacity="0.6"/>
-    <circle cx="248" cy="105" r="2.5" fill="#A8D5B5" opacity="0.6"/>
-    <circle cx="118" cy="300" r="2" fill="#A8D5B5" opacity="0.5"/>
-    <circle cx="292" cy="278" r="2" fill="#A8D5B5" opacity="0.5"/>
+    {/* Main trunk — gentle S-curve */}
+    <path d="M200 468 C198 420 203 368 200 308 C197 248 202 188 199 128 C197 88 200 58 200 48"
+      stroke="#A8D5B5" strokeWidth="3.5" strokeLinecap="round"/>
+    {/* Ground line */}
+    <path d="M158 470 C176 466 224 466 242 470"
+      stroke="#8BB89A" strokeWidth="2" strokeLinecap="round" opacity="0.7"/>
+    {/* Roots */}
+    <path d="M200 462 C188 466 172 470 160 477" stroke="#7AAB8A" strokeWidth="1.8" strokeLinecap="round" opacity="0.5"/>
+    <path d="M200 462 C212 466 228 470 240 477" stroke="#7AAB8A" strokeWidth="1.8" strokeLinecap="round" opacity="0.5"/>
+    <path d="M200 462 C200 470 199 478 198 486" stroke="#7AAB8A" strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
+    {/* Leaf pair 1 — lowest, widest (y≈380) */}
+    <path d="M200 392 C200 392 148 372 118 330 C95 297 108 265 140 272 C172 279 200 350 200 392Z" fill="#7AAB8A"/>
+    <path d="M200 372 C200 372 252 352 282 310 C305 277 292 245 260 252 C228 259 200 330 200 372Z" fill="#5E8F6D"/>
+    {/* Leaf pair 2 (y≈298) */}
+    <path d="M200 308 C200 308 156 292 132 256 C112 228 124 202 152 210 C180 218 200 274 200 308Z" fill="#8BB89A"/>
+    <path d="M200 290 C200 290 244 274 268 238 C288 210 276 184 248 192 C220 200 200 256 200 290Z" fill="#6FA080"/>
+    {/* Leaf pair 3 (y≈220) */}
+    <path d="M200 228 C200 228 163 213 142 183 C124 157 134 133 159 140 C184 147 200 196 200 228Z" fill="#9FC4AB"/>
+    <path d="M200 212 C200 212 237 197 258 167 C276 141 266 117 241 124 C216 131 200 180 200 212Z" fill="#75A888"/>
+    {/* Leaf pair 4 (y≈148) */}
+    <path d="M200 155 C200 155 171 141 153 116 C138 94 148 74 169 81 C190 88 200 126 200 155Z" fill="#A8D5B5"/>
+    <path d="M200 140 C200 140 229 126 247 101 C262 79 252 59 231 66 C210 73 200 111 200 140Z" fill="#8BB89A"/>
+    {/* Leaf pair 5 — top, smallest (y≈83) */}
+    <path d="M200 88 C200 88 179 77 166 59 C155 43 163 29 179 35 C195 41 200 66 200 88Z" fill="#A8D5B5"/>
+    <path d="M200 76 C200 76 221 65 234 47 C245 31 237 17 221 23 C205 29 200 54 200 76Z" fill="#9FC4AB"/>
+    {/* Terminal bud */}
+    <circle cx="200" cy="44" r="5" fill="#A8D5B5" opacity="0.8"/>
+    <circle cx="200" cy="44" r="2.5" fill="#8BB89A"/>
+    {/* Leaf veins */}
+    <path d="M200 378 C178 353 152 338 128 328" stroke="#5E8F6D" strokeWidth="0.9" strokeLinecap="round" opacity="0.4"/>
+    <path d="M200 360 C222 335 248 320 272 310" stroke="#4A7C59" strokeWidth="0.9" strokeLinecap="round" opacity="0.4"/>
+    {/* Floating seeds/particles */}
+    <circle cx="148" cy="78" r="2.5" fill="#A8D5B5" opacity="0.5"/>
+    <circle cx="260" cy="96" r="2" fill="#A8D5B5" opacity="0.45"/>
+    <circle cx="130" cy="196" r="1.8" fill="#A8D5B5" opacity="0.4"/>
+    <circle cx="278" cy="174" r="2.2" fill="#A8D5B5" opacity="0.45"/>
+    <circle cx="165" cy="308" r="1.5" fill="#A8D5B5" opacity="0.35"/>
   </svg>
 );
 
@@ -118,7 +140,11 @@ const Login = () => {
               border: '1.5px solid rgba(139,184,154,0.35)',
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M12 22C12 22 11 18 8 14C5 10 3 8 3 6C3 4 5 2 8 2C10 2 11.5 3 12 4C12.5 3 14 2 16 2C19 2 21 4 21 6C21 8 19 10 16 14C13 18 12 22 12 22Z" fill="#8BB89A"/>
+                <path d="M12 20.5 C11.7 16.5 12.3 12.5 12 5.5" stroke="#8BB89A" strokeWidth="1.6" strokeLinecap="round"/>
+                <path d="M8.5 20.5 L15.5 20.5" stroke="#8BB89A" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M12 15.5 C9.5 14.5 7 12 6.5 9 C9.5 8.5 12 11.5 12 15.5Z" fill="#8BB89A"/>
+                <path d="M12 11.5 C14.5 10.5 17 8 17.5 5 C14.5 4.5 12 7.5 12 11.5Z" fill="#8BB89A"/>
+                <circle cx="12" cy="4" r="1.4" fill="#8BB89A"/>
               </svg>
             </Box>
             <Typography sx={{
@@ -139,7 +165,7 @@ const Login = () => {
 
         {/* Botanical illustration */}
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
-          <BotanicalSVG />
+          <SaplingSVG />
         </Box>
 
         {/* Tagline */}
@@ -172,7 +198,11 @@ const Login = () => {
             borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M12 22C12 22 11 18 8 14C5 10 3 8 3 6C3 4 5 2 8 2C10 2 11.5 3 12 4C12.5 3 14 2 16 2C19 2 21 4 21 6C21 8 19 10 16 14C13 18 12 22 12 22Z" fill="#4A7C59"/>
+              <path d="M12 20.5 C11.7 16.5 12.3 12.5 12 5.5" stroke="#4A7C59" strokeWidth="1.6" strokeLinecap="round"/>
+              <path d="M8.5 20.5 L15.5 20.5" stroke="#4A7C59" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M12 15.5 C9.5 14.5 7 12 6.5 9 C9.5 8.5 12 11.5 12 15.5Z" fill="#4A7C59"/>
+              <path d="M12 11.5 C14.5 10.5 17 8 17.5 5 C14.5 4.5 12 7.5 12 11.5Z" fill="#4A7C59"/>
+              <circle cx="12" cy="4" r="1.4" fill="#4A7C59"/>
             </svg>
           </Box>
           <Typography sx={{ fontFamily: '"Lora", Georgia, serif', fontSize: '1.05rem', fontWeight: 600, color: '#1A2E1A' }}>
