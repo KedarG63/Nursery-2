@@ -962,7 +962,7 @@ const generateReceipt = async (req, res) => {
       </head>
       <body>
         <div class="header">
-          <h1>Plant Nursery Management System</h1>
+          <h1>Vasundhara Seedlings</h1>
           <p>Payment Receipt</p>
         </div>
 
