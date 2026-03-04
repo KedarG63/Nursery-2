@@ -426,13 +426,16 @@ const recordOfflinePayment = async (req, res) => {
     }
 
     // Validate amount against real balance (total - paid)
-    if (paymentAmount > orderBalance + 0.01) {
+    if (paymentAmount > orderBalance + 0.005) {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Payment amount (₹${paymentAmount.toFixed(2)}) exceeds outstanding balance (₹${orderBalance.toFixed(2)})`,
       });
     }
+
+    // Cap effective payment to prevent floating-point overflow past total_amount
+    const effectivePayment = Math.min(paymentAmount, orderBalance);
 
     // Create payment record
     const paymentResult = await client.query(
@@ -448,7 +451,7 @@ const recordOfflinePayment = async (req, res) => {
         order.customer_id,
         payment_method,
         'manual',
-        amount,
+        effectivePayment,
         'success',
         receipt_number,
         userId,
@@ -457,24 +460,16 @@ const recordOfflinePayment = async (req, res) => {
       ]
     );
 
-    // Update order paid_amount and balance_amount
-    // Use finalBalance to avoid floating point precision issues
+    // Update order — use LEAST(total_amount, ...) so paid_amount can never
+    // exceed total_amount regardless of floating-point rounding
     await client.query(
       `UPDATE orders
-       SET paid_amount = paid_amount + $1,
-           balance_amount = $2,
+       SET paid_amount = LEAST(total_amount, paid_amount + $1),
            updated_at = NOW(),
-           updated_by = $3
-       WHERE id = $4`,
-      [paymentAmount, finalBalance, userId, order_id]
+           updated_by = $2
+       WHERE id = $3`,
+      [effectivePayment, userId, order_id]
     );
-
-    // Log the update for verification
-    console.log('Order updated:', {
-      previousBalance: orderBalance,
-      paymentAmount,
-      newBalance: finalBalance
-    });
 
     await client.query('COMMIT');
 
