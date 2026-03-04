@@ -230,6 +230,32 @@ const createCustomer = async (req, res) => {
       });
     }
 
+    // Check for soft-deleted customer with same phone — restore instead of creating new
+    const softDeleted = await client.query(
+      'SELECT id FROM customers WHERE phone = $1 AND deleted_at IS NOT NULL',
+      [phone]
+    );
+
+    if (softDeleted.rows.length > 0) {
+      const restoredId = softDeleted.rows[0].id;
+      await client.query(
+        `UPDATE customers SET deleted_at = NULL, status = 'active', updated_by = $1, updated_at = NOW() WHERE id = $2`,
+        [req.user.id, restoredId]
+      );
+      await client.query('COMMIT');
+      const restored = await pool.query(
+        `SELECT c.*,
+          (SELECT json_agg(ca.*) FROM customer_addresses ca WHERE ca.customer_id = c.id AND ca.deleted_at IS NULL) as addresses
+         FROM customers c WHERE c.id = $1`,
+        [restoredId]
+      );
+      return res.status(200).json({
+        success: true,
+        data: restored.rows[0],
+        message: 'Customer restored successfully'
+      });
+    }
+
     // Insert customer
     const insertQuery = `
       INSERT INTO customers (
