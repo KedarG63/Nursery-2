@@ -5,7 +5,7 @@ const userService = {
    * Get all users
    */
   getUsers: async () => {
-    const response = await api.get('/users');
+    const response = await api.get('/api/users');
     return response.data;
   },
 
@@ -13,38 +13,38 @@ const userService = {
    * Get users by role
    */
   getUsersByRole: async (role) => {
-    const response = await api.get(`/users/role/${role}`);
+    const response = await api.get(`/api/users/role/${role}`);
     return response.data;
   },
 
   createUser: async ({ email, password, full_name, phone, role }) => {
-    const response = await api.post('/users', { email, password, full_name, phone, role });
+    const response = await api.post('/api/users', { email, password, full_name, phone, role });
     return response.data;
   },
 
   updateUser: async (id, { full_name, phone }) => {
-    const response = await api.put(`/users/${id}`, { full_name, phone });
+    const response = await api.put(`/api/users/${id}`, { full_name, phone });
     return response.data;
   },
 
   updateRole: async (id, role) => {
-    const response = await api.put(`/users/${id}/role`, { role });
+    const response = await api.put(`/api/users/${id}/role`, { role });
     return response.data;
   },
 
   resetPassword: async (id, newPassword) => {
-    const response = await api.put(`/users/${id}/reset-password`, { new_password: newPassword });
+    const response = await api.put(`/api/users/${id}/reset-password`, { new_password: newPassword });
     return response.data;
   },
 
   toggleStatus: async (id, status) => {
-    const response = await api.put(`/users/${id}/status`, { status });
+    const response = await api.put(`/api/users/${id}/status`, { status });
     return response.data;
   },
 
   // Legacy — kept for DriversManagement page compatibility
   createDriver: async (driverData) => {
-    const response = await api.post('/users', {
+    const response = await api.post('/api/users', {
       email: driverData.email,
       password: driverData.password,
       full_name: driverData.fullName,
@@ -60,7 +60,7 @@ const userService = {
    * Update driver
    */
   updateDriver: async (driverId, driverData) => {
-    const response = await api.put(`/users/${driverId}`, {
+    const response = await api.put(`/api/users/${driverId}`, {
       full_name: driverData.fullName,
       phone: driverData.phone,
       license_number: driverData.licenseNumber,
@@ -73,7 +73,7 @@ const userService = {
    * Delete user
    */
   deleteUser: async (userId) => {
-    const response = await api.delete(`/users/${userId}`);
+    const response = await api.delete(`/api/users/${userId}`);
     return response.data;
   },
 
@@ -81,7 +81,7 @@ const userService = {
    * Get user profile
    */
   getProfile: async () => {
-    const response = await api.get('/auth/profile');
+    const response = await api.get('/api/auth/profile');
     return response.data;
   }
 };
