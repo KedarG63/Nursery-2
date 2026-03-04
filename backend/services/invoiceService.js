@@ -127,8 +127,8 @@ const generateInvoiceHTML = (invoice, items, customer, order) => {
     <!-- Header -->
     <div class="header">
       <div>
-        <div class="company-name">Green Nursery</div>
-        <div class="company-sub">Plant Nursery Management System</div>
+        <div class="company-name">Vasundhara Seedlings</div>
+        <div class="company-sub">Plant Nursery</div>
       </div>
       <div class="invoice-title">
         <h1>Invoice</h1>

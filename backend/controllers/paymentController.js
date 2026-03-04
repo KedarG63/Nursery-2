@@ -391,8 +391,9 @@ const recordOfflinePayment = async (req, res) => {
     await client.query('BEGIN');
 
     // Fetch order with row lock to prevent race conditions
+    // Fetch total_amount and paid_amount (source of truth) not just balance_amount
     const orderResult = await client.query(
-      `SELECT id, customer_id, balance_amount FROM orders
+      `SELECT id, customer_id, total_amount, paid_amount FROM orders
        WHERE id = $1 AND deleted_at IS NULL
        FOR UPDATE`,
       [order_id]
@@ -408,19 +409,12 @@ const recordOfflinePayment = async (req, res) => {
 
     const order = orderResult.rows[0];
 
-    // Convert to numbers for accurate comparison
-    const orderBalance = parseFloat(order.balance_amount);
-    const paymentAmount = parseFloat(amount);
-    const newBalance = orderBalance - paymentAmount;
-
-    // Log for debugging
-    console.log('Recording payment:', {
-      orderId: order_id,
-      paymentAmount,
-      currentBalance: orderBalance,
-      newBalance,
-      isValid: newBalance >= -0.01
-    });
+    // Compute from source of truth (consistent with DB trigger)
+    const totalAmount = parseFloat(order.total_amount);
+    const currentPaid = parseFloat(order.paid_amount);
+    const orderBalance = Math.round((totalAmount - currentPaid) * 100) / 100;
+    const paymentAmount = Math.round(parseFloat(amount) * 100) / 100;
+    const finalBalance = Math.max(0, Math.round((orderBalance - paymentAmount) * 100) / 100);
 
     // Validate amount is positive
     if (paymentAmount <= 0) {
@@ -431,26 +425,14 @@ const recordOfflinePayment = async (req, res) => {
       });
     }
 
-    // Validate amount against current balance
-    if (paymentAmount > orderBalance) {
+    // Validate amount against real balance (total - paid)
+    if (paymentAmount > orderBalance + 0.01) {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Payment amount (₹${paymentAmount.toFixed(2)}) exceeds outstanding balance (₹${orderBalance.toFixed(2)})`,
       });
     }
-
-    // Additional safety check: ensure balance won't go negative
-    if (newBalance < -0.01) { // Allow tiny floating point errors
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: `Payment would result in negative balance. Current balance: ₹${orderBalance.toFixed(2)}, Payment: ₹${paymentAmount.toFixed(2)}`,
-      });
-    }
-
-    // If balance is very close to zero, round it to zero
-    const finalBalance = Math.abs(newBalance) < 0.01 ? 0 : newBalance;
 
     // Create payment record
     const paymentResult = await client.query(
