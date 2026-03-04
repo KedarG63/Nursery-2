@@ -35,7 +35,8 @@
     "invoices": "चालान",
     "vendorBills": "विक्रेता बिल",
     "arAging": "AR एजिंग",
-    "apAging": "AP एजिंग"
+    "apAging": "AP एजिंग",
+    "users": "उपयोगकर्ता"
   },
   "auth": {
     "loginTitle": "साइन इन करें",

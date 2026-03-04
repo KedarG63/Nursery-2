@@ -35,7 +35,8 @@
     "invoices": "Invoices",
     "vendorBills": "Vendor Bills",
     "arAging": "AR Aging",
-    "apAging": "AP Aging"
+    "apAging": "AP Aging",
+    "users": "Users"
   },
   "auth": {
     "loginTitle": "Sign In",
