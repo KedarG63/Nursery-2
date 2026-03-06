@@ -512,15 +512,15 @@ const checkAvailability = async (req, res) => {
       JOIN products p ON sp.product_id = p.id
       LEFT JOIN skus s ON sp.sku_id = s.id
       WHERE sp.product_id = $1
-        AND ($2::uuid IS NULL OR sp.sku_id = $2)
-        AND sp.inventory_status = 'available'
+        AND ($2::uuid IS NULL OR sp.sku_id IS NULL OR sp.sku_id = $2)
+        AND sp.inventory_status IN ('available', 'low_stock')
         AND sp.expiry_date > CURRENT_DATE
-        AND sp.seeds_remaining >= $3
+        AND (COALESCE($3::integer, 1) IS NULL OR COALESCE(sp.seeds_remaining, 0) >= COALESCE($3::integer, 1))
         AND sp.deleted_at IS NULL
       ORDER BY sp.expiry_date ASC, sp.purchase_date ASC
     `;
 
-    const result = await pool.query(query, [product_id, sku_id || null, seeds_needed]);
+    const result = await pool.query(query, [product_id, sku_id || null, seeds_needed || null]);
 
     res.json({
       success: true,

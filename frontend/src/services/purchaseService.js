@@ -47,9 +47,9 @@ const purchaseService = {
 
   // Get available seeds for a specific product/SKU
   getAvailableSeeds: async (productId, skuId = null) => {
-    const params = { product_id: productId };
+    const params = { product_id: productId, seeds_needed: 1 };
     if (skuId) params.sku_id = skuId;
-    const response = await api.get('/api/purchases/available-seeds', { params });
+    const response = await api.get('/api/purchases/check-availability', { params });
     return response.data;
   },
 

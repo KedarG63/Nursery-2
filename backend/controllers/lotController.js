@@ -72,17 +72,13 @@ const createLot = async (req, res) => {
       seedAllocation = await checkAndAllocateSeed(product_id, sku_id, quantity, client);
 
       if (!seedAllocation.available) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          message: seedAllocation.message || 'Insufficient seeds available',
-          required_seeds: seedAllocation.required,
-          product_name,
-        });
+        // Log warning but don't block lot creation — seeds may exist but not match SKU exactly
+        console.warn(`Seed allocation skipped for lot: ${seedAllocation.message}. product_id=${product_id}, sku_id=${sku_id}, quantity=${quantity}`);
+        seedAllocation = null;
+      } else {
+        // Extract seed purchase sequence for lot number
+        seedPurchaseSeq = seedAllocation.seedPurchase.purchase_number.split('-').pop();
       }
-
-      // Extract seed purchase sequence for lot number
-      seedPurchaseSeq = seedAllocation.seedPurchase.purchase_number.split('-').pop();
     }
 
     // Generate lot number: LOT-YYYYMMDD-XXXX-S{SeedSeq} (Phase 22 enhanced format)

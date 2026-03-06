@@ -308,8 +308,7 @@ const validateCheckAvailability = [
     .withMessage('Invalid SKU ID'),
 
   query('seeds_needed')
-    .notEmpty()
-    .withMessage('Seeds needed is required')
+    .optional()
     .isInt({ min: 1 })
     .withMessage('Seeds needed must be at least 1'),
 
