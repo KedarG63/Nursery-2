@@ -9,7 +9,7 @@ import {
   Button,
   Divider,
 } from '@mui/material';
-import { Warning as WarningIcon, DirectionsWalk as WalkInIcon } from '@mui/icons-material';
+import { Warning as WarningIcon, DirectionsWalk as WalkInIcon, CheckCircle as CheckIcon } from '@mui/icons-material';
 import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import { getCustomers, getCustomer, createCustomer, createAddress } from '../../services/customerService';
@@ -61,6 +61,8 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
    * Find or create the walk-in customer and auto-select it
    */
   const handleWalkIn = async () => {
+    // Show name field immediately — API resolves in background
+    setShowWalkInName(true);
     setWalkInLoading(true);
     try {
       // Check if walk-in customer already exists in loaded list
@@ -103,7 +105,6 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
         }
       }
 
-      setShowWalkInName(true);
       onCustomerSelect(walkIn);
     } catch (error) {
       console.error('Failed to set walk-in customer:', error);
@@ -192,27 +193,51 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
 
         <Divider sx={{ my: 2 }}>or</Divider>
 
-        <Button
-          variant="outlined"
-          color="secondary"
-          startIcon={<WalkInIcon />}
-          onClick={handleWalkIn}
-          disabled={walkInLoading}
-          fullWidth
-        >
-          {walkInLoading ? 'Setting up...' : 'Walk-in / Cash Customer'}
-        </Button>
-
-        {showWalkInName && (
-          <TextField
+        {!showWalkInName ? (
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<WalkInIcon />}
+            onClick={handleWalkIn}
             fullWidth
-            label="Walk-in Customer Name (optional)"
-            placeholder="e.g. Ramesh Sharma"
-            value={walkInName}
-            onChange={handleWalkInNameChange}
-            sx={{ mt: 2 }}
-            helperText="Enter the customer's name for this sale record"
-          />
+          >
+            Walk-in / Cash Customer
+          </Button>
+        ) : (
+          <Box>
+            <TextField
+              fullWidth
+              autoFocus
+              label="Walk-in Customer Name (optional)"
+              placeholder="e.g. Ramesh Sharma"
+              value={walkInName}
+              onChange={handleWalkInNameChange}
+              helperText={
+                walkInLoading
+                  ? 'Setting up walk-in account...'
+                  : selectedCustomer
+                  ? 'Ready — click Next to continue'
+                  : 'Enter name for the sales record (optional)'
+              }
+              InputProps={{
+                endAdornment: !walkInLoading && selectedCustomer
+                  ? <CheckIcon color="success" fontSize="small" />
+                  : null,
+              }}
+            />
+            <Button
+              size="small"
+              onClick={() => {
+                setShowWalkInName(false);
+                setWalkInName('');
+                onCustomerSelect(null);
+                if (onWalkInName) onWalkInName('');
+              }}
+              sx={{ mt: 0.5 }}
+            >
+              ← Back to customer search
+            </Button>
+          </Box>
         )}
       </Box>
 
