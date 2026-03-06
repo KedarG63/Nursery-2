@@ -148,7 +148,8 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
     return { type: 'success', message: 'Good credit status' };
   };
 
-  const creditStatus = getCreditStatus(selectedCustomer);
+  const isWalkIn = selectedCustomer?.name === 'Walk-in Customer';
+  const creditStatus = isWalkIn ? null : getCreditStatus(selectedCustomer);
 
   return (
     <Box>
@@ -160,46 +161,48 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
       </Typography>
 
       <Box sx={{ mt: 3 }}>
-        <Autocomplete
-          options={customers}
-          loading={loading}
-          value={selectedCustomer}
-          onChange={(event, newValue) => onCustomerSelect(newValue)}
-          inputValue={inputValue}
-          onInputChange={(event, newInputValue) => setInputValue(newInputValue)}
-          getOptionLabel={(customer) =>
-            `${customer.name} - ${formatPhone(customer.phone)}`
-          }
-          isOptionEqualToValue={(option, value) => option.id === value.id}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Search Customer"
-              placeholder="Type customer name or phone..."
-              required
-            />
-          )}
-          renderOption={(props, customer) => (
-            <Box component="li" {...props}>
-              <Box sx={{ width: '100%' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body1">{customer.name}</Typography>
-                  <Chip
-                    label={customer.customer_type}
-                    size="small"
-                    color="primary"
-                  />
+        {!showWalkInName && (
+          <Autocomplete
+            options={customers}
+            loading={loading}
+            value={selectedCustomer}
+            onChange={(event, newValue) => onCustomerSelect(newValue)}
+            inputValue={inputValue}
+            onInputChange={(event, newInputValue) => setInputValue(newInputValue)}
+            getOptionLabel={(customer) =>
+              `${customer.name} - ${formatPhone(customer.phone)}`
+            }
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Search Customer"
+                placeholder="Type customer name or phone..."
+                required
+              />
+            )}
+            renderOption={(props, customer) => (
+              <Box component="li" {...props}>
+                <Box sx={{ width: '100%' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body1">{customer.name}</Typography>
+                    <Chip
+                      label={customer.customer_type}
+                      size="small"
+                      color="primary"
+                    />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatPhone(customer.phone)} • Credit: {formatCurrency((customer.credit_limit || 0) - (customer.credit_used || 0))}
+                  </Typography>
                 </Box>
-                <Typography variant="caption" color="text.secondary">
-                  {formatPhone(customer.phone)} • Credit: {formatCurrency((customer.credit_limit || 0) - (customer.credit_used || 0))}
-                </Typography>
               </Box>
-            </Box>
-          )}
-          noOptionsText="No customers found"
-        />
+            )}
+            noOptionsText="No customers found"
+          />
+        )}
 
-        <Divider sx={{ my: 2 }}>or</Divider>
+        {!showWalkInName && <Divider sx={{ my: 2 }}>or</Divider>}
 
         {!showWalkInName ? (
           <Button
@@ -263,7 +266,7 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
       {/* Selected Customer Details */}
       {selectedCustomer && (
         <Box sx={{ mt: 3 }}>
-          <Alert severity={creditStatus?.type || 'info'} icon={<WarningIcon />}>
+          <Alert severity={isWalkIn ? 'info' : (creditStatus?.type || 'info')} icon={isWalkIn ? false : <WarningIcon />}>
             <Typography variant="subtitle2" gutterBottom>
               {showWalkInName
                 ? (walkInName || 'Walk-in Customer')
@@ -275,18 +278,27 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
                 Mobile: +91 {walkInPhone.slice(0, 5)} {walkInPhone.slice(5)}
               </Typography>
             )}
-            <Typography variant="body2">
-              Credit Limit: {formatCurrency(selectedCustomer.credit_limit || 0)}
-            </Typography>
-            <Typography variant="body2">
-              Credit Used: {formatCurrency(selectedCustomer.credit_used || 0)}
-            </Typography>
-            <Typography variant="body2" fontWeight={600}>
-              Available: {formatCurrency((selectedCustomer.credit_limit || 0) - (selectedCustomer.credit_used || 0))}
-            </Typography>
-            {creditStatus && (
-              <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                {creditStatus.message}
+            {!isWalkIn && (
+              <>
+                <Typography variant="body2">
+                  Credit Limit: {formatCurrency(selectedCustomer.credit_limit || 0)}
+                </Typography>
+                <Typography variant="body2">
+                  Credit Used: {formatCurrency(selectedCustomer.credit_used || 0)}
+                </Typography>
+                <Typography variant="body2" fontWeight={600}>
+                  Available: {formatCurrency((selectedCustomer.credit_limit || 0) - (selectedCustomer.credit_used || 0))}
+                </Typography>
+                {creditStatus && (
+                  <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                    {creditStatus.message}
+                  </Typography>
+                )}
+              </>
+            )}
+            {isWalkIn && (
+              <Typography variant="body2" color="text.secondary">
+                Cash / counter sale — no credit
               </Typography>
             )}
           </Alert>
