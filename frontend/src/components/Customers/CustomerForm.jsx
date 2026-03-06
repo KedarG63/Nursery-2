@@ -38,10 +38,10 @@ const addressSchema = z.object({
 const customerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
-  phone: z.string().regex(/^[0-9]{10}$/, 'Phone must be 10 digits'),
+  phone: z.string().regex(/^[6-9][0-9]{9}$/, 'Must be a valid 10-digit Indian mobile number (starts with 6-9)'),
   whatsapp_number: z
     .string()
-    .regex(/^[0-9]{10}$/, 'WhatsApp number must be 10 digits')
+    .regex(/^[6-9][0-9]{9}$/, 'Must be a valid 10-digit Indian mobile number')
     .optional()
     .or(z.literal('')),
   customer_type: z.enum(['farmer', 'retailer', 'home_gardener', 'institutional']),
@@ -49,7 +49,7 @@ const customerSchema = z.object({
   credit_limit: z.number().min(0, 'Credit limit cannot be negative'),
   credit_days: z
     .number()
-    .min(0, 'Credit days cannot be negative')
+    .min(1, 'Credit days must be at least 1')
     .max(365, 'Credit days cannot exceed 365'),
   whatsapp_opt_in: z.boolean().optional(),
   addresses: z.array(addressSchema).min(1, 'At least one address is required')
