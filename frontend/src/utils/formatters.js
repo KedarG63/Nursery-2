@@ -59,12 +59,15 @@ export const formatPhone = (phone) => {
   // Remove all non-digit characters
   const cleaned = phone.replace(/\D/g, '');
 
-  // Format as (XXX) XXX-XXXX for 10 digits
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  // Strip +91 country code for Indian numbers (12 digits starting with 91)
+  const digits = (cleaned.length === 12 && cleaned.startsWith('91')) ? cleaned.slice(2) : cleaned;
+
+  // Format as XXXXX XXXXX for 10 digits
+  if (digits.length === 10) {
+    return `${digits.slice(0, 5)} ${digits.slice(5)}`;
   }
 
-  // Return as-is if not 10 digits
+  // Return as-is if format not recognized
   return phone;
 };
 

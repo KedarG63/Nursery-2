@@ -19,10 +19,7 @@ import {
 import {
   QrCode as QrCodeIcon,
   Delete as DeleteIcon,
-  LocationOn as LocationIcon,
-  Timeline as TimelineIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import dayjs from 'dayjs';
 import { canManageWarehouse, canDelete } from '../../utils/roleCheck';
@@ -74,7 +71,6 @@ const LotsTable = ({
   onLocationChange,
   onDelete,
 }) => {
-  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const userRole = user?.roles;
 
@@ -275,16 +271,6 @@ const LotsTable = ({
 
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                    <Tooltip title="View Traceability">
-                      <IconButton
-                        size="small"
-                        onClick={() => navigate(`/inventory/lots/${lot.id}/traceability`)}
-                        color="primary"
-                      >
-                        <TimelineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-
                     <Tooltip title="View QR Code">
                       <IconButton
                         size="small"
@@ -293,17 +279,6 @@ const LotsTable = ({
                         <QrCodeIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-
-                    {canManageWarehouse(userRole) && (
-                      <Tooltip title="Change Location">
-                        <IconButton
-                          size="small"
-                          onClick={() => onLocationChange && onLocationChange(lot)}
-                        >
-                          <LocationIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
 
                     {canDelete(userRole) && (
                       <Tooltip title="Delete">

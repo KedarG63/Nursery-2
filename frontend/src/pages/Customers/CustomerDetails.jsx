@@ -55,7 +55,10 @@ const CustomerDetails = () => {
     try {
       setLoading(true);
       const response = await getCustomer(id);
-      setCustomer(response.data || response.customer || response);
+      // Backend returns { success, data: { customer, addresses, credit_transactions } }
+      const rawData = response.data || response;
+      const customerObj = rawData?.customer || rawData;
+      setCustomer({ ...customerObj, addresses: rawData?.addresses || customerObj?.addresses || [] });
     } catch (error) {
       console.error('Error fetching customer:', error);
       toast.error('Failed to load customer details');

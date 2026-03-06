@@ -114,8 +114,8 @@ const ProductsList = () => {
   };
 
   const handleViewProduct = (productId) => {
-    // TODO: Navigate to product details page or open view dialog
-    console.log('View product:', productId);
+    const product = products.find((p) => p.id === productId);
+    if (product) handleEditProduct(product);
   };
 
   const handleDeleteClick = (productId) => {
