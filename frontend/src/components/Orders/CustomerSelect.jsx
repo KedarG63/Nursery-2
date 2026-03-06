@@ -35,6 +35,7 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
   const [loading, setLoading] = useState(false);
   const [walkInLoading, setWalkInLoading] = useState(false);
   const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
   const [showWalkInName, setShowWalkInName] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
@@ -115,8 +116,15 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
   };
 
   const handleWalkInNameChange = (e) => {
-    setWalkInName(e.target.value);
-    if (onWalkInName) onWalkInName(e.target.value);
+    const name = e.target.value;
+    setWalkInName(name);
+    if (onWalkInName) onWalkInName(name, walkInPhone);
+  };
+
+  const handleWalkInPhoneChange = (e) => {
+    const phone = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setWalkInPhone(phone);
+    if (onWalkInName) onWalkInName(walkInName, phone);
   };
 
   /**
@@ -208,30 +216,41 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
             <TextField
               fullWidth
               autoFocus
-              label="Walk-in Customer Name (optional)"
+              label="Customer Name (optional)"
               placeholder="e.g. Ramesh Sharma"
               value={walkInName}
               onChange={handleWalkInNameChange}
+              sx={{ mb: 1.5 }}
+            />
+            <TextField
+              fullWidth
+              label="Mobile Number (optional)"
+              placeholder="e.g. 9876543210"
+              value={walkInPhone}
+              onChange={handleWalkInPhoneChange}
+              inputProps={{ maxLength: 10, inputMode: 'numeric' }}
+              InputProps={{
+                startAdornment: <span style={{ marginRight: 4, color: '#666' }}>+91</span>,
+                endAdornment: !walkInLoading && selectedCustomer
+                  ? <CheckIcon color="success" fontSize="small" />
+                  : null,
+              }}
               helperText={
                 walkInLoading
                   ? 'Setting up walk-in account...'
                   : selectedCustomer
                   ? 'Ready — click Next to continue'
-                  : 'Enter name for the sales record (optional)'
+                  : 'Enter 10-digit number for the sales record'
               }
-              InputProps={{
-                endAdornment: !walkInLoading && selectedCustomer
-                  ? <CheckIcon color="success" fontSize="small" />
-                  : null,
-              }}
             />
             <Button
               size="small"
               onClick={() => {
                 setShowWalkInName(false);
                 setWalkInName('');
+                setWalkInPhone('');
                 onCustomerSelect(null);
-                if (onWalkInName) onWalkInName('');
+                if (onWalkInName) onWalkInName('', '');
               }}
               sx={{ mt: 0.5 }}
             >
@@ -246,8 +265,16 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
         <Box sx={{ mt: 3 }}>
           <Alert severity={creditStatus?.type || 'info'} icon={<WarningIcon />}>
             <Typography variant="subtitle2" gutterBottom>
-              {selectedCustomer.name} ({selectedCustomer.customer_type})
+              {showWalkInName
+                ? (walkInName || 'Walk-in Customer')
+                : selectedCustomer.name}{' '}
+              ({selectedCustomer.customer_type})
             </Typography>
+            {showWalkInName && walkInPhone && (
+              <Typography variant="body2">
+                Mobile: +91 {walkInPhone.slice(0, 5)} {walkInPhone.slice(5)}
+              </Typography>
+            )}
             <Typography variant="body2">
               Credit Limit: {formatCurrency(selectedCustomer.credit_limit || 0)}
             </Typography>

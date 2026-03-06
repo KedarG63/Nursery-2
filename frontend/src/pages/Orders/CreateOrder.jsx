@@ -107,13 +107,14 @@ const CreateOrder = () => {
   };
 
   /**
-   * Handle walk-in customer name — prepend to order notes
+   * Handle walk-in customer name/phone — store in order notes
    */
-  const handleWalkInName = (name) => {
-    setOrderData((prev) => ({
-      ...prev,
-      notes: name ? `Walk-in: ${name}` : prev.notes,
-    }));
+  const handleWalkInName = (name, phone) => {
+    const label = [
+      name ? `Walk-in: ${name}` : 'Walk-in',
+      phone ? `Ph: +91${phone}` : '',
+    ].filter(Boolean).join(' | ');
+    setOrderData((prev) => ({ ...prev, notes: label }));
   };
 
   /**
