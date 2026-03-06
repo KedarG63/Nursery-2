@@ -194,7 +194,7 @@ const CustomersList = () => {
       fetchCustomers(); // Refresh list
     } catch (error) {
       console.error('Error saving customer:', error);
-      toast.error(error.message || 'Failed to save customer');
+      toast.error(error.errors?.[0]?.msg || error.error || error.message || 'Failed to save customer');
       setFormDialog((prev) => ({ ...prev, loading: false }));
     }
   };

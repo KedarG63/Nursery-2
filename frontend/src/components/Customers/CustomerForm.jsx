@@ -141,8 +141,10 @@ const CustomerForm = ({ open, customer, onClose, onSubmit, loading }) => {
     }
 
     // Prepend +91 country code — DB constraint requires +91XXXXXXXXXX format
+    // Strip empty strings so backend .optional() validators skip them correctly
     onSubmit({
       ...data,
+      email: data.email || undefined,
       phone: `+91${data.phone}`,
       whatsapp_number: data.whatsapp_number ? `+91${data.whatsapp_number}` : `+91${data.phone}`,
     });
