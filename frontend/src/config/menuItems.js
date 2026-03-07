@@ -72,14 +72,6 @@ const menuItems = [
     roles: ['Admin', 'Manager', 'Sales'],
   },
   {
-    id: 'deliveries',
-    label: 'Deliveries',
-    labelKey: 'nav.deliveries',
-    icon: LocalShippingIcon,
-    path: '/deliveries',
-    roles: ['Admin', 'Manager', 'Delivery'],
-  },
-  {
     id: 'payments',
     label: 'Payments',
     labelKey: 'nav.payments',
@@ -118,6 +110,15 @@ const menuItems = [
     icon: PaymentsIcon,
     path: '/billing/reports/ap-aging',
     roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'deliveries',
+    label: 'Deliveries',
+    labelKey: 'nav.deliveries',
+    icon: LocalShippingIcon,
+    path: '/deliveries',
+    roles: ['Admin', 'Manager', 'Delivery'],
+    hidden: false, // Set to true to hide from sidebar
   },
   {
     id: 'users',

@@ -39,6 +39,7 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (!user || !user.roles) return false;
+    if (item.hidden) return false;
     return item.roles.some((role) => user.roles.includes(role));
   });
 
