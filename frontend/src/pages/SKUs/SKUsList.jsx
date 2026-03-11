@@ -179,7 +179,7 @@ const SKUsList = () => {
         }}
       >
         <Typography variant="h4" component="h1">
-          SKUs
+          Product Varieties
         </Typography>
         {canEdit(userRole) && (
           <Button
@@ -188,7 +188,7 @@ const SKUsList = () => {
             startIcon={<AddIcon />}
             onClick={handleAddSku}
           >
-            Add SKU
+            Add Product Variety
           </Button>
         )}
       </Box>

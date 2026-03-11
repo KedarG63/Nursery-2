@@ -33,7 +33,7 @@ const menuItems = [
   },
   {
     id: 'skus',
-    label: 'SKUs',
+    label: 'Product Varieties',
     labelKey: 'nav.skus',
     icon: LabelIcon,
     path: '/skus',

@@ -6,7 +6,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  MenuItem,
   Box,
   Typography,
   CircularProgress,
@@ -25,29 +24,13 @@ import productService from '../../services/productService';
 const skuSchema = z.object({
   product_id: z.string().min(1, 'Product is required'),
   sku_code: z.string().min(1, 'SKU Code is required').max(50, 'SKU Code must be less than 50 characters'),
-  variety: z.string().max(100, 'Variety must be less than 100 characters').optional(),
-  size: z.enum(['small', 'medium', 'large'], {
-    errorMap: () => ({ message: 'Please select a size' }),
-  }),
-  container_type: z.enum(['tray', 'pot', 'seedling_tray', 'grow_bag'], {
-    errorMap: () => ({ message: 'Please select a container type' }),
-  }),
+  variety: z.string().min(1, 'Product variety is required').max(100, 'Variety must be less than 100 characters'),
   price: z
     .number({ invalid_type_error: 'Price must be a number' })
     .min(0.01, 'Price must be greater than 0'),
   cost: z
     .number({ invalid_type_error: 'Cost must be a number' })
     .min(0, 'Cost must be at least 0'),
-  min_stock_level: z
-    .number({ invalid_type_error: 'Min stock level must be a number' })
-    .min(0, 'Min stock level must be at least 0')
-    .int('Min stock level must be an integer'),
-  max_stock_level: z
-    .number({ invalid_type_error: 'Max stock level must be a number' })
-    .min(0, 'Max stock level must be at least 0')
-    .int('Max stock level must be an integer')
-    .optional()
-    .nullable(),
 }).refine((data) => data.price > data.cost, {
   message: 'Price must be greater than cost',
   path: ['price'],
@@ -58,9 +41,6 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-
-  const sizes = skuService.getSizes();
-  const containerTypes = skuService.getContainerTypes();
 
   const {
     control,
@@ -75,17 +55,12 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
       product_id: sku?.product_id || '',
       sku_code: sku?.sku_code || '',
       variety: sku?.variety || '',
-      size: sku?.size || '',
-      container_type: sku?.container_type || '',
       price: sku?.price || 0,
       cost: sku?.cost || 0,
-      min_stock_level: sku?.min_stock_level || 10,
-      max_stock_level: sku?.max_stock_level || null,
     },
   });
 
-  const watchSize = watch('size');
-  const watchContainerType = watch('container_type');
+  const watchVariety = watch('variety');
 
   // Fetch products for dropdown
   useEffect(() => {
@@ -99,12 +74,8 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
         product_id: sku.product_id,
         sku_code: sku.sku_code,
         variety: sku.variety || '',
-        size: sku.size,
-        container_type: sku.container_type,
         price: sku.price,
         cost: sku.cost,
-        min_stock_level: sku.min_stock_level,
-        max_stock_level: sku.max_stock_level,
       });
       // Find and set the selected product
       if (sku.product) {
@@ -113,12 +84,12 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     }
   }, [sku, reset]);
 
-  // Auto-generate SKU code when product, size, or container type changes
+  // Auto-generate SKU code when product or variety changes
   useEffect(() => {
-    if (selectedProduct && watchSize && watchContainerType && !sku) {
-      generateSKUCode(selectedProduct, watchSize, watchContainerType);
+    if (selectedProduct && watchVariety && !sku) {
+      generateSKUCode(selectedProduct, watchVariety);
     }
-  }, [selectedProduct, watchSize, watchContainerType, sku]);
+  }, [selectedProduct, watchVariety, sku]);
 
   const fetchProducts = async () => {
     setLoadingProducts(true);
@@ -133,25 +104,19 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     }
   };
 
-  const generateSKUCode = (product, size, containerType) => {
-    // Generate SKU code format: {PRODUCT_CODE}-{SIZE_CODE}-{CONTAINER_CODE}
-    // Example: TOMATO-MED-POT
+  const generateSKUCode = (product, variety) => {
+    // Generate SKU code format: {PRODUCT_CODE}-{VARIETY_CODE}
+    // Example: TOMATO-CHERRY
     const productCode = product.name
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '')
       .substring(0, 10);
-    const sizeCode = size.substring(0, 3).toUpperCase();
+    const varietyCode = variety
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .substring(0, 6);
 
-    // Map container types to short codes
-    const containerCodes = {
-      tray: 'TRY',
-      pot: 'POT',
-      seedling_tray: 'STR',
-      grow_bag: 'BAG',
-    };
-    const containerCode = containerCodes[containerType] || containerType.substring(0, 3).toUpperCase();
-
-    const skuCode = `${productCode}-${sizeCode}-${containerCode}`;
+    const skuCode = `${productCode}-${varietyCode}`;
     setValue('sku_code', skuCode);
   };
 
@@ -159,27 +124,24 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     setLoading(true);
 
     try {
-      const skuData = {
-        ...data,
-        max_stock_level: data.max_stock_level || null,
-      };
+      const skuData = { ...data };
 
       if (sku) {
         // Update existing SKU
         await skuService.updateSKU(sku.id, skuData);
-        toast.success('SKU updated successfully');
+        toast.success('Product variety updated successfully');
       } else {
         // Create new SKU
         await skuService.createSKU(skuData);
-        toast.success('SKU created successfully');
+        toast.success('Product variety created successfully');
       }
 
       reset();
       setSelectedProduct(null);
       onSuccess && onSuccess();
     } catch (error) {
-      console.error('Failed to save SKU:', error);
-      toast.error(error.response?.data?.message || 'Failed to save SKU');
+      console.error('Failed to save product variety:', error);
+      toast.error(error.response?.data?.message || 'Failed to save product variety');
     } finally {
       setLoading(false);
     }
@@ -197,9 +159,9 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     setSelectedProduct(newValue);
     setValue('product_id', newValue?.id || '');
 
-    // Auto-generate SKU code if size and container type are selected
-    if (newValue && watchSize && watchContainerType && !sku) {
-      generateSKUCode(newValue, watchSize, watchContainerType);
+    // Auto-generate SKU code if variety is entered
+    if (newValue && watchVariety && !sku) {
+      generateSKUCode(newValue, watchVariety);
     }
   };
 
@@ -208,7 +170,7 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
-            {sku ? 'Edit SKU' : 'Add SKU'}
+            {sku ? 'Edit Product Variety' : 'Add Product Variety'}
           </Typography>
           <IconButton onClick={handleClose} disabled={loading}>
             <CloseIcon />
@@ -262,61 +224,14 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Variety (Optional)"
+                  label="Product Variety"
+                  required
                   fullWidth
                   error={!!errors.variety}
                   helperText={errors.variety?.message}
                   disabled={loading}
-                  placeholder="e.g., Cherry, Beefsteak"
+                  placeholder="e.g., Cherry, Beefsteak, Hybrid"
                 />
-              )}
-            />
-
-            {/* Size */}
-            <Controller
-              name="size"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  select
-                  label="Size"
-                  required
-                  fullWidth
-                  error={!!errors.size}
-                  helperText={errors.size?.message}
-                  disabled={loading}
-                >
-                  {sizes.map((size) => (
-                    <MenuItem key={size} value={size}>
-                      {skuService.getSizeDisplayName(size)}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-            />
-
-            {/* Container Type */}
-            <Controller
-              name="container_type"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  select
-                  label="Container Type"
-                  required
-                  fullWidth
-                  error={!!errors.container_type}
-                  helperText={errors.container_type?.message}
-                  disabled={loading}
-                >
-                  {containerTypes.map((containerType) => (
-                    <MenuItem key={containerType} value={containerType}>
-                      {skuService.getContainerTypeDisplayName(containerType)}
-                    </MenuItem>
-                  ))}
-                </TextField>
               )}
             />
 
@@ -331,7 +246,7 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
                   required
                   fullWidth
                   error={!!errors.sku_code}
-                  helperText={errors.sku_code?.message || 'Auto-generated from product, size, and pot type'}
+                  helperText={errors.sku_code?.message || 'Auto-generated from product name and variety'}
                   disabled={loading}
                 />
               )}
@@ -378,47 +293,6 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
                 />
               )}
             />
-
-            {/* Min Stock Level */}
-            <Controller
-              name="min_stock_level"
-              control={control}
-              render={({ field: { onChange, value, ...field } }) => (
-                <TextField
-                  {...field}
-                  type="number"
-                  label="Min Stock Level"
-                  required
-                  fullWidth
-                  value={value}
-                  onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-                  error={!!errors.min_stock_level}
-                  helperText={errors.min_stock_level?.message}
-                  disabled={loading}
-                  inputProps={{ min: 0 }}
-                />
-              )}
-            />
-
-            {/* Max Stock Level */}
-            <Controller
-              name="max_stock_level"
-              control={control}
-              render={({ field: { onChange, value, ...field } }) => (
-                <TextField
-                  {...field}
-                  type="number"
-                  label="Max Stock Level (Optional)"
-                  fullWidth
-                  value={value || ''}
-                  onChange={(e) => onChange(e.target.value ? parseInt(e.target.value, 10) : null)}
-                  error={!!errors.max_stock_level}
-                  helperText={errors.max_stock_level?.message}
-                  disabled={loading}
-                  inputProps={{ min: 0 }}
-                />
-              )}
-            />
           </Box>
         </DialogContent>
 
@@ -432,7 +306,7 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
             disabled={loading}
             startIcon={loading && <CircularProgress size={20} />}
           >
-            {loading ? 'Saving...' : sku ? 'Update SKU' : 'Create SKU'}
+            {loading ? 'Saving...' : sku ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </form>

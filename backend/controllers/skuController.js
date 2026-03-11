@@ -320,7 +320,7 @@ async function createSKU(req, res) {
 
     // Generate SKU code if not provided
     const finalSKUCode =
-      sku_code || generateSKUCode(product.name, variety, size, container_type);
+      sku_code || generateSKUCode(product.name, variety, size || 'medium', container_type || 'pot');
 
     // Check if SKU code already exists
     const existingSKU = await db.query(
@@ -350,8 +350,8 @@ async function createSKU(req, res) {
       finalSKUCode,
       product_id,
       variety || null,
-      size,
-      container_type,
+      size || 'medium',
+      container_type || 'pot',
       price,
       cost,
       min_stock_level || 0,

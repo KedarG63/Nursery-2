@@ -24,7 +24,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "products": "Products",
-    "skus": "SKUs",
+    "skus": "Product Varieties",
     "inventory": "Inventory",
     "purchases": "Purchases",
     "orders": "Orders",

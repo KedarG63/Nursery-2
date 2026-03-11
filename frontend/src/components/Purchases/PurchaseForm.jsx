@@ -109,28 +109,32 @@ const PurchaseForm = ({ open, onClose, onSuccess, purchase }) => {
   const grandTotal = totalCost + (watchShipping || 0) + (watchTax || 0) + (watchOther || 0);
   const costPerSeed = watchSeedsPerPacket > 0 ? (watchCostPerPacket / watchSeedsPerPacket).toFixed(4) : 0;
 
+  // Pre-load vendors and products on mount so they're ready when edit form opens
+  useEffect(() => {
+    fetchVendors();
+    fetchProducts();
+  }, []);
+
   useEffect(() => {
     if (open) {
-      fetchVendors();
-      fetchProducts();
       if (purchase) {
         reset({
           vendor_id: purchase.vendor_id || '',
           product_id: purchase.product_id || '',
           sku_id: purchase.sku_id || '',
           seed_lot_number: purchase.seed_lot_number || '',
-          number_of_packets: purchase.number_of_packets || 1,
-          seeds_per_packet: purchase.seeds_per_packet || 100,
-          cost_per_packet: purchase.cost_per_packet || 0,
-          shipping_cost: purchase.shipping_cost || 0,
-          tax_amount: purchase.tax_amount || 0,
-          other_charges: purchase.other_charges || 0,
-          germination_rate: purchase.germination_rate || 85,
-          purity_percentage: purchase.purity_percentage || 95,
-          expiry_date: purchase.expiry_date?.split('T')[0] || '',
-          purchase_date: purchase.purchase_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+          number_of_packets: Number(purchase.number_of_packets) || 1,
+          seeds_per_packet: Number(purchase.seeds_per_packet) || 100,
+          cost_per_packet: Number(purchase.cost_per_packet) || 0,
+          shipping_cost: Number(purchase.shipping_cost) || 0,
+          tax_amount: Number(purchase.tax_amount) || 0,
+          other_charges: Number(purchase.other_charges) || 0,
+          germination_rate: Number(purchase.germination_rate) || 85,
+          purity_percentage: Number(purchase.purity_percentage) || 95,
+          expiry_date: purchase.expiry_date ? String(purchase.expiry_date).split('T')[0] : '',
+          purchase_date: purchase.purchase_date ? String(purchase.purchase_date).split('T')[0] : new Date().toISOString().split('T')[0],
           invoice_number: purchase.invoice_number || '',
-          invoice_date: purchase.invoice_date?.split('T')[0] || '',
+          invoice_date: purchase.invoice_date ? String(purchase.invoice_date).split('T')[0] : '',
           storage_location: purchase.storage_location || '',
           storage_conditions: purchase.storage_conditions || '',
           notes: purchase.notes || '',
