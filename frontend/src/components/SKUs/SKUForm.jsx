@@ -23,7 +23,6 @@ import productService from '../../services/productService';
 // Validation schema
 const skuSchema = z.object({
   product_id: z.string().min(1, 'Product is required'),
-  sku_code: z.string().min(1, 'SKU Code is required').max(50, 'SKU Code must be less than 50 characters'),
   variety: z.string().min(1, 'Product variety is required').max(100, 'Variety must be less than 100 characters'),
   price: z
     .number({ invalid_type_error: 'Price must be a number' })
@@ -47,20 +46,16 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     handleSubmit,
     formState: { errors },
     reset,
-    watch,
     setValue,
   } = useForm({
     resolver: zodResolver(skuSchema),
     defaultValues: {
       product_id: sku?.product_id || '',
-      sku_code: sku?.sku_code || '',
       variety: sku?.variety || '',
       price: sku?.price || 0,
       cost: sku?.cost || 0,
     },
   });
-
-  const watchVariety = watch('variety');
 
   // Fetch products for dropdown
   useEffect(() => {
@@ -72,24 +67,15 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     if (sku) {
       reset({
         product_id: sku.product_id,
-        sku_code: sku.sku_code,
         variety: sku.variety || '',
         price: sku.price,
         cost: sku.cost,
       });
-      // Find and set the selected product
       if (sku.product) {
         setSelectedProduct(sku.product);
       }
     }
   }, [sku, reset]);
-
-  // Auto-generate SKU code when product or variety changes
-  useEffect(() => {
-    if (selectedProduct && watchVariety && !sku) {
-      generateSKUCode(selectedProduct, watchVariety);
-    }
-  }, [selectedProduct, watchVariety, sku]);
 
   const fetchProducts = async () => {
     setLoadingProducts(true);
@@ -102,22 +88,6 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
     } finally {
       setLoadingProducts(false);
     }
-  };
-
-  const generateSKUCode = (product, variety) => {
-    // Generate SKU code format: {PRODUCT_CODE}-{VARIETY_CODE}
-    // Example: TOMATO-CHERRY
-    const productCode = product.name
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .substring(0, 10);
-    const varietyCode = variety
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .substring(0, 6);
-
-    const skuCode = `${productCode}-${varietyCode}`;
-    setValue('sku_code', skuCode);
   };
 
   const onSubmit = async (data) => {
@@ -136,7 +106,7 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
         toast.success('Product variety created successfully');
       }
 
-      reset();
+      reset({ product_id: '', variety: '', price: 0, cost: 0 });
       setSelectedProduct(null);
       onSuccess && onSuccess();
     } catch (error) {
@@ -149,7 +119,7 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
 
   const handleClose = () => {
     if (!loading) {
-      reset();
+      reset({ product_id: '', variety: '', price: 0, cost: 0 });
       setSelectedProduct(null);
       onClose();
     }
@@ -158,11 +128,6 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
   const handleProductChange = (event, newValue) => {
     setSelectedProduct(newValue);
     setValue('product_id', newValue?.id || '');
-
-    // Auto-generate SKU code if variety is entered
-    if (newValue && watchVariety && !sku) {
-      generateSKUCode(newValue, watchVariety);
-    }
   };
 
   return (
@@ -231,23 +196,6 @@ const SKUForm = ({ open, onClose, sku, onSuccess }) => {
                   helperText={errors.variety?.message}
                   disabled={loading}
                   placeholder="e.g., Cherry, Beefsteak, Hybrid"
-                />
-              )}
-            />
-
-            {/* SKU Code */}
-            <Controller
-              name="sku_code"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="SKU Code"
-                  required
-                  fullWidth
-                  error={!!errors.sku_code}
-                  helperText={errors.sku_code?.message || 'Auto-generated from product name and variety'}
-                  disabled={loading}
                 />
               )}
             />

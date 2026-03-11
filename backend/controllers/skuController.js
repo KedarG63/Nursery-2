@@ -1,36 +1,24 @@
 const db = require('../utils/db');
 
 /**
- * Generate SKU code from product name, variety, size, and container type
- * Format: PROD-VAR-SIZE-CONT (e.g., TOM-CHE-MED-POT)
+ * Generate SKU code from product name, variety, and a serial number.
+ * Format: PRODUCTCODE-VARIETYCODE-001 (e.g., TOMATO-ADVANT-001)
+ *         or PRODUCTCODE-001 when no variety (e.g., SPINACH-001)
  */
-function generateSKUCode(productName, variety, size, containerType) {
-  // Extract first 3-4 letters of product name
-  const prodCode = productName.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+async function generateSKUCode(productName, variety, productId) {
+  const prodCode = productName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+  const varPart = variety
+    ? '-' + variety.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6)
+    : '';
 
-  // Extract first 3 letters of variety or use 'STD' for standard
-  const varCode = variety
-    ? variety.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')
-    : 'STD';
+  // Count ALL skus for this product (including deleted) to avoid serial reuse
+  const countResult = await db.query(
+    'SELECT COUNT(*) FROM skus WHERE product_id = $1',
+    [productId]
+  );
+  const serial = String(parseInt(countResult.rows[0].count) + 1).padStart(3, '0');
 
-  // Map size to code
-  const sizeMap = {
-    small: 'SML',
-    medium: 'MED',
-    large: 'LRG',
-  };
-  const sizeCode = sizeMap[size] || size.substring(0, 3).toUpperCase();
-
-  // Map container type to code
-  const containerMap = {
-    tray: 'TRY',
-    pot: 'POT',
-    seedling_tray: 'STR',
-    grow_bag: 'BAG',
-  };
-  const contCode = containerMap[containerType] || containerType.substring(0, 3).toUpperCase();
-
-  return `${prodCode}-${varCode}-${sizeCode}-${contCode}`;
+  return `${prodCode}${varPart}-${serial}`;
 }
 
 /**
@@ -42,9 +30,7 @@ async function getAllSKUs(req, res) {
       limit = 50,
       offset = 0,
       product_id = '',
-      size = '',
-      container_type = '',
-      active = '',
+        active = '',
     } = req.query;
 
     // Build query dynamically
@@ -62,20 +48,6 @@ async function getAllSKUs(req, res) {
       paramCount++;
       conditions.push(`s.product_id = $${paramCount}`);
       params.push(product_id);
-    }
-
-    // Filter by size
-    if (size) {
-      paramCount++;
-      conditions.push(`s.size = $${paramCount}`);
-      params.push(size);
-    }
-
-    // Filter by container_type
-    if (container_type) {
-      paramCount++;
-      conditions.push(`s.container_type = $${paramCount}`);
-      params.push(container_type);
     }
 
     // Filter by active status
@@ -111,9 +83,6 @@ async function getAllSKUs(req, res) {
         p.name as product_name,
         p.category as product_category,
         s.variety,
-        CONCAT(s.variety, ' - ', s.size, ' - ', s.container_type) as name,
-        s.size,
-        s.container_type,
         s.price,
         s.cost,
         s.min_stock_level,
@@ -188,8 +157,6 @@ async function getSKUById(req, res) {
         p.category as product_category,
         p.growth_period_days,
         s.variety,
-        s.size,
-        s.container_type,
         s.price,
         s.cost,
         s.min_stock_level,
@@ -290,11 +257,8 @@ async function getSKUById(req, res) {
  */
 async function createSKU(req, res) {
   const {
-    sku_code,
     product_id,
     variety,
-    size,
-    container_type,
     price,
     cost,
     min_stock_level,
@@ -318,11 +282,10 @@ async function createSKU(req, res) {
 
     const product = productResult.rows[0];
 
-    // Generate SKU code if not provided
-    const finalSKUCode =
-      sku_code || generateSKUCode(product.name, variety, size || 'medium', container_type || 'pot');
+    // Always auto-generate the SKU code with serial number
+    const finalSKUCode = await generateSKUCode(product.name, variety, product_id);
 
-    // Check if SKU code already exists
+    // Check if SKU code already exists (collision guard)
     const existingSKU = await db.query(
       'SELECT id FROM skus WHERE sku_code = $1 AND deleted_at IS NULL',
       [finalSKUCode]
@@ -338,11 +301,11 @@ async function createSKU(req, res) {
     // Insert new SKU
     const query = `
       INSERT INTO skus (
-        sku_code, product_id, variety, size, container_type,
+        sku_code, product_id, variety,
         price, cost, min_stock_level, max_stock_level, created_by, active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
-      RETURNING id, sku_code, product_id, variety, size, container_type,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+      RETURNING id, sku_code, product_id, variety,
                 price, cost, min_stock_level, max_stock_level, active, created_at, updated_at
     `;
 
@@ -350,8 +313,6 @@ async function createSKU(req, res) {
       finalSKUCode,
       product_id,
       variety || null,
-      size || 'medium',
-      container_type || 'pot',
       price,
       cost,
       min_stock_level || 0,
@@ -404,10 +365,7 @@ async function createSKU(req, res) {
 async function updateSKU(req, res) {
   const { id } = req.params;
   const {
-    sku_code,
     variety,
-    size,
-    container_type,
     price,
     cost,
     min_stock_level,
@@ -434,28 +392,10 @@ async function updateSKU(req, res) {
     const params = [];
     let paramCount = 0;
 
-    if (sku_code !== undefined) {
-      paramCount++;
-      updates.push(`sku_code = $${paramCount}`);
-      params.push(sku_code);
-    }
-
     if (variety !== undefined) {
       paramCount++;
       updates.push(`variety = $${paramCount}`);
       params.push(variety);
-    }
-
-    if (size !== undefined) {
-      paramCount++;
-      updates.push(`size = $${paramCount}`);
-      params.push(size);
-    }
-
-    if (container_type !== undefined) {
-      paramCount++;
-      updates.push(`container_type = $${paramCount}`);
-      params.push(container_type);
     }
 
     if (price !== undefined) {
@@ -502,7 +442,7 @@ async function updateSKU(req, res) {
       UPDATE skus
       SET ${updates.join(', ')}
       WHERE id = $${paramCount} AND deleted_at IS NULL
-      RETURNING id, sku_code, product_id, variety, size, container_type,
+      RETURNING id, sku_code, product_id, variety,
                 price, cost, min_stock_level, max_stock_level, active, created_at, updated_at
     `;
 

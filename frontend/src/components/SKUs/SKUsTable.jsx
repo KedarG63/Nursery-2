@@ -50,8 +50,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
               <TableCell>SKU Code</TableCell>
               <TableCell>Product Name</TableCell>
               <TableCell>Variety</TableCell>
-              <TableCell>Size</TableCell>
-              <TableCell>Container Type</TableCell>
               <TableCell align="right">Price</TableCell>
               {(userRole === 'Admin' || userRole === 'Manager') && (
                 <TableCell align="right">Cost</TableCell>
@@ -64,8 +62,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
           <TableBody>
             {[...Array(5)].map((_, index) => (
               <TableRow key={index}>
-                <TableCell><Skeleton /></TableCell>
-                <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
@@ -113,8 +109,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
             <TableCell>SKU Code</TableCell>
             <TableCell>Product Name</TableCell>
             <TableCell>Variety</TableCell>
-            <TableCell>Size</TableCell>
-            <TableCell>Container Type</TableCell>
             <TableCell align="right">Price</TableCell>
             {(userRole === 'Admin' || userRole === 'Manager') && (
               <TableCell align="right">Cost</TableCell>
@@ -141,12 +135,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
                 <Typography variant="body2" color="textSecondary">
                   {sku.variety || '-'}
                 </Typography>
-              </TableCell>
-              <TableCell>
-                <Chip label={skuService.getSizeDisplayName(sku.size)} size="small" variant="outlined" />
-              </TableCell>
-              <TableCell>
-                <Chip label={skuService.getContainerTypeDisplayName(sku.container_type)} size="small" variant="outlined" />
               </TableCell>
               <TableCell align="right">
                 <Typography variant="body2" fontWeight="medium">
