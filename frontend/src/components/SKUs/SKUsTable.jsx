@@ -55,7 +55,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
                 <TableCell align="right">Cost</TableCell>
               )}
               <TableCell align="right">Current Stock</TableCell>
-              <TableCell align="right">Min Stock Level</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -69,7 +68,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
                 {(userRole === 'Admin' || userRole === 'Manager') && (
                   <TableCell><Skeleton /></TableCell>
                 )}
-                <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
               </TableRow>
@@ -114,7 +112,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
               <TableCell align="right">Cost</TableCell>
             )}
             <TableCell align="right">Current Stock</TableCell>
-            <TableCell align="right">Min Stock Level</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
@@ -183,9 +180,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
                     sx={{ cursor: 'help' }}
                   />
                 </Tooltip>
-              </TableCell>
-              <TableCell align="right">
-                <Typography variant="body2">{sku.min_stock_level}</Typography>
               </TableCell>
               <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                 {canEdit(userRole) && (
