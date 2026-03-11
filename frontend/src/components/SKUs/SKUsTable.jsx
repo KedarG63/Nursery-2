@@ -128,7 +128,7 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
               </TableCell>
               <TableCell>
                 <Typography variant="body2">
-                  {sku.product?.name || 'N/A'}
+                  {sku.product_name || sku.product?.name || 'N/A'}
                 </Typography>
               </TableCell>
               <TableCell>

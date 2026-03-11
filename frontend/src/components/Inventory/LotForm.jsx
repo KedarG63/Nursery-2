@@ -193,12 +193,8 @@ const LotForm = ({ open, onClose, onSuccess }) => {
                   options={skus}
                   getOptionLabel={(option) => {
                     if (option.sku_code) {
-                      if (option.product?.name) {
-                        const sizeDisplay = skuService.getSizeDisplayName(option.size);
-                        const containerDisplay = skuService.getContainerTypeDisplayName(option.container_type);
-                        return `${option.sku_code} - ${option.product.name} (${sizeDisplay}, ${containerDisplay})`;
-                      }
-                      return option.sku_code;
+                      const productName = option.product_name || option.product?.name;
+                      return productName ? `${option.sku_code} - ${productName}` : option.sku_code;
                     }
                     return '';
                   }}
