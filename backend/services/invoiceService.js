@@ -78,8 +78,9 @@ const generateInvoiceHTML = (invoice, items, customer, order) => {
       z-index: 0; text-transform: uppercase; letter-spacing: 10px;
     }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #2e7d32; padding-bottom: 16px; }
+    .company-tagline { font-size: 10px; color: #888; font-style: italic; letter-spacing: 0.5px; margin-bottom: 3px; }
     .company-name { font-size: 22px; font-weight: bold; color: #2e7d32; }
-    .company-sub { font-size: 11px; color: #666; margin-top: 4px; }
+    .company-address { font-size: 10px; color: #555; margin-top: 4px; line-height: 1.5; }
     .invoice-title { text-align: right; }
     .invoice-title h1 { font-size: 28px; color: #2e7d32; text-transform: uppercase; letter-spacing: 2px; }
     .invoice-title .invoice-number { font-size: 15px; font-weight: bold; margin-top: 4px; }
@@ -127,8 +128,9 @@ const generateInvoiceHTML = (invoice, items, customer, order) => {
     <!-- Header -->
     <div class="header">
       <div>
+        <div class="company-tagline">Pure Plant, Pure Life</div>
         <div class="company-name">Vasundhara Seedlings</div>
-        <div class="company-sub">Plant Nursery</div>
+        <div class="company-address">Shop No 1, Main Road, Gotkhindi, Bavachi, Maharashtra 416301<br>Ph: 8888286161</div>
       </div>
       <div class="invoice-title">
         <h1>Invoice</h1>
