@@ -36,11 +36,18 @@ const generateInvoiceHTML = (invoice, items, customer, order) => {
     : '';
 
   const itemRows = items
-    .map(
-      (item, index) => `
+    .map((item, index) => {
+      const traceabilityParts = [];
+      if (item.lot_number) traceabilityParts.push(`Lot: ${item.lot_number}`);
+      if (item.vendor_name) traceabilityParts.push(item.vendor_name);
+      if (item.seed_purchase_date) traceabilityParts.push(`Purchased: ${formatDate(item.seed_purchase_date)}`);
+      const traceabilityLine = traceabilityParts.length
+        ? `<br><small class="muted">${traceabilityParts.join(' | ')}</small>`
+        : '';
+      return `
       <tr>
         <td class="center">${index + 1}</td>
-        <td>${item.description || ''}${item.sku_code ? `<br><small class="muted">${item.sku_code}</small>` : ''}</td>
+        <td>${item.description || ''}${item.sku_code ? `<br><small class="muted">${item.sku_code}</small>` : ''}${traceabilityLine}</td>
         <td class="center">${item.quantity}</td>
         <td class="right">${formatCurrency(item.unit_price)}</td>
         <td class="right">${item.discount_amount > 0 ? formatCurrency(item.discount_amount) : '—'}</td>
@@ -48,8 +55,8 @@ const generateInvoiceHTML = (invoice, items, customer, order) => {
         <td class="center">${parseFloat(item.tax_rate) > 0 ? `${item.tax_rate}%` : '—'}</td>
         <td class="right">${parseFloat(item.tax_amount) > 0 ? formatCurrency(item.tax_amount) : '—'}</td>
       </tr>
-    `
-    )
+    `;
+    })
     .join('');
 
   const customerAddress = [

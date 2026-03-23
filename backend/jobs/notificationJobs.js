@@ -35,6 +35,18 @@ class NotificationJobs {
       await this.checkReadyOrders();
     });
 
+    // Daily 3-day delivery reminder at 8:00 AM
+    cron.schedule('0 8 * * *', async () => {
+      console.log('⏰ Sending 3-day delivery reminders...');
+      await this.sendDeliveryReminders3Days();
+    });
+
+    // Daily day-of-delivery reminder at 7:00 AM
+    cron.schedule('0 7 * * *', async () => {
+      console.log('⏰ Sending day-of-delivery reminders...');
+      await this.sendDeliveryDayReminders();
+    });
+
     console.log('✅ Notification cron jobs initialized');
   }
 
@@ -133,6 +145,78 @@ class NotificationJobs {
 
     } catch (error) {
       console.error('Error checking ETA alerts:', error);
+    }
+  }
+
+  /**
+   * Send 3-day delivery reminders for orders delivering in exactly 3 days
+   */
+  static async sendDeliveryReminders3Days() {
+    try {
+      const query = `
+        SELECT o.id
+        FROM orders o
+        WHERE o.delivery_date::date = CURRENT_DATE + INTERVAL '3 days'
+          AND o.status NOT IN ('cancelled', 'delivered')
+          AND NOT EXISTS (
+            SELECT 1 FROM whatsapp_messages wm
+            WHERE wm.order_id = o.id
+              AND wm.template_name = 'delivery_reminder_3days'
+          )
+        LIMIT 50
+      `;
+
+      const result = await pool.query(query);
+
+      for (const order of result.rows) {
+        try {
+          await notificationService.sendDeliveryReminder3Days(order.id);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          console.error(`Error sending 3-day reminder for order ${order.id}:`, error.message);
+        }
+      }
+
+      console.log(`✅ Sent ${result.rows.length} 3-day delivery reminders`);
+
+    } catch (error) {
+      console.error('Error sending 3-day delivery reminders:', error);
+    }
+  }
+
+  /**
+   * Send day-of-delivery reminders for orders delivering today
+   */
+  static async sendDeliveryDayReminders() {
+    try {
+      const query = `
+        SELECT o.id
+        FROM orders o
+        WHERE o.delivery_date::date = CURRENT_DATE
+          AND o.status NOT IN ('cancelled', 'delivered')
+          AND NOT EXISTS (
+            SELECT 1 FROM whatsapp_messages wm
+            WHERE wm.order_id = o.id
+              AND wm.template_name = 'delivery_day_reminder'
+          )
+        LIMIT 50
+      `;
+
+      const result = await pool.query(query);
+
+      for (const order of result.rows) {
+        try {
+          await notificationService.sendDeliveryDayReminder(order.id);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          console.error(`Error sending day-of reminder for order ${order.id}:`, error.message);
+        }
+      }
+
+      console.log(`✅ Sent ${result.rows.length} day-of-delivery reminders`);
+
+    } catch (error) {
+      console.error('Error sending day-of-delivery reminders:', error);
     }
   }
 

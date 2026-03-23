@@ -130,7 +130,7 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
                 {/* Lot number shown below QR — visible on sticker for human reference */}
                 <Box sx={{ textAlign: 'center', py: 1 }}>
                   <Typography variant="caption" fontFamily="monospace" fontWeight="bold">
-                    {lotNumber}
+                    {lotDetails?.productName ? `${lotDetails.productName} | ${lotNumber}` : lotNumber}
                   </Typography>
                 </Box>
               </Card>

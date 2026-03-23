@@ -542,6 +542,81 @@ Happy Gardening! 🌿
   }
 
   /**
+   * Send 3-days-before-delivery reminder
+   * Tells the customer to prepare their field for sapling delivery
+   */
+  async sendDeliveryReminder3Days(orderId) {
+    const orderQuery = `
+      SELECT o.*, c.phone_number, c.name as customer_name
+      FROM orders o
+      JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = $1
+    `;
+
+    const result = await pool.query(orderQuery, [orderId]);
+    if (result.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+
+    const order = result.rows[0];
+
+    const variables = [
+      order.customer_name,
+      order.order_number,
+      this.formatDate(order.delivery_date)
+    ];
+
+    return await whatsappService.sendMessage(
+      order.phone_number,
+      null,
+      {
+        templateName: 'delivery_reminder_3days',
+        variables,
+        customerId: order.customer_id,
+        orderId: order.id,
+        category: 'delivery'
+      }
+    );
+  }
+
+  /**
+   * Send day-of-delivery morning reminder
+   * Tells the customer their saplings will arrive today
+   */
+  async sendDeliveryDayReminder(orderId) {
+    const orderQuery = `
+      SELECT o.*, c.phone_number, c.name as customer_name
+      FROM orders o
+      JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = $1
+    `;
+
+    const result = await pool.query(orderQuery, [orderId]);
+    if (result.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+
+    const order = result.rows[0];
+
+    const variables = [
+      order.customer_name,
+      order.order_number
+    ];
+
+    return await whatsappService.sendMessage(
+      order.phone_number,
+      null,
+      {
+        templateName: 'delivery_day_reminder',
+        variables,
+        customerId: order.customer_id,
+        orderId: order.id,
+        category: 'delivery'
+      }
+    );
+  }
+
+  /**
    * Format date helper
    */
   formatDate(date) {

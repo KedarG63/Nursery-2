@@ -85,7 +85,6 @@ const AddressFields = ({ address, index, register, errors, onRemove, canRemove }
             {...register(`addresses.${index}.pincode`)}
             error={!!errors?.addresses?.[index]?.pincode}
             helperText={errors?.addresses?.[index]?.pincode?.message}
-            required
             inputProps={{ maxLength: 6 }}
           />
         </Grid>

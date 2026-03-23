@@ -102,7 +102,16 @@ const InvoiceItemsTable = ({ items = [], editable = false, onChange, taxRate = 1
                     <>
                       <Typography variant="body2">{item.description}</Typography>
                       {item.sku_code && (
-                        <Typography variant="caption" color="text.secondary">{item.sku_code}</Typography>
+                        <Typography variant="caption" color="text.secondary" display="block">{item.sku_code}</Typography>
+                      )}
+                      {item.lot_number && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {'Lot: ' + item.lot_number}
+                          {item.vendor_name ? ' | ' + item.vendor_name : ''}
+                          {item.seed_purchase_date
+                            ? ' | Purchased: ' + new Date(item.seed_purchase_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : ''}
+                        </Typography>
                       )}
                     </>
                   )}

@@ -96,6 +96,7 @@ const createLot = async (req, res) => {
     const { qr_code, qr_code_url } = await generateQRCode({
       lot_number,
       sku_code,
+      product_name,
       created_date: new Date().toISOString(),
       seed_lot_number: seedAllocation ? seedAllocation.seedPurchase.seed_lot_number : null,
       vendor_name: seedAllocation ? seedAllocation.seedPurchase.vendor_name : null,
@@ -658,9 +659,10 @@ const regenerateQRCode = async (req, res) => {
 
     // Get lot details
     const lotResult = await client.query(
-      `SELECT l.*, s.sku_code
+      `SELECT l.*, s.sku_code, p.name AS product_name
        FROM lots l
        JOIN skus s ON l.sku_id = s.id
+       JOIN products p ON s.product_id = p.id
        WHERE l.id = $1 AND l.deleted_at IS NULL`,
       [id]
     );
@@ -678,6 +680,7 @@ const regenerateQRCode = async (req, res) => {
     const { qr_code, qr_code_url } = await generateQRCode({
       lot_number: lot.lot_number,
       sku_code: lot.sku_code,
+      product_name: lot.product_name,
       created_date: lot.created_at,
     });
 

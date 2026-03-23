@@ -31,7 +31,7 @@ const addressSchema = z.object({
   address_line2: z.string().optional(),
   city: z.string().min(1, 'City is required'),
   state: z.string().min(1, 'State is required'),
-  pincode: z.string().regex(/^[0-9]{6}$/, 'Pincode must be 6 digits'),
+  pincode: z.string().regex(/^[0-9]{6}$/, 'Pincode must be 6 digits').optional().or(z.literal('')),
   is_default: z.boolean().optional()
 });
 

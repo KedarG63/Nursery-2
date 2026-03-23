@@ -36,12 +36,26 @@ class MetaWhatsAppService {
    * Send a pre-approved template message
    * templateName must exactly match the name approved in Meta Business Manager
    */
+  /**
+   * Send a pre-approved template message.
+   * variables can be:
+   *   - Array of strings: positional params → { type: 'text', text: '...' }
+   *   - Array of { name, value } objects: named params → { type: 'text', parameter_name: '...', text: '...' }
+   */
   async sendTemplateMessage(phoneNumber, templateName, variables) {
-    const components = variables && variables.length > 0
-      ? [{
-          type: 'body',
-          parameters: variables.map(v => ({ type: 'text', text: String(v) }))
-        }]
+    let parameters = [];
+    if (variables && variables.length > 0) {
+      if (typeof variables[0] === 'object' && variables[0] !== null && 'name' in variables[0]) {
+        // Named parameters (required by newer Meta template editor)
+        parameters = variables.map(v => ({ type: 'text', parameter_name: v.name, text: String(v.value) }));
+      } else {
+        // Positional parameters (legacy format)
+        parameters = variables.map(v => ({ type: 'text', text: String(v) }));
+      }
+    }
+
+    const components = parameters.length > 0
+      ? [{ type: 'body', parameters }]
       : [];
 
     const payload = {

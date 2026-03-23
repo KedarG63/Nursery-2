@@ -127,11 +127,22 @@ const getInvoice = async (req, res, next) => {
 
     const invoice = invoiceResult.rows[0];
 
-    // Fetch items
+    // Fetch items with lot traceability (via direct lot_id or via order_item → lot)
     const itemsResult = await db.query(
-      `SELECT ii.*, s.sku_code
+      `SELECT
+         ii.*,
+         s.sku_code,
+         l.lot_number,
+         l.seed_purchase_id,
+         sp.seed_lot_number,
+         sp.purchase_date AS seed_purchase_date,
+         v.vendor_name
        FROM invoice_items ii
        LEFT JOIN skus s ON s.id = ii.sku_id
+       LEFT JOIN order_items oi ON oi.id = ii.order_item_id
+       LEFT JOIN lots l ON l.id = COALESCE(ii.lot_id, oi.lot_id)
+       LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
+       LEFT JOIN vendors v ON v.id = sp.vendor_id
        WHERE ii.invoice_id = $1
        ORDER BY ii.created_at ASC`,
       [id]
@@ -239,11 +250,12 @@ const createInvoice = async (req, res, next) => {
     for (const item of items) {
       await client.query(
         `INSERT INTO invoice_items
-           (invoice_id, order_item_id, description, sku_id, quantity, unit_price, discount_amount, tax_rate, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           (invoice_id, order_item_id, lot_id, description, sku_id, quantity, unit_price, discount_amount, tax_rate, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           invoiceId,
           item.order_item_id || null,
+          item.lot_id || null,
           item.description,
           item.sku_id || null,
           item.quantity,
@@ -340,11 +352,12 @@ const updateInvoice = async (req, res, next) => {
       for (const item of items) {
         await client.query(
           `INSERT INTO invoice_items
-             (invoice_id, order_item_id, description, sku_id, quantity, unit_price, discount_amount, tax_rate, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+             (invoice_id, order_item_id, lot_id, description, sku_id, quantity, unit_price, discount_amount, tax_rate, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             id,
             item.order_item_id || null,
+            item.lot_id || null,
             item.description,
             item.sku_id || null,
             item.quantity,
@@ -608,7 +621,21 @@ const generatePDF = async (req, res, next) => {
     const customer = customerResult.rows[0] || {};
 
     const itemsResult = await db.query(
-      `SELECT ii.*, s.sku_code FROM invoice_items ii LEFT JOIN skus s ON s.id = ii.sku_id WHERE ii.invoice_id = $1 ORDER BY ii.created_at ASC`,
+      `SELECT
+         ii.*,
+         s.sku_code,
+         l.lot_number,
+         sp.seed_lot_number,
+         sp.purchase_date AS seed_purchase_date,
+         v.vendor_name
+       FROM invoice_items ii
+       LEFT JOIN skus s ON s.id = ii.sku_id
+       LEFT JOIN order_items oi ON oi.id = ii.order_item_id
+       LEFT JOIN lots l ON l.id = COALESCE(ii.lot_id, oi.lot_id)
+       LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
+       LEFT JOIN vendors v ON v.id = sp.vendor_id
+       WHERE ii.invoice_id = $1
+       ORDER BY ii.created_at ASC`,
       [id]
     );
 

@@ -14,6 +14,7 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
  * @param {string} lotData.lot_number - Lot number
  * @param {string} lotData.sku_code - SKU code
  * @param {string} lotData.created_date - Creation date
+ * @param {string} [lotData.product_name] - Product variety name
  * @param {string} [lotData.seed_lot_number] - Seed lot number for traceability
  * @param {string} [lotData.vendor_name] - Seed vendor name
  * @returns {string} Human-readable multiline text for QR code
@@ -21,6 +22,7 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
 const generateQRData = (lotData) => {
   const lines = [
     `LOT: ${lotData.lot_number}`,
+    `VARIETY: ${lotData.product_name || 'N/A'}`,
     `SKU: ${lotData.sku_code || 'N/A'}`,
     `Date: ${lotData.created_date || ''}`,
   ];

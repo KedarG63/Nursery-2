@@ -24,16 +24,21 @@ import {
 } from '@mui/icons-material';
 import purchaseService from '../../services/purchaseService';
 import lotService from '../../services/lotService';
+import vendorReturnService from '../../services/vendorReturnService';
+import VendorReturnForm from './VendorReturnForm';
 import { useNavigate } from 'react-router-dom';
 
 const PurchaseDetails = ({ open, onClose, purchase }) => {
   const navigate = useNavigate();
   const [usageHistory, setUsageHistory] = useState([]);
   const [loadingUsage, setLoadingUsage] = useState(false);
+  const [returnNotes, setReturnNotes] = useState([]);
+  const [showReturnForm, setShowReturnForm] = useState(false);
 
   useEffect(() => {
     if (open && purchase) {
       fetchUsageHistory();
+      fetchReturnNotes();
     }
   }, [open, purchase]);
 
@@ -49,6 +54,16 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
       setUsageHistory([]);
     } finally {
       setLoadingUsage(false);
+    }
+  };
+
+  const fetchReturnNotes = async () => {
+    if (!purchase?.id) return;
+    try {
+      const response = await vendorReturnService.listReturns({ seed_purchase_id: purchase.id, limit: 50 });
+      setReturnNotes(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch return notes:', error);
     }
   };
 
@@ -176,7 +191,7 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
                       </Alert>
                     )}
 
-                    <Box sx={{ mt: 2 }}>
+                    <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
                       <Button
                         variant="outlined"
                         fullWidth
@@ -187,6 +202,17 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
                         disabled={!purchase.seeds_remaining || purchase.seeds_remaining === 0}
                       >
                         Create Lot from These Seeds
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="warning"
+                        fullWidth
+                        onClick={() => setShowReturnForm(true)}
+                        disabled={
+                          (parseInt(purchase.number_of_packets) - parseInt(purchase.packets_returned || 0)) <= 0
+                        }
+                      >
+                        Return Packets to Vendor
                       </Button>
                     </Box>
                   </Grid>
@@ -344,6 +370,41 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
             </Typography>
           </Grid>
 
+          {parseFloat(purchase.vendor_credit_applied) > 0 && (
+            <Grid item xs={6}>
+              <Typography variant="body2" color="text.secondary">
+                Vendor Credit Applied
+              </Typography>
+              <Typography variant="body1" color="success.main" fontWeight="bold">
+                - {formatCurrency(purchase.vendor_credit_applied)}
+              </Typography>
+            </Grid>
+          )}
+
+          {parseFloat(purchase.vendor_credit_applied) > 0 && (
+            <Grid item xs={6}>
+              <Typography variant="body2" color="text.secondary">
+                Net Payable
+              </Typography>
+              <Typography variant="body1" fontWeight="bold">
+                {formatCurrency(
+                  parseFloat(purchase.grand_total) - parseFloat(purchase.vendor_credit_applied)
+                )}
+              </Typography>
+            </Grid>
+          )}
+
+          {parseInt(purchase.packets_returned) > 0 && (
+            <Grid item xs={6}>
+              <Typography variant="body2" color="text.secondary">
+                Packets Returned
+              </Typography>
+              <Typography variant="body1">
+                {purchase.packets_returned} of {purchase.number_of_packets} packets
+              </Typography>
+            </Grid>
+          )}
+
           <Grid item xs={12}>
             <Divider />
           </Grid>
@@ -478,6 +539,66 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
             </>
           )}
 
+          {/* Vendor Return Notes */}
+          {returnNotes.length > 0 && (
+            <>
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                  Return Notes
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12}>
+                {returnNotes.map((vrn, index) => (
+                  <Card
+                    key={vrn.id}
+                    variant="outlined"
+                    sx={{ mb: index < returnNotes.length - 1 ? 1 : 0 }}
+                  >
+                    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Grid container spacing={1} alignItems="center">
+                        <Grid item xs={12} sm={3}>
+                          <Typography variant="caption" color="text.secondary">Return #</Typography>
+                          <Typography variant="body2" fontWeight="bold">{vrn.return_number}</Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={2}>
+                          <Typography variant="caption" color="text.secondary">Packets</Typography>
+                          <Typography variant="body2">{vrn.packets_returned}</Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={2}>
+                          <Typography variant="caption" color="text.secondary">Amount</Typography>
+                          <Typography variant="body2">{formatCurrency(vrn.return_amount)}</Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={2}>
+                          <Typography variant="caption" color="text.secondary">Date</Typography>
+                          <Typography variant="body2">{formatDate(vrn.return_date)}</Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Chip
+                            label={vendorReturnService.getStatusLabel(vrn.status)}
+                            color={vendorReturnService.getStatusColor(vrn.status)}
+                            size="small"
+                          />
+                        </Grid>
+                        {vrn.reason && (
+                          <Grid item xs={12}>
+                            <Typography variant="caption" color="text.secondary">
+                              Reason: {vrn.reason}
+                            </Typography>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Grid>
+            </>
+          )}
+
           {/* Seed Usage History */}
           {usageHistory.length > 0 && (
             <>
@@ -590,6 +711,17 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      {/* Vendor Return Form (nested dialog) */}
+      <VendorReturnForm
+        open={showReturnForm}
+        purchase={purchase}
+        onClose={() => setShowReturnForm(false)}
+        onCreated={() => {
+          fetchReturnNotes();
+          setShowReturnForm(false);
+        }}
+      />
     </Dialog>
   );
 };
