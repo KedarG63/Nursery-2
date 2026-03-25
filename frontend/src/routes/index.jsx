@@ -37,6 +37,9 @@ import VendorBillsList from '../pages/Billing/VendorBillsList';
 import VendorBillDetails from '../pages/Billing/VendorBillDetails';
 import CustomerAgingReport from '../pages/Billing/CustomerAgingReport';
 import VendorAgingReport from '../pages/Billing/VendorAgingReport';
+import BankAccountsPage from '../pages/Banking/BankAccountsPage';
+import BankLedgerPage from '../pages/Banking/BankLedgerPage';
+import BankMonthlySummaryPage from '../pages/Banking/BankMonthlySummaryPage';
 
 const AppRoutes = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -115,6 +118,11 @@ const AppRoutes = () => {
         <Route path="billing/vendor-bills/:id" element={<VendorBillDetails />} />
         <Route path="billing/reports/ar-aging" element={<CustomerAgingReport />} />
         <Route path="billing/reports/ap-aging" element={<VendorAgingReport />} />
+
+        {/* Banking / Bank Ledger */}
+        <Route path="banking" element={<BankAccountsPage />} />
+        <Route path="banking/:id/ledger" element={<BankLedgerPage />} />
+        <Route path="banking/:id/summary" element={<BankMonthlySummaryPage />} />
       </Route>
 
       {/* Catch all - redirect to home */}

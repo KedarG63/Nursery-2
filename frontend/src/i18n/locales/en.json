@@ -36,6 +36,7 @@
     "vendorBills": "Vendor Bills",
     "arAging": "AR Aging",
     "apAging": "AP Aging",
+    "banking": "Bank Ledger",
     "users": "Users"
   },
   "auth": {

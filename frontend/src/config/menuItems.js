@@ -13,6 +13,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import SavingsIcon from '@mui/icons-material/Savings';
 
 const menuItems = [
   {
@@ -119,6 +120,14 @@ const menuItems = [
     path: '/deliveries',
     roles: ['Admin', 'Manager', 'Delivery'],
     hidden: false, // Set to true to hide from sidebar
+  },
+  {
+    id: 'banking',
+    label: 'Bank Ledger',
+    labelKey: 'nav.banking',
+    icon: SavingsIcon,
+    path: '/banking',
+    roles: ['Admin', 'Manager'],
   },
   {
     id: 'users',

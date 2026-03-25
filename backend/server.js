@@ -95,6 +95,7 @@ const purchaseRoutes = require('./routes/purchases'); // Phase 22
 const invoiceRoutes = require('./routes/invoices'); // Phase 23: Billing
 const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billing
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
+const bankLedgerRoutes   = require('./routes/bankLedger');    // Feature: Bank Ledger
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -118,6 +119,7 @@ app.use('/api/purchases', purchaseRoutes); // Phase 22
 app.use('/api/invoices', invoiceRoutes); // Phase 23: Billing
 app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
+app.use('/api/bank-accounts', bankLedgerRoutes);   // Feature: Bank Ledger
 
 // Serve uploaded files (delivery proofs)
 app.use('/uploads', express.static('uploads'));
