@@ -119,7 +119,7 @@ const menuItems = [
     icon: LocalShippingIcon,
     path: '/deliveries',
     roles: ['Admin', 'Manager', 'Delivery'],
-    hidden: false, // Set to true to hide from sidebar
+    hidden: true, // Set to false to show in sidebar
   },
   {
     id: 'banking',
