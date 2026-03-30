@@ -124,7 +124,7 @@ exports.up = (pgm) => {
     tax_rate: {
       type: 'decimal(5,2)',
       notNull: true,
-      default: 18.00,
+      default: 0.00,
     },
     tax_amount: {
       type: 'decimal(10,2)',

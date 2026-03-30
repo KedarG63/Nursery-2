@@ -188,7 +188,7 @@ const createInvoice = async (req, res, next) => {
       invoice_date,
       due_date,
       discount_amount = 0,
-      tax_rate = 18,
+      tax_rate = 0,
       notes,
       terms_and_conditions,
       items,
@@ -363,7 +363,7 @@ const updateInvoice = async (req, res, next) => {
             item.quantity,
             item.unit_price,
             item.discount_amount || 0,
-            item.tax_rate !== undefined ? item.tax_rate : 18,
+            item.tax_rate !== undefined ? item.tax_rate : 0,
             item.notes || null,
           ]
         );

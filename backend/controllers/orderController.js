@@ -9,8 +9,8 @@ const lotAllocationService = require('../services/lotAllocationService');
 const { isValidStatusTransition } = require('../validators/orderValidator');
 const notificationEvents = require('../events/notificationEvents');
 
-// Tax rate configuration (18% GST)
-const TAX_RATE = 0.18;
+// Tax rate configuration (0% - GST exempt)
+const TAX_RATE = 0.00;
 
 /**
  * Create a new order

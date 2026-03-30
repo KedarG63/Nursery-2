@@ -36,7 +36,7 @@ const CreateInvoice = () => {
   const [invoiceDate, setInvoiceDate] = useState(new Date());
   const [dueDate, setDueDate] = useState(null);
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [taxRate, setTaxRate] = useState(18);
+  const [taxRate, setTaxRate] = useState(0);
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('');
   const [issueNow, setIssueNow] = useState(false);
@@ -78,9 +78,9 @@ const CreateInvoice = () => {
         quantity: oi.quantity,
         unit_price: parseFloat(oi.unit_price),
         discount_amount: 0,
-        tax_rate: 18,
+        tax_rate: 0,
         line_total: (oi.quantity * parseFloat(oi.unit_price)).toFixed(2),
-        tax_amount: (oi.quantity * parseFloat(oi.unit_price) * 0.18).toFixed(2),
+        tax_amount: (0).toFixed(2),
       }));
       setItems(mappedItems);
 
@@ -124,7 +124,7 @@ const CreateInvoice = () => {
         invoice_date: format(invoiceDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         discount_amount: parseFloat(discountAmount) || 0,
-        tax_rate: parseFloat(taxRate) || 18,
+        tax_rate: parseFloat(taxRate) || 0,
         notes: notes || undefined,
         terms_and_conditions: terms || undefined,
         items: items.map((item) => ({

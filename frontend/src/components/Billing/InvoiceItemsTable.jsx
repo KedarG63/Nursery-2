@@ -16,7 +16,7 @@ import { formatCurrency } from '../../utils/formatters';
  *  - onChange: (newItems) => void  (only used when editable=true)
  *  - taxRate: number (invoice-level tax rate, used as default for new items)
  */
-const InvoiceItemsTable = ({ items = [], editable = false, onChange, taxRate = 18 }) => {
+const InvoiceItemsTable = ({ items = [], editable = false, onChange, taxRate = 0 }) => {
   const handleFieldChange = (index, field, value) => {
     if (!onChange) return;
     const updated = items.map((item, i) => {
