@@ -20,7 +20,6 @@ import {
   Chip,
   Tabs,
   Tab,
-  Collapse,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -276,11 +275,10 @@ const PurchasesList = () => {
                   <tbody>
                     {groups.map((group) => {
                       const isExpanded = expandedGroups.has(group.key);
-                      const multiItem = group.items.length > 1;
 
                       return (
                         <React.Fragment key={group.key}>
-                          {/* ── Group header row ── */}
+                          {/* ── Group header row (same layout for 1 or many items) ── */}
                           <tr
                             onClick={() => toggleGroup(group.key)}
                             style={{
@@ -290,15 +288,14 @@ const PurchasesList = () => {
                               borderBottom: isExpanded ? 'none' : '2px solid #c5cae9',
                             }}
                           >
-                            {/* Expand/collapse icon */}
                             <td style={{ ...td, paddingLeft: 8 }}>
                               <IconButton size="small" tabIndex={-1}>
                                 {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                               </IconButton>
                             </td>
 
-                            {/* Group info spans several columns */}
-                            <td colSpan={multiItem ? 6 : 1} style={{ ...td, paddingLeft: 4 }}>
+                            {/* Group info — always spans all data columns */}
+                            <td colSpan={6} style={{ ...td, paddingLeft: 4 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                                 <ReceiptIcon fontSize="small" sx={{ color: '#3f51b5', flexShrink: 0 }} />
                                 <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#1a237e' }}>
@@ -325,62 +322,19 @@ const PurchasesList = () => {
                               </Box>
                             </td>
 
-                            {/* If single item, show its inline data */}
-                            {!multiItem && (
-                              <>
-                                <td style={tdR}>{group.items[0].number_of_packets}</td>
-                                <td style={tdR}>{group.items[0].total_seeds}</td>
-                                <td style={tdR}>{group.items[0].seeds_remaining}</td>
-                              </>
-                            )}
-
                             {/* Grand total */}
                             <td style={{ ...tdR, fontWeight: 700, color: '#1a237e' }}>
                               {formatCurrency(group.grandTotal)}
                             </td>
 
-                            {/* Statuses — only for single-item groups */}
-                            {!multiItem ? (
-                              <>
-                                <td style={td}>
-                                  <Chip
-                                    label={purchaseService.getInventoryStatusDisplay(group.items[0].inventory_status)}
-                                    color={purchaseService.getInventoryStatusColor(group.items[0].inventory_status)}
-                                    size="small"
-                                  />
-                                </td>
-                                <td style={td}>
-                                  <Chip
-                                    label={purchaseService.getPaymentStatusDisplay(group.items[0].payment_status)}
-                                    color={purchaseService.getPaymentStatusColor(group.items[0].payment_status)}
-                                    size="small"
-                                  />
-                                </td>
-                                {canEdit(userRole) && (
-                                  <td style={{ ...td, textAlign: 'center' }}>
-                                    <IconButton size="small" color="info" onClick={(e) => { e.stopPropagation(); handleViewPurchase(group.items[0]); }}>
-                                      <ViewIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); handleEditPurchase(group.items[0]); }}>
-                                      <EditIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteClick(group.items[0].id); }}>
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  </td>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <td style={td} />
-                                <td style={td} />
-                                {canEdit(userRole) && <td style={td} />}
-                              </>
-                            )}
+                            {/* Empty status + actions cells */}
+                            <td style={td} />
+                            <td style={td} />
+                            {canEdit(userRole) && <td style={td} />}
                           </tr>
 
-                          {/* ── Product sub-rows (only for multi-item groups) ── */}
-                          {multiItem && isExpanded && group.items.map((purchase, idx) => (
+                          {/* ── Product sub-rows (same for 1 or many items) ── */}
+                          {isExpanded && group.items.map((purchase, idx) => (
                             <tr
                               key={purchase.id}
                               style={{
@@ -435,27 +389,6 @@ const PurchasesList = () => {
                               )}
                             </tr>
                           ))}
-
-                          {/* Single-item group: show the one row expanded inline (already in header) */}
-                          {!multiItem && isExpanded && (
-                            <tr style={{ borderBottom: '2px solid #c5cae9', backgroundColor: '#fafafa' }}>
-                              <td style={{ ...td, paddingLeft: 8 }} />
-                              <td style={{ ...td, paddingLeft: 32 }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  {group.items[0].product_name || '—'}
-                                </Typography>
-                                {group.items[0].sku_code && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {group.items[0].sku_code}
-                                  </Typography>
-                                )}
-                              </td>
-                              <td style={{ ...td, fontSize: '0.8rem', color: '#555' }}>
-                                {group.items[0].seed_lot_number || '—'}
-                              </td>
-                              <td colSpan={7} />
-                            </tr>
-                          )}
                         </React.Fragment>
                       );
                     })}
