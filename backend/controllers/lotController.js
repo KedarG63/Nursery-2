@@ -302,6 +302,7 @@ const listLots = async (req, res) => {
       `SELECT
         l.*,
         s.sku_code,
+        s.variety,
         s.product_id,
         p.name as product_name,
         u1.full_name as created_by_name,
@@ -354,6 +355,7 @@ const listLots = async (req, res) => {
           `SELECT
             l.*,
             s.sku_code,
+            s.variety,
             s.product_id,
             p.name as product_name,
             u1.full_name as created_by_name,
@@ -410,6 +412,7 @@ const getLotDetails = async (req, res) => {
       `SELECT
         l.*,
         s.sku_code,
+        s.variety,
         s.product_id,
         p.name as product_name,
         p.description as product_description,
@@ -461,6 +464,7 @@ const getLotDetails = async (req, res) => {
           `SELECT
             l.*,
             s.sku_code,
+            s.variety,
             s.product_id,
             p.name as product_name,
             p.description as product_description,
