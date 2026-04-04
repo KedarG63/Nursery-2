@@ -81,16 +81,27 @@ const createLot = async (req, res) => {
       }
     }
 
-    // Generate lot number: LOT-YYYYMMDD-XXXX-S{SeedSeq} (Phase 22 enhanced format)
-    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const countResult = await client.query(
-      'SELECT COUNT(*) FROM lots WHERE lot_number LIKE $1',
-      [`LOT-${dateStr}-%`]
-    );
-    const sequence = String(parseInt(countResult.rows[0].count) + 1).padStart(4, '0');
-    const lot_number = seedPurchaseSeq
-      ? `LOT-${dateStr}-${sequence}-S${seedPurchaseSeq}`
-      : `LOT-${dateStr}-${sequence}`;
+    // Generate lot number:
+    // With seed lot: {seed_lot_number}-001, -002, ... (per vendor seed lot)
+    // Without seed:  LOT-YYYYMMDD-XXXX (fallback)
+    let lot_number;
+    const seedLotNumber = seedAllocation ? seedAllocation.seedPurchase.seed_lot_number : null;
+    if (seedLotNumber) {
+      const countResult = await client.query(
+        'SELECT COUNT(*) FROM lots WHERE lot_number LIKE $1',
+        [`${seedLotNumber}-%`]
+      );
+      const sequence = String(parseInt(countResult.rows[0].count) + 1).padStart(3, '0');
+      lot_number = `${seedLotNumber}-${sequence}`;
+    } else {
+      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const countResult = await client.query(
+        'SELECT COUNT(*) FROM lots WHERE lot_number LIKE $1',
+        [`LOT-${dateStr}-%`]
+      );
+      const sequence = String(parseInt(countResult.rows[0].count) + 1).padStart(4, '0');
+      lot_number = `LOT-${dateStr}-${sequence}`;
+    }
 
     // Generate QR code with seed traceability
     const { qr_code, qr_code_url } = await generateQRCode({

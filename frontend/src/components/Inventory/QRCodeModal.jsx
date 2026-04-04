@@ -212,54 +212,44 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
                       </Grid>
                     )}
 
-                    {/* Seed Traceability */}
-                    {(lotDetails.seed_lot_number || lotDetails.seed_vendor_name) && (
-                      <Grid item xs={12}>
-                        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-                          Seed Traceability
-                        </Typography>
-                      </Grid>
-                    )}
-                    {lotDetails.seed_lot_number && (
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Seed Lot Number:
-                        </Typography>
-                        <Typography variant="body1" fontWeight="medium">
-                          {lotDetails.seed_lot_number}
-                        </Typography>
-                      </Grid>
-                    )}
-                    {lotDetails.seed_vendor_name && (
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Seed Vendor:
-                        </Typography>
-                        <Typography variant="body1" fontWeight="medium">
-                          {lotDetails.seed_vendor_name}
-                        </Typography>
-                      </Grid>
-                    )}
-                    {lotDetails.seed_purchase_date && (
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Seed Purchase Date:
-                        </Typography>
-                        <Typography variant="body1" fontWeight="medium">
-                          {dayjs(lotDetails.seed_purchase_date).format('MMM D, YYYY')}
-                        </Typography>
-                      </Grid>
-                    )}
-                    {lotDetails.seed_expiry_date && (
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Seed Expiry Date:
-                        </Typography>
-                        <Typography variant="body1" fontWeight="medium">
-                          {dayjs(lotDetails.seed_expiry_date).format('MMM D, YYYY')}
-                        </Typography>
-                      </Grid>
-                    )}
+                    {/* Seed Traceability — always shown */}
+                    <Grid item xs={12}>
+                      <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+                        Seed Traceability
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">
+                        Seed Lot Number:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {lotDetails.seed_lot_number || '—'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">
+                        Seed Vendor:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {lotDetails.seed_vendor_name || '—'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">
+                        Seed Purchase Date:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {lotDetails.seed_purchase_date ? dayjs(lotDetails.seed_purchase_date).format('MMM D, YYYY') : '—'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">
+                        Seed Expiry Date:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {lotDetails.seed_expiry_date ? dayjs(lotDetails.seed_expiry_date).format('MMM D, YYYY') : '—'}
+                      </Typography>
+                    </Grid>
                   </Grid>
                 </Box>
               )}
