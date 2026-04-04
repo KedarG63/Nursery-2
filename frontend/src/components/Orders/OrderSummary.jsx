@@ -174,8 +174,8 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>SKU</TableCell>
-                    <TableCell>Product Name</TableCell>
+                    <TableCell>Product</TableCell>
+                    <TableCell>Variety</TableCell>
                     <TableCell align="right">Quantity</TableCell>
                     <TableCell align="right">Unit Price</TableCell>
                     <TableCell align="right">Total</TableCell>
@@ -189,13 +189,13 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                     order.items.map((item, index) => (
                       <TableRow key={item.id || index}>
                         <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {item.sku_code || item.sku?.code || '-'}
+                          <Typography variant="body2">
+                            {item.product_name || '-'}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {item.sku_name || item.product_name || '-'}
+                            {item.variety || item.sku_variety || item.sku_name || '-'}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">{item.quantity}</TableCell>
@@ -267,7 +267,7 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" fontWeight="medium">
-                            {allocation.sku_code}
+                            {allocation.variety || allocation.sku_code}
                           </Typography>
                         </TableCell>
                         <TableCell>

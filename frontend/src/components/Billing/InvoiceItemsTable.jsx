@@ -101,8 +101,8 @@ const InvoiceItemsTable = ({ items = [], editable = false, onChange, taxRate = 0
                   ) : (
                     <>
                       <Typography variant="body2">{item.description}</Typography>
-                      {item.sku_code && (
-                        <Typography variant="caption" color="text.secondary" display="block">{item.sku_code}</Typography>
+                      {item.sku_variety && (
+                        <Typography variant="caption" color="text.secondary" display="block">{item.sku_variety}</Typography>
                       )}
                       {item.lot_number && (
                         <Typography variant="caption" color="text.secondary" display="block">

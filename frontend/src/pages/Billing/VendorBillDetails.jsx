@@ -156,7 +156,7 @@ const VendorBillDetails = () => {
             <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Box>
                 <Typography variant="caption" color="text.secondary">Product</Typography>
-                <Typography variant="body2">{bill.product_name} {bill.sku_code ? `· ${bill.sku_code}` : ''}</Typography>
+                <Typography variant="body2">{bill.product_name} {bill.variety ? `· ${bill.variety}` : ''}</Typography>
               </Box>
               <Box>
                 <Typography variant="caption" color="text.secondary">Invoice #</Typography>

@@ -428,7 +428,7 @@ const PurchaseForm = ({ open, onClose, onSuccess, purchase }) => {
                 <Controller name="sku_id" control={control} render={({ field }) => (
                   <Autocomplete {...field}
                     options={editSkus}
-                    getOptionLabel={(o) => typeof o === 'string' ? editSkus.find((s) => s.id === o)?.sku_code || '' : o.sku_code || ''}
+                    getOptionLabel={(o) => typeof o === 'string' ? editSkus.find((s) => s.id === o)?.variety || editSkus.find((s) => s.id === o)?.sku_code || '' : o.variety || o.sku_code || ''}
                     value={editSkus.find((s) => s.id === field.value) || null}
                     onChange={(_, v) => field.onChange(v?.id || '')}
                     loading={loadingEditSkus}
@@ -672,7 +672,7 @@ const PurchaseForm = ({ open, onClose, onSuccess, purchase }) => {
                   <Grid item xs={12} md={4}>
                     <Autocomplete
                       options={item.skus}
-                      getOptionLabel={(o) => o.sku_code || ''}
+                      getOptionLabel={(o) => o.variety || o.sku_code || ''}
                       value={item.skus.find((s) => s.id === item.sku_id) || null}
                       onChange={(_, v) => updateLineItem(index, 'sku_id', v?.id || '')}
                       loading={item.loadingSkus}

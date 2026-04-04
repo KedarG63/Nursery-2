@@ -358,7 +358,7 @@ const LotsList = () => {
                 <MenuItem value="">All SKUs</MenuItem>
                 {skus.map((sku) => (
                   <MenuItem key={sku.id} value={sku.id}>
-                    {sku.sku_code} - {sku.product?.name}
+                    {sku.product?.name} — {sku.variety || sku.sku_code}
                   </MenuItem>
                 ))}
               </Select>
@@ -431,7 +431,7 @@ const LotsList = () => {
           lotId={selectedLotForQR.id}
           lotNumber={selectedLotForQR.lot_number}
           lotDetails={{
-            skuName: selectedLotForQR.sku_code,
+            skuName: selectedLotForQR.variety || selectedLotForQR.sku_code,
             productName: selectedLotForQR.product_name,
             location: selectedLotForQR.current_location,
             stage: selectedLotForQR.growth_stage,

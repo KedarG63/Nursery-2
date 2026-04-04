@@ -176,11 +176,11 @@ const LotsTable = ({
 
                 <TableCell>
                   <Typography variant="body2">
-                    {lot.sku_code || 'N/A'}
+                    {lot.product_name || 'N/A'}
                   </Typography>
-                  {lot.product_name && (
+                  {lot.variety && (
                     <Typography variant="caption" color="textSecondary">
-                      {lot.product_name}
+                      {lot.variety}
                     </Typography>
                   )}
                 </TableCell>

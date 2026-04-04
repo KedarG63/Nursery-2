@@ -209,10 +209,10 @@ const LotTraceability = () => {
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Typography variant="body2" color="text.secondary">
-                        SKU
+                        Variety
                       </Typography>
                       <Typography variant="body1">
-                        {lineage.sku?.sku_code || '-'}
+                        {lineage.sku?.variety || lineage.sku?.sku_code || '-'}
                       </Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>

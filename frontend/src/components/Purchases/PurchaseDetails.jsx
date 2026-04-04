@@ -248,9 +248,9 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
 
           <Grid item xs={6}>
             <Typography variant="body2" color="text.secondary">
-              SKU
+              Variety
             </Typography>
-            <Typography variant="body1">{purchase.sku_code || '-'}</Typography>
+            <Typography variant="body1">{purchase.variety || '-'}</Typography>
           </Grid>
 
           <Grid item xs={6}>

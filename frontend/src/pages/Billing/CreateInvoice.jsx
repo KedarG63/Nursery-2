@@ -74,7 +74,7 @@ const CreateInvoice = () => {
         order_item_id: oi.id,
         description: oi.product_name || oi.sku_name || oi.description || `Item`,
         sku_id: oi.sku_id,
-        sku_code: oi.sku_code || '',
+        sku_variety: oi.variety || oi.sku_code || '',
         quantity: oi.quantity,
         unit_price: parseFloat(oi.unit_price),
         discount_amount: 0,

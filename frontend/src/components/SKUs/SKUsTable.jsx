@@ -47,7 +47,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>SKU Code</TableCell>
               <TableCell>Product Name</TableCell>
               <TableCell>Variety</TableCell>
               <TableCell align="right">Price</TableCell>
@@ -61,7 +60,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
           <TableBody>
             {[...Array(5)].map((_, index) => (
               <TableRow key={index}>
-                <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
                 <TableCell><Skeleton /></TableCell>
@@ -104,7 +102,6 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>SKU Code</TableCell>
             <TableCell>Product Name</TableCell>
             <TableCell>Variety</TableCell>
             <TableCell align="right">Price</TableCell>
@@ -119,17 +116,12 @@ const SKUsTable = ({ skus, loading, onEdit, onDelete }) => {
           {skus.map((sku) => (
             <TableRow key={sku.id} hover>
               <TableCell>
-                <Typography variant="body2" fontWeight="medium">
-                  {sku.sku_code}
-                </Typography>
-              </TableCell>
-              <TableCell>
                 <Typography variant="body2">
                   {sku.product_name || sku.product?.name || 'N/A'}
                 </Typography>
               </TableCell>
               <TableCell>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" fontWeight="medium">
                   {sku.variety || '-'}
                 </Typography>
               </TableCell>

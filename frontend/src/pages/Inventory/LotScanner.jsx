@@ -417,9 +417,9 @@ const LotScanner = () => {
             <LotQuickActions
               lot={{
                 ...scannedLot,
-                sku_name: scannedLot.sku?.sku_code
-                  ? `${scannedLot.sku.sku_code} - ${scannedLot.sku.product?.name || ''}`
-                  : scannedLot.sku?.product?.name || 'N/A',
+                sku_name: scannedLot.sku?.product?.name
+                  ? `${scannedLot.sku.product.name} — ${scannedLot.sku.variety || scannedLot.sku.sku_code || ''}`
+                  : scannedLot.sku?.variety || scannedLot.sku?.sku_code || 'N/A',
                 location: scannedLot.current_location,
               }}
               onStageUpdate={handleStageUpdate}

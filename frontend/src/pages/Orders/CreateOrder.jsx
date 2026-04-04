@@ -157,7 +157,7 @@ const CreateOrder = () => {
 
       // Store detailed information for all items (available and unavailable)
       setAvailabilityDetails(data.map(item => ({
-        skuCode: item.sku_code,
+        skuVariety: item.variety || item.sku_code,
         productName: item.product_name,
         requestedQty: item.requested_quantity,
         availableQty: item.available_quantity,
@@ -171,13 +171,13 @@ const CreateOrder = () => {
       if (!all_available) {
         const unavailableItems = data.filter(item => !item.available);
         setAvailabilityErrors(unavailableItems.map(item => ({
-          skuCode: item.sku_code,
+          skuVariety: item.variety || item.sku_code,
           productName: item.product_name,
           requestedQty: item.requested_quantity,
           availableQty: item.available_quantity,
           nextAvailableDate: item.next_available_date,
           shortfall: item.requested_quantity - item.available_quantity,
-          message: `${item.product_name} (${item.sku_code}): Only ${item.available_quantity} of ${item.requested_quantity} available by ${orderData.deliveryDate}. Shortfall: ${item.requested_quantity - item.available_quantity}. Next availability: ${item.next_available_date || 'Not available'}`
+          message: `${item.product_name} (${item.variety || item.sku_code}): Only ${item.available_quantity} of ${item.requested_quantity} available by ${orderData.deliveryDate}. Shortfall: ${item.requested_quantity - item.available_quantity}. Next availability: ${item.next_available_date || 'Not available'}`
         })));
         toast.warning('Some items are not available by the requested delivery date');
         setAvailabilityChecked(false);
@@ -325,7 +325,7 @@ const CreateOrder = () => {
                                 {detail.productName}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {detail.skuCode}
+                                {detail.skuVariety}
                               </Typography>
                             </TableCell>
                             <TableCell align="center">
@@ -384,7 +384,7 @@ const CreateOrder = () => {
                                 {error.productName}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {error.skuCode}
+                                {error.skuVariety}
                               </Typography>
                             </TableCell>
                             <TableCell align="center">

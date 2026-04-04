@@ -77,6 +77,7 @@ const OrderItems = ({ items, onItemsChange }) => {
       const newItem = {
         sku_id: selectedSKU.id,
         sku_code: selectedSKU.sku_code,
+        sku_variety: selectedSKU.variety || selectedSKU.sku_code,
         sku_name: selectedSKU.name,
         product_name: selectedSKU.product_name,
         quantity: quantity,
@@ -129,7 +130,7 @@ const OrderItems = ({ items, onItemsChange }) => {
               onChange={(event, newValue) => setSelectedSKU(newValue)}
               options={skus}
               getOptionLabel={(option) =>
-                `${option.sku_code} - ${option.name} (${option.product_name}) - ${formatCurrency(option.price)}`
+                `${option.product_name} — ${option.variety || option.sku_code} (${formatCurrency(option.price)})`
               }
               loading={loading}
               renderInput={(params) => (
@@ -174,8 +175,8 @@ const OrderItems = ({ items, onItemsChange }) => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>SKU Code</TableCell>
                 <TableCell>Product</TableCell>
+                <TableCell>Variety</TableCell>
                 <TableCell align="right">Unit Price</TableCell>
                 <TableCell align="center">Quantity</TableCell>
                 <TableCell align="right">Subtotal</TableCell>
@@ -185,12 +186,11 @@ const OrderItems = ({ items, onItemsChange }) => {
             <TableBody>
               {items.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell>{item.sku_code}</TableCell>
                   <TableCell>
-                    <Typography variant="body2">{item.sku_name}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {item.product_name}
-                    </Typography>
+                    <Typography variant="body2">{item.product_name}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{item.sku_variety || item.sku_code}</Typography>
                   </TableCell>
                   <TableCell align="right">{formatCurrency(item.unit_price)}</TableCell>
                   <TableCell align="center">

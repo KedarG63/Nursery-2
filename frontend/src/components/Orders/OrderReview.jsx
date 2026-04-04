@@ -115,9 +115,9 @@ const OrderReview = ({ orderData }) => {
               {items.map((item, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    <Typography variant="body2">{item.sku_name}</Typography>
+                    <Typography variant="body2">{item.product_name}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {item.sku_code} - {item.product_name}
+                      {item.sku_variety || item.sku_name || ''}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">{formatCurrency(item.unit_price)}</TableCell>

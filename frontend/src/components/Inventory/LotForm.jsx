@@ -192,11 +192,9 @@ const LotForm = ({ open, onClose, onSuccess }) => {
                   {...field}
                   options={skus}
                   getOptionLabel={(option) => {
-                    if (option.sku_code) {
-                      const productName = option.product_name || option.product?.name;
-                      return productName ? `${option.sku_code} - ${productName}` : option.sku_code;
-                    }
-                    return '';
+                    const variety = option.variety || option.sku_code || '';
+                    const productName = option.product_name || option.product?.name;
+                    return productName ? `${productName} — ${variety}` : variety;
                   }}
                   loading={loadingSKUs}
                   value={selectedSKU}
