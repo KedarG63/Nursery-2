@@ -303,7 +303,7 @@ const createCustomer = async (req, res) => {
             address.address_line2 || null,
             address.city,
             address.state,
-            address.pincode,
+            address.pincode || null,
             isDefault,
           ]
         );

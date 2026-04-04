@@ -800,7 +800,7 @@ const deleteLot = async (req, res) => {
 
     // Check if lot has allocated quantity
     const lotResult = await pool.query(
-      'SELECT allocated_quantity FROM lots WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT allocated_quantity, seed_purchase_id, seeds_used_count FROM lots WHERE id = $1 AND deleted_at IS NULL',
       [id]
     );
 
@@ -818,13 +818,43 @@ const deleteLot = async (req, res) => {
       });
     }
 
-    // Soft delete
-    await pool.query(
-      `UPDATE lots
-       SET deleted_at = NOW(), updated_by = $1, updated_at = NOW()
-       WHERE id = $2`,
-      [userId, id]
-    );
+    const lot = lotResult.rows[0];
+
+    // Use a transaction so seed restoration and deletion are atomic
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Soft delete the lot
+      await client.query(
+        `UPDATE lots SET deleted_at = NOW(), updated_by = $1, updated_at = NOW() WHERE id = $2`,
+        [userId, id]
+      );
+
+      // Restore seeds to the seed purchase if linked
+      if (lot.seed_purchase_id && lot.seeds_used_count > 0) {
+        await client.query(
+          `UPDATE seed_purchases
+           SET seeds_used = GREATEST(0, seeds_used - $1),
+               seeds_remaining = seeds_remaining + $1,
+               inventory_status = CASE
+                 WHEN (seeds_remaining + $1) <= 0 THEN 'exhausted'
+                 WHEN (seeds_remaining + $1)::DECIMAL / NULLIF(total_seeds, 0) < 0.1 THEN 'low_stock'
+                 ELSE 'available'
+               END,
+               updated_at = NOW()
+           WHERE id = $2 AND deleted_at IS NULL`,
+          [lot.seeds_used_count, lot.seed_purchase_id]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     res.json({
       success: true,

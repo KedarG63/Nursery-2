@@ -117,7 +117,8 @@ const createPurchase = async (req, res) => {
         v.vendor_name,
         v.vendor_code,
         p.name as product_name,
-        s.sku_code
+        s.sku_code,
+        s.variety
       FROM seed_purchases sp
       JOIN vendors v ON sp.vendor_id = v.id
       JOIN products p ON sp.product_id = p.id
@@ -166,7 +167,8 @@ const listPurchases = async (req, res) => {
         v.vendor_name,
         v.vendor_code,
         p.name as product_name,
-        s.sku_code
+        s.sku_code,
+        s.variety
       FROM seed_purchases sp
       JOIN vendors v ON sp.vendor_id = v.id
       JOIN products p ON sp.product_id = p.id
@@ -263,7 +265,8 @@ const getPurchaseById = async (req, res) => {
         v.email as vendor_email,
         p.name as product_name,
         p.category as product_category,
-        s.sku_code
+        s.sku_code,
+        s.variety
       FROM seed_purchases sp
       JOIN vendors v ON sp.vendor_id = v.id
       JOIN products p ON sp.product_id = p.id
