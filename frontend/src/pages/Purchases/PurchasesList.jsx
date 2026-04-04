@@ -347,9 +347,9 @@ const PurchasesList = () => {
                                 <Typography variant="body2" fontWeight={500}>
                                   {purchase.product_name || '—'}
                                 </Typography>
-                                {purchase.sku_code && (
+                                {purchase.variety && (
                                   <Typography variant="caption" color="text.secondary">
-                                    {purchase.sku_code}
+                                    {purchase.variety}
                                   </Typography>
                                 )}
                               </td>

@@ -72,7 +72,9 @@ const CreateInvoice = () => {
       // Pre-fill items from order_items
       const mappedItems = (o.items || []).map((oi) => ({
         order_item_id: oi.id,
-        description: oi.product_name || oi.sku_name || oi.description || `Item`,
+        description: oi.variety
+          ? `${oi.product_name || oi.sku_name || 'Item'} — ${oi.variety}`
+          : (oi.product_name || oi.sku_name || oi.description || 'Item'),
         sku_id: oi.sku_id,
         sku_variety: oi.variety || oi.sku_code || '',
         quantity: oi.quantity,

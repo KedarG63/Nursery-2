@@ -194,7 +194,7 @@ const SeedInventory = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Product</TableCell>
-                <TableCell>SKU</TableCell>
+                <TableCell>Variety</TableCell>
                 <TableCell align="right">Available Seeds</TableCell>
                 <TableCell align="right">Purchases</TableCell>
                 <TableCell>Vendors</TableCell>
@@ -215,7 +215,7 @@ const SeedInventory = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    {item.skuCode || <Typography variant="caption" color="text.secondary">N/A</Typography>}
+                    {item.skuVariety || <Typography variant="caption" color="text.secondary">—</Typography>}
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" fontWeight="bold">

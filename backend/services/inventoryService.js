@@ -57,6 +57,7 @@ const getSeedInventorySummary = async (filters = {}) => {
       p.category as product_category,
       s.id as sku_id,
       s.sku_code,
+      s.variety,
       COUNT(sp.id) as purchase_count,
       SUM(sp.total_seeds) as total_seeds_purchased,
       SUM(sp.seeds_used) as total_seeds_used,
@@ -75,7 +76,7 @@ const getSeedInventorySummary = async (filters = {}) => {
     LEFT JOIN skus s ON sp.sku_id = s.id
     LEFT JOIN vendors v ON sp.vendor_id = v.id
     WHERE ${whereClause}
-    GROUP BY p.id, p.name, p.category, s.id, s.sku_code
+    GROUP BY p.id, p.name, p.category, s.id, s.sku_code, s.variety
     ORDER BY p.name, s.sku_code
   `;
 
@@ -87,6 +88,7 @@ const getSeedInventorySummary = async (filters = {}) => {
     productCategory: row.product_category,
     skuId: row.sku_id,
     skuCode: row.sku_code,
+    skuVariety: row.variety || null,
     purchaseCount: parseInt(row.purchase_count),
     totalSeedsPurchased: parseInt(row.total_seeds_purchased),
     totalSeedsUsed: parseInt(row.total_seeds_used),

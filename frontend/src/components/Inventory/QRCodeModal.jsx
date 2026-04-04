@@ -153,7 +153,7 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
                     {lotDetails.skuName && (
                       <Grid item xs={6}>
                         <Typography variant="body2" color="textSecondary">
-                          SKU:
+                          Variety:
                         </Typography>
                         <Typography variant="body1" fontWeight="medium">
                           {lotDetails.skuName}
