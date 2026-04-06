@@ -471,7 +471,7 @@ const deletePurchase = async (req, res) => {
     // Soft delete
     const result = await client.query(
       `UPDATE seed_purchases
-       SET deleted_at = NOW(), updated_by = $1
+       SET deleted_at = NOW(), deleted_by = $1, updated_by = $1
        WHERE id = $2
        RETURNING *`,
       [userId, id]

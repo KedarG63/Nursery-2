@@ -480,7 +480,7 @@ const deleteCustomer = async (req, res) => {
     // Soft delete
     const result = await pool.query(
       `UPDATE customers
-       SET deleted_at = NOW(), updated_by = $2
+       SET deleted_at = NOW(), deleted_by = $2, updated_by = $2
        WHERE id = $1 AND deleted_at IS NULL
        RETURNING id`,
       [id, req.user.id]

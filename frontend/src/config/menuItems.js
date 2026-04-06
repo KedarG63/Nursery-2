@@ -1,3 +1,4 @@
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -127,6 +128,14 @@ const menuItems = [
     labelKey: 'nav.banking',
     icon: SavingsIcon,
     path: '/banking',
+    roles: ['Admin', 'Manager'],
+  },
+  {
+    id: 'trash',
+    label: 'Trash',
+    labelKey: 'nav.trash',
+    icon: DeleteSweepIcon,
+    path: '/trash',
     roles: ['Admin', 'Manager'],
   },
   {

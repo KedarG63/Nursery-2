@@ -834,7 +834,7 @@ const deleteLot = async (req, res) => {
 
       // Soft delete the lot
       await client.query(
-        `UPDATE lots SET deleted_at = NOW(), updated_by = $1, updated_at = NOW() WHERE id = $2`,
+        `UPDATE lots SET deleted_at = NOW(), deleted_by = $1, updated_by = $1, updated_at = NOW() WHERE id = $2`,
         [userId, id]
       );
 

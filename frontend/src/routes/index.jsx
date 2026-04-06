@@ -40,6 +40,7 @@ import VendorAgingReport from '../pages/Billing/VendorAgingReport';
 import BankAccountsPage from '../pages/Banking/BankAccountsPage';
 import BankLedgerPage from '../pages/Banking/BankLedgerPage';
 import BankMonthlySummaryPage from '../pages/Banking/BankMonthlySummaryPage';
+import TrashPage from '../pages/Trash/TrashPage';
 
 const AppRoutes = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -123,6 +124,9 @@ const AppRoutes = () => {
         <Route path="banking" element={<BankAccountsPage />} />
         <Route path="banking/:id/ledger" element={<BankLedgerPage />} />
         <Route path="banking/:id/summary" element={<BankMonthlySummaryPage />} />
+
+        {/* Trash / Recycle Bin */}
+        <Route path="trash" element={<TrashPage />} />
       </Route>
 
       {/* Catch all - redirect to home */}

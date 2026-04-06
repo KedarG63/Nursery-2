@@ -96,6 +96,7 @@ const invoiceRoutes = require('./routes/invoices'); // Phase 23: Billing
 const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billing
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
 const bankLedgerRoutes   = require('./routes/bankLedger');    // Feature: Bank Ledger
+const trashRoutes        = require('./routes/trash');          // Feature: Trash / Recycle Bin
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -120,6 +121,7 @@ app.use('/api/invoices', invoiceRoutes); // Phase 23: Billing
 app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
 app.use('/api/bank-accounts', bankLedgerRoutes);   // Feature: Bank Ledger
+app.use('/api/trash', trashRoutes);                // Feature: Trash / Recycle Bin
 
 // Serve uploaded files (delivery proofs)
 app.use('/uploads', express.static('uploads'));
@@ -158,6 +160,10 @@ async function startServer() {
       // Initialize notification cron jobs (Phase 9)
       const NotificationJobs = require('./jobs/notificationJobs');
       NotificationJobs.initializeJobs();
+
+      // Initialize trash purge job
+      const { initTrashPurgeJob } = require('./jobs/trashPurgeJob');
+      initTrashPurgeJob();
 
       // Initialize Phase 16 automated jobs
       logger.info('🤖 Initializing Phase 16 automation jobs...');
