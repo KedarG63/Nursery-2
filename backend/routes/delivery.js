@@ -43,6 +43,33 @@ router.get(
 );
 
 /**
+ * GET /api/delivery/summary
+ * Get delivery summary for dashboard
+ * IMPORTANT: Must be registered BEFORE /:id to avoid being matched as a route ID
+ * Access: Admin, Delivery Manager, Warehouse
+ */
+router.get(
+  '/summary',
+  // authenticate,
+  // authorize(['Admin', 'Manager', 'Warehouse']),
+  deliveryController.getDeliverySummary
+);
+
+/**
+ * GET /api/delivery/available-orders
+ * Get orders ready for delivery (not yet assigned to routes)
+ * IMPORTANT: Must be registered BEFORE /:id to avoid being matched as a route ID
+ * Query params: delivery_date (optional, defaults to today)
+ * Access: Admin, Delivery Manager, Warehouse
+ */
+router.get(
+  '/available-orders',
+  // authenticate,
+  // authorize(['Admin', 'Manager', 'Warehouse']),
+  deliveryController.getAvailableOrdersForDelivery
+);
+
+/**
  * GET /api/routes/:id
  * Get route details with stops
  * Access: Admin, Delivery Manager, Warehouse, Driver (own routes)
@@ -89,31 +116,6 @@ router.get(
   // authenticate,
   // authorize(['Admin', 'Manager', 'Warehouse']),
   deliveryController.getRouteProgress
-);
-
-/**
- * GET /api/delivery/summary
- * Get delivery summary for dashboard
- * Access: Admin, Delivery Manager, Warehouse
- */
-router.get(
-  '/summary',
-  // authenticate,
-  // authorize(['Admin', 'Manager', 'Warehouse']),
-  deliveryController.getDeliverySummary
-);
-
-/**
- * GET /api/delivery/available-orders
- * Get orders ready for delivery (not yet assigned to routes)
- * Query params: delivery_date (optional, defaults to today)
- * Access: Admin, Delivery Manager, Warehouse
- */
-router.get(
-  '/available-orders',
-  // authenticate,
-  // authorize(['Admin', 'Manager', 'Warehouse']),
-  deliveryController.getAvailableOrdersForDelivery
 );
 
 module.exports = router;
