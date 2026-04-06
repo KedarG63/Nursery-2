@@ -161,7 +161,16 @@ async function createProduct(req, res) {
   const { name, description, category, growth_period_days, lot_size, image_url } = req.body;
   const userId = req.user?.id;
 
+  const VALID_CATEGORIES = ['leafy_greens', 'fruiting', 'root', 'herbs'];
+
   try {
+    if (category && !VALID_CATEGORIES.includes(category)) {
+      return res.status(400).json({
+        error: 'Invalid category',
+        message: `category must be one of: ${VALID_CATEGORIES.join(', ')}`,
+      });
+    }
+
     // Check if product with same name already exists
     const existingProduct = await db.query(
       'SELECT id FROM products WHERE LOWER(name) = LOWER($1) AND deleted_at IS NULL',

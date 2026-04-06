@@ -62,7 +62,7 @@ class InventoryReportService {
         END as is_low_stock
       FROM skus s
       JOIN products p ON s.product_id = p.id
-      LEFT JOIN lots l ON s.id = l.sku_id AND l.status = 'active'
+      LEFT JOIN lots l ON s.id = l.sku_id AND l.deleted_at IS NULL
       GROUP BY s.id, s.name, p.name, s.min_stock_level
       ORDER BY current_stock ASC
     `;
@@ -91,7 +91,7 @@ class InventoryReportService {
         COALESCE(SUM(total_quantity), 0) as total_quantity,
         COALESCE(SUM(available_quantity), 0) as available_quantity
       FROM lots
-      WHERE status = 'active'
+      WHERE deleted_at IS NULL
       GROUP BY growth_stage
       ORDER BY growth_stage
     `;
@@ -147,19 +147,19 @@ class InventoryReportService {
   async getStockByLocation() {
     const query = `
       SELECT
-        location,
+        current_location,
         COUNT(*) as lot_count,
         COALESCE(SUM(available_quantity), 0) as total_quantity
       FROM lots
-      WHERE status = 'active'
-      GROUP BY location
+      WHERE deleted_at IS NULL
+      GROUP BY current_location
       ORDER BY total_quantity DESC
     `;
 
     const result = await db.query(query);
 
     return result.rows.map(row => ({
-      location: row.location,
+      location: row.current_location,
       lotCount: parseInt(row.lot_count),
       quantity: parseInt(row.total_quantity)
     }));

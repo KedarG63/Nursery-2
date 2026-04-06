@@ -67,7 +67,7 @@ class DeliveryReportService {
         ) as on_time_rate
       FROM route_stops rs
       JOIN delivery_routes dr ON rs.route_id = dr.id
-      WHERE dr.date >= $1 AND dr.date <= $2
+      WHERE dr.route_date >= $1 AND dr.route_date <= $2
         AND rs.status = 'delivered'
         AND ($3::uuid IS NULL OR dr.driver_id = $3)
     `;
@@ -115,7 +115,7 @@ class DeliveryReportService {
       FROM users u
       JOIN delivery_routes dr ON u.id = dr.driver_id
       LEFT JOIN route_stops rs ON dr.id = rs.route_id
-      WHERE dr.date >= $1 AND dr.date <= $2
+      WHERE dr.route_date >= $1 AND dr.route_date <= $2
       GROUP BY u.id, u.full_name
       ORDER BY routes_completed DESC
     `;
@@ -178,7 +178,7 @@ class DeliveryReportService {
           2
         ) as avg_time_minutes
       FROM delivery_routes dr
-      WHERE dr.date >= $1 AND dr.date <= $2
+      WHERE dr.route_date >= $1 AND dr.route_date <= $2
         AND dr.status = 'completed'
         AND dr.actual_start_time IS NOT NULL
         AND dr.actual_end_time IS NOT NULL

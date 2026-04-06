@@ -47,14 +47,14 @@ async function authenticateDriver(req, res, next) {
         u.id,
         u.email,
         u.full_name as name,
-        u.phone_number,
+        u.phone,
         u.status,
-        array_agg(DISTINCT r.role_name) as roles
+        array_agg(DISTINCT r.name) as roles
       FROM users u
       LEFT JOIN user_roles ur ON u.id = ur.user_id
       LEFT JOIN roles r ON ur.role_id = r.id
       WHERE u.id = $1 AND u.deleted_at IS NULL
-      GROUP BY u.id, u.email, u.full_name, u.phone_number, u.status
+      GROUP BY u.id, u.email, u.full_name, u.phone, u.status
     `;
 
     const result = await pool.query(userQuery, [decoded.userId || decoded.id]);

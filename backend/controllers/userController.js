@@ -107,7 +107,8 @@ const createUser = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { email, password, full_name, phone, role, license_number, license_expiry } = req.body;
+    const { email, password, full_name: full_name_field, fullName, phone, role, license_number, license_expiry } = req.body;
+    const full_name = full_name_field || fullName;
 
     await client.query('BEGIN');
 

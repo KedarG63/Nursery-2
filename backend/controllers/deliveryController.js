@@ -624,7 +624,7 @@ const getDeliverySummary = async (req, res) => {
        JOIN user_roles ur ON u.id = ur.user_id
        JOIN roles r ON ur.role_id = r.id
        LEFT JOIN delivery_routes dr ON dr.driver_id = u.id AND dr.route_date = CURRENT_DATE
-       LEFT JOIN route_stops rs ON rs.route_id = dr.id AND rs.status = 'completed'
+       LEFT JOIN route_stops rs ON rs.route_id = dr.id AND rs.status = 'delivered'
        WHERE r.name = 'Delivery'
        AND u.status = 'active'
        GROUP BY u.id, u.full_name

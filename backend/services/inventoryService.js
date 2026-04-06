@@ -280,7 +280,7 @@ const getSeedInventoryByProduct = async (product_id) => {
         WHEN sp.seeds_remaining::DECIMAL / sp.total_seeds < 0.1 THEN 'Low Stock'
         ELSE 'Available'
       END as status_label,
-      EXTRACT(DAY FROM (sp.expiry_date - CURRENT_DATE)) as days_until_expiry
+      (sp.expiry_date - CURRENT_DATE) as days_until_expiry
     FROM seed_purchases sp
     JOIN products p ON sp.product_id = p.id
     LEFT JOIN skus s ON sp.sku_id = s.id
@@ -359,7 +359,7 @@ const getAvailableSeedsForLotCreation = async (product_id, sku_id = null) => {
       v.vendor_name,
       p.name as product_name,
       s.sku_code,
-      EXTRACT(DAY FROM (sp.expiry_date - CURRENT_DATE)) as days_until_expiry
+      (sp.expiry_date - CURRENT_DATE) as days_until_expiry
     FROM seed_purchases sp
     JOIN products p ON sp.product_id = p.id
     LEFT JOIN skus s ON sp.sku_id = s.id

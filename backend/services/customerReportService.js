@@ -101,7 +101,7 @@ class CustomerReportService {
         FROM customers c
         LEFT JOIN orders o ON c.id = o.customer_id
           AND o.created_at >= $1 AND o.created_at <= $2
-          AND o.status NOT IN ('cancelled', 'draft')
+          AND o.status NOT IN ('cancelled')
         GROUP BY c.id, c.customer_type
       ) AS customer_revenues
       GROUP BY customer_type

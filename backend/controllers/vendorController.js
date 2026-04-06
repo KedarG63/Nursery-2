@@ -14,7 +14,8 @@ const createVendor = async (req, res) => {
 
   try {
     const {
-      vendor_name,
+      vendor_name: vendor_name_field,
+      name: vendor_name_alias,
       vendor_code,
       contact_person,
       phone,
@@ -26,6 +27,7 @@ const createVendor = async (req, res) => {
       notes,
     } = req.body;
 
+    const vendor_name = vendor_name_field || vendor_name_alias;
     const userId = req.user.id;
 
     await client.query('BEGIN');

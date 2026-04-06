@@ -750,7 +750,7 @@ const getPaymentSummary = async (req, res) => {
 
     // Payment installments upcoming
     const installmentsResult = await pool.query(
-      `SELECT COUNT(*) as count, SUM(installment_amount) as amount
+      `SELECT COUNT(*) as count, SUM(amount) as amount
        FROM payment_installments
        WHERE status = 'pending'
        AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`
@@ -819,7 +819,7 @@ const getUpcomingPayments = async (req, res) => {
          o.balance_amount,
          o.delivery_date,
          o.payment_type,
-         EXTRACT(DAY FROM (o.delivery_date - CURRENT_DATE)) as days_until_due
+         (o.delivery_date - CURRENT_DATE) as days_until_due
        FROM orders o
        JOIN customers c ON o.customer_id = c.id
        WHERE o.balance_amount > 0
