@@ -846,9 +846,9 @@ const deleteLot = async (req, res) => {
            SET seeds_used      = GREATEST(0, COALESCE(seeds_used, 0) - $1),
                seeds_remaining = COALESCE(seeds_remaining, 0) + $1,
                inventory_status = CASE
-                 WHEN (COALESCE(seeds_remaining, 0) + $1) <= 0 THEN 'exhausted'
-                 WHEN (COALESCE(seeds_remaining, 0) + $1)::DECIMAL / NULLIF(total_seeds, 0) < 0.1 THEN 'low_stock'
-                 ELSE 'available'
+                 WHEN (COALESCE(seeds_remaining, 0) + $1) <= 0 THEN 'exhausted'::seed_inventory_status_enum
+                 WHEN (COALESCE(seeds_remaining, 0) + $1)::DECIMAL / NULLIF(total_seeds, 0) < 0.1 THEN 'low_stock'::seed_inventory_status_enum
+                 ELSE 'available'::seed_inventory_status_enum
                END,
                updated_at = NOW()
            WHERE id = $2 AND deleted_at IS NULL`,
