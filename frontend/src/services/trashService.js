@@ -1,4 +1,4 @@
-import api from './api';
+import api from '../utils/api';
 
 const trashService = {
   listTrash: (params = {}) => api.get('/api/trash', { params }).then((r) => r.data),
