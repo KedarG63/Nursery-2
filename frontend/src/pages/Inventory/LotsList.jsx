@@ -436,7 +436,7 @@ const LotsList = () => {
             location: selectedLotForQR.current_location,
             stage: selectedLotForQR.growth_stage,
             expected_ready_date: selectedLotForQR.expected_ready_date,
-            lot_created_at: selectedLotForQR.created_at,
+            lot_created_at: selectedLotForQR.planted_date,
             seed_lot_number: selectedLotForQR.seed_lot_number,
             seed_vendor_name: selectedLotForQR.seed_vendor_name,
             seed_expiry_date: selectedLotForQR.seed_expiry_date,

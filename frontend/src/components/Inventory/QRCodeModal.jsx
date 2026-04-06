@@ -204,7 +204,7 @@ const QRCodeModal = ({ open, onClose, lotId, lotNumber, lotDetails }) => {
                     {lotDetails.lot_created_at && (
                       <Grid item xs={12}>
                         <Typography variant="body2" color="textSecondary">
-                          Lot Created:
+                          Planted Date:
                         </Typography>
                         <Typography variant="body1" fontWeight="medium">
                           {dayjs(lotDetails.lot_created_at).format('MMM D, YYYY')}

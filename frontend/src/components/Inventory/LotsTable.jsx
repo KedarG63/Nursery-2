@@ -93,7 +93,7 @@ const LotsTable = ({
               <TableCell align="right">Total Qty</TableCell>
               <TableCell align="right">Allocated</TableCell>
               <TableCell align="right">Available</TableCell>
-              <TableCell>Date Created</TableCell>
+              <TableCell>Planted Date</TableCell>
               <TableCell>Expected Ready</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -255,7 +255,7 @@ const LotsTable = ({
 
                 <TableCell>
                   <Typography variant="body2">
-                    {dayjs(lot.created_at).format('MMM D, YYYY')}
+                    {lot.planted_date ? dayjs(lot.planted_date).format('MMM D, YYYY') : '—'}
                   </Typography>
                 </TableCell>
 
