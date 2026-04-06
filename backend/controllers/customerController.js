@@ -441,6 +441,15 @@ const updateCustomer = async (req, res) => {
       });
     }
 
+    // Sync credit_limit to customer_credit table if it was changed
+    if (credit_limit !== undefined) {
+      await pool.query(
+        `UPDATE customer_credit SET credit_limit = $1, updated_at = NOW()
+         WHERE customer_id = $2`,
+        [credit_limit, id]
+      );
+    }
+
     res.json({
       success: true,
       data: result.rows[0],

@@ -94,7 +94,9 @@ const createLot = async (req, res) => {
       const sequence = String(parseInt(countResult.rows[0].count) + 1).padStart(3, '0');
       lot_number = `${seedLotNumber}-${sequence}`;
     } else {
-      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      // Use planted_date for the date part so past-dated lots are numbered correctly
+      const refDate = planted_date ? new Date(planted_date) : new Date();
+      const dateStr = refDate.toISOString().split('T')[0].replace(/-/g, '');
       const countResult = await client.query(
         'SELECT COUNT(*) FROM lots WHERE lot_number LIKE $1',
         [`LOT-${dateStr}-%`]
