@@ -26,13 +26,8 @@ const OrderReview = ({ orderData }) => {
     return items.reduce((sum, item) => sum + item.subtotal, 0);
   };
 
-  const calculateTax = () => {
-    // 18% GST
-    return calculateSubtotal() * 0.18;
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
+    return calculateSubtotal();
   };
 
   return (
@@ -137,10 +132,6 @@ const OrderReview = ({ orderData }) => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography variant="body1">Subtotal:</Typography>
               <Typography variant="body1">{formatCurrency(calculateSubtotal())}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body1">Tax (18% GST):</Typography>
-              <Typography variant="body1">{formatCurrency(calculateTax())}</Typography>
             </Box>
             <Divider />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
