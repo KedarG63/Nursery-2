@@ -817,7 +817,8 @@ const deleteLot = async (req, res) => {
       });
     }
 
-    if (lotResult.rows[0].allocated_quantity > 0) {
+    // COALESCE guards against NULL allocated_quantity (older lots before column existed)
+    if (parseInt(lotResult.rows[0].allocated_quantity || 0) > 0) {
       return res.status(400).json({
         success: false,
         error: 'Cannot delete lot with allocated quantity',
@@ -838,19 +839,20 @@ const deleteLot = async (req, res) => {
       );
 
       // Restore seeds to the seed purchase if linked
-      if (lot.seed_purchase_id && lot.seeds_used_count > 0) {
+      const seedsToRestore = parseInt(lot.seeds_used_count || 0);
+      if (lot.seed_purchase_id && seedsToRestore > 0) {
         await client.query(
           `UPDATE seed_purchases
-           SET seeds_used = GREATEST(0, seeds_used - $1),
-               seeds_remaining = seeds_remaining + $1,
+           SET seeds_used      = GREATEST(0, COALESCE(seeds_used, 0) - $1),
+               seeds_remaining = COALESCE(seeds_remaining, 0) + $1,
                inventory_status = CASE
-                 WHEN (seeds_remaining + $1) <= 0 THEN 'exhausted'
-                 WHEN (seeds_remaining + $1)::DECIMAL / NULLIF(total_seeds, 0) < 0.1 THEN 'low_stock'
+                 WHEN (COALESCE(seeds_remaining, 0) + $1) <= 0 THEN 'exhausted'
+                 WHEN (COALESCE(seeds_remaining, 0) + $1)::DECIMAL / NULLIF(total_seeds, 0) < 0.1 THEN 'low_stock'
                  ELSE 'available'
                END,
                updated_at = NOW()
            WHERE id = $2 AND deleted_at IS NULL`,
-          [lot.seeds_used_count, lot.seed_purchase_id]
+          [seedsToRestore, lot.seed_purchase_id]
         );
       }
 
