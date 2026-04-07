@@ -20,21 +20,9 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
  * @returns {string} Human-readable multiline text for QR code
  */
 const generateQRData = (lotData) => {
-  const lines = [
-    `LOT: ${lotData.lot_number}`,
-    `VARIETY: ${lotData.product_name || 'N/A'}`,
-    `SKU: ${lotData.sku_code || 'N/A'}`,
-    `Date: ${lotData.created_date || ''}`,
-  ];
-
-  if (lotData.seed_lot_number) {
-    lines.push(`Seed Lot: ${lotData.seed_lot_number}`);
-  }
-  if (lotData.vendor_name) {
-    lines.push(`Seed Vendor: ${lotData.vendor_name}`);
-  }
-
-  return lines.join('\n');
+  // Encode only the lot number — short and simple so any camera can scan it.
+  // The app looks up full details by lot number after scanning.
+  return lotData.lot_number;
 };
 
 /**
@@ -52,10 +40,10 @@ const generateQRCode = async (lotData) => {
 
     // Generate QR code as PNG buffer
     const qrCodeBuffer = await QRCode.toBuffer(qrData, {
-      errorCorrectionLevel: 'H', // High error correction
+      errorCorrectionLevel: 'M', // Medium — less dense, easier to scan
       type: 'png',
-      width: 300,
-      margin: 2,
+      width: 400,
+      margin: 3,
       color: {
         dark: '#000000',
         light: '#FFFFFF',
@@ -98,9 +86,9 @@ const generateQRCodeDataURL = async (lotData) => {
     const qrData = generateQRData(lotData);
 
     const dataURL = await QRCode.toDataURL(qrData, {
-      errorCorrectionLevel: 'H',
-      width: 300,
-      margin: 2,
+      errorCorrectionLevel: 'M',
+      width: 400,
+      margin: 3,
     });
 
     return dataURL;
@@ -167,18 +155,11 @@ const extractLotNumber = (qrData) => {
  * @returns {boolean} True if valid
  */
 const validateQRData = (qrData) => {
-  try {
-    const parsed = parseQRData(qrData);
-
-    if (typeof parsed === 'object' && parsed.lot_number) {
-      return /^LOT-\d{8}-\d{4}$/.test(parsed.lot_number);
-    }
-
-    // Plain string — check lot number pattern
-    return /^LOT-\d{8}-\d{4}$/.test(parsed);
-  } catch (e) {
-    return false;
-  }
+  if (!qrData) return false;
+  const parsed = parseQRData(qrData);
+  const lotNumber = typeof parsed === 'object' ? parsed.lot_number : parsed;
+  // Accept LOT-YYYYMMDD-XXXX (old) or any non-empty string (new seed-lot-based numbers)
+  return typeof lotNumber === 'string' && lotNumber.trim().length > 0;
 };
 
 module.exports = {
