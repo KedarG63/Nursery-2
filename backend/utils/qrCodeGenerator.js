@@ -20,13 +20,17 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
  * @returns {string} Human-readable multiline text for QR code
  */
 const generateQRData = (lotData) => {
+  const fmt = (d) => d ? String(d).split('T')[0] : '';
   const lines = [
     `LOT: ${lotData.lot_number}`,
     `PRODUCT: ${lotData.product_name || 'N/A'}`,
-    `Date: ${lotData.created_date ? lotData.created_date.split('T')[0] : ''}`,
+    `VARIETY: ${lotData.variety || 'N/A'}`,
+    `PLANTED: ${fmt(lotData.planted_date)}`,
+    `READY: ${fmt(lotData.expected_ready_date)}`,
   ];
-  if (lotData.seed_lot_number) lines.push(`Seed: ${lotData.seed_lot_number}`);
-  if (lotData.vendor_name)     lines.push(`Vendor: ${lotData.vendor_name}`);
+  if (lotData.seed_lot_number) lines.push(`SEED LOT: ${lotData.seed_lot_number}`);
+  if (lotData.vendor_name)     lines.push(`VENDOR: ${lotData.vendor_name}`);
+  if (lotData.seed_expiry_date) lines.push(`EXPIRY: ${fmt(lotData.seed_expiry_date)}`);
   return lines.join('\n');
 };
 

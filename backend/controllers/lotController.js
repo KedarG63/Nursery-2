@@ -47,7 +47,7 @@ const createLot = async (req, res) => {
 
     // Get SKU and Product details for QR code and growth period
     const skuResult = await client.query(
-      `SELECT s.sku_code, s.product_id, p.growth_period_days, p.name as product_name
+      `SELECT s.sku_code, s.variety, s.product_id, p.growth_period_days, p.name as product_name
        FROM skus s
        JOIN products p ON s.product_id = p.id
        WHERE s.id = $1 AND s.deleted_at IS NULL AND p.deleted_at IS NULL`,
@@ -62,7 +62,7 @@ const createLot = async (req, res) => {
       });
     }
 
-    const { sku_code, product_id, growth_period_days = 120, product_name } = skuResult.rows[0];
+    const { sku_code, variety, product_id, growth_period_days = 120, product_name } = skuResult.rows[0];
 
     // Phase 22: Check seed availability BEFORE creating lot
     let seedAllocation = null;
@@ -105,19 +105,25 @@ const createLot = async (req, res) => {
       lot_number = `LOT-${dateStr}-${sequence}`;
     }
 
+    // Calculate expected ready date using product's growth period (needed for QR)
+    const planted_dt = planted_date ? new Date(planted_date) : new Date();
+    const expected_ready_dt = new Date(planted_dt);
+    expected_ready_dt.setDate(expected_ready_dt.getDate() + growth_period_days);
+
     // Generate QR code with seed traceability
     const { qr_code, qr_code_url } = await generateQRCode({
       lot_number,
       sku_code,
+      variety,
       product_name,
-      created_date: new Date().toISOString(),
+      planted_date: planted_dt.toISOString(),
+      expected_ready_date: expected_ready_dt.toISOString(),
       seed_lot_number: seedAllocation ? seedAllocation.seedPurchase.seed_lot_number : null,
       vendor_name: seedAllocation ? seedAllocation.seedPurchase.vendor_name : null,
+      seed_expiry_date: seedAllocation ? seedAllocation.seedPurchase.expiry_date : null,
     });
 
-    // Calculate expected ready date using product's growth period
-    const expected_ready_date = new Date(planted_date);
-    expected_ready_date.setDate(expected_ready_date.getDate() + growth_period_days);
+    const expected_ready_date = expected_ready_dt;
 
     // Insert lot with seed traceability data (Phase 22 enhanced)
     const insertResult = await client.query(
@@ -676,10 +682,13 @@ const regenerateQRCode = async (req, res) => {
 
     // Get lot details
     const lotResult = await client.query(
-      `SELECT l.*, s.sku_code, p.name AS product_name
+      `SELECT l.*, s.sku_code, s.variety, p.name AS product_name,
+              sp.seed_lot_number, v.vendor_name, sp.expiry_date AS seed_expiry_date
        FROM lots l
        JOIN skus s ON l.sku_id = s.id
        JOIN products p ON s.product_id = p.id
+       LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
+       LEFT JOIN vendors v ON v.id = sp.vendor_id
        WHERE l.id = $1 AND l.deleted_at IS NULL`,
       [id]
     );
@@ -697,8 +706,13 @@ const regenerateQRCode = async (req, res) => {
     const { qr_code, qr_code_url } = await generateQRCode({
       lot_number: lot.lot_number,
       sku_code: lot.sku_code,
+      variety: lot.variety,
       product_name: lot.product_name,
-      created_date: lot.created_at,
+      planted_date: lot.planted_date,
+      expected_ready_date: lot.expected_ready_date,
+      seed_lot_number: lot.seed_lot_number,
+      vendor_name: lot.vendor_name,
+      seed_expiry_date: lot.seed_expiry_date,
     });
 
     // Update lot
@@ -735,10 +749,12 @@ const downloadQRCode = async (req, res) => {
     const { id } = req.params;
 
     const lotResult = await pool.query(
-      `SELECT l.lot_number, l.qr_code_url, l.created_at, s.sku_code,
-              sp.seed_lot_number, v.vendor_name
+      `SELECT l.lot_number, l.qr_code_url, l.planted_date, l.expected_ready_date,
+              s.sku_code, s.variety, p.name AS product_name,
+              sp.seed_lot_number, v.vendor_name, sp.expiry_date AS seed_expiry_date
        FROM lots l
        JOIN skus s ON l.sku_id = s.id
+       JOIN products p ON s.product_id = p.id
        LEFT JOIN seed_purchases sp ON sp.id = l.seed_purchase_id
        LEFT JOIN vendors v ON v.id = sp.vendor_id
        WHERE l.id = $1 AND l.deleted_at IS NULL`,
@@ -759,23 +775,27 @@ const downloadQRCode = async (req, res) => {
       return res.redirect(lot.qr_code_url);
     }
 
-    // Always regenerate from current lot data using up-to-date format
+    // Regenerate from current lot data using up-to-date format
     const { generateQRData } = require('../utils/qrCodeGenerator');
     const QRCode = require('qrcode');
     const qrData = generateQRData({
       lot_number: lot.lot_number,
       sku_code: lot.sku_code,
-      created_date: lot.created_at,
+      variety: lot.variety,
+      product_name: lot.product_name,
+      planted_date: lot.planted_date,
+      expected_ready_date: lot.expected_ready_date,
       seed_lot_number: lot.seed_lot_number,
       vendor_name: lot.vendor_name,
+      seed_expiry_date: lot.seed_expiry_date,
     });
 
     // Generate QR code as PNG buffer
     const qrCodeBuffer = await QRCode.toBuffer(qrData, {
-      errorCorrectionLevel: 'H',
+      errorCorrectionLevel: 'M',
       type: 'png',
-      width: 300,
-      margin: 2,
+      width: 400,
+      margin: 3,
       color: {
         dark: '#000000',
         light: '#FFFFFF',
