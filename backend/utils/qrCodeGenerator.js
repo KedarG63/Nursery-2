@@ -20,9 +20,14 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
  * @returns {string} Human-readable multiline text for QR code
  */
 const generateQRData = (lotData) => {
-  // Encode only the lot number — short and simple so any camera can scan it.
-  // The app looks up full details by lot number after scanning.
-  return lotData.lot_number;
+  const lines = [
+    `LOT: ${lotData.lot_number}`,
+    `PRODUCT: ${lotData.product_name || 'N/A'}`,
+    `Date: ${lotData.created_date ? lotData.created_date.split('T')[0] : ''}`,
+  ];
+  if (lotData.seed_lot_number) lines.push(`Seed: ${lotData.seed_lot_number}`);
+  if (lotData.vendor_name)     lines.push(`Vendor: ${lotData.vendor_name}`);
+  return lines.join('\n');
 };
 
 /**
