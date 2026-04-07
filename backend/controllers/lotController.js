@@ -770,12 +770,7 @@ const downloadQRCode = async (req, res) => {
 
     const lot = lotResult.rows[0];
 
-    // If cloud storage URL exists, redirect to it
-    if (lot.qr_code_url) {
-      return res.redirect(lot.qr_code_url);
-    }
-
-    // Regenerate from current lot data using up-to-date format
+    // Always regenerate from current DB data so the QR reflects the latest lot info
     const { generateQRData } = require('../utils/qrCodeGenerator');
     const QRCode = require('qrcode');
     const qrData = generateQRData({

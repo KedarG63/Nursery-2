@@ -20,7 +20,12 @@ const { uploadToStorage, isStorageConfigured } = require('../config/cloudStorage
  * @returns {string} Human-readable multiline text for QR code
  */
 const generateQRData = (lotData) => {
-  const fmt = (d) => d ? String(d).split('T')[0] : '';
+  const fmt = (d) => {
+    if (!d) return '';
+    // Handle JS Date objects (returned by node-postgres for TIMESTAMP columns)
+    if (d instanceof Date) return d.toISOString().split('T')[0];
+    return String(d).split('T')[0];
+  };
   const lines = [
     `LOT: ${lotData.lot_number}`,
     `PRODUCT: ${lotData.product_name || 'N/A'}`,
