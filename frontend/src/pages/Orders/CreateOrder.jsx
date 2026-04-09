@@ -46,7 +46,9 @@ const CreateOrder = () => {
     deliveryDate: null,
     deliverySlot: 'morning',
     paymentMethod: 'advance',
-    notes: ''
+    notes: '',
+    walkInName: '',
+    walkInPhone: '',
   });
 
   const [availabilityChecked, setAvailabilityChecked] = useState(false);
@@ -107,14 +109,19 @@ const CreateOrder = () => {
   };
 
   /**
-   * Handle walk-in customer name/phone — store in order notes
+   * Handle walk-in customer name/phone — store separately and also in notes
    */
   const handleWalkInName = (name, phone) => {
     const label = [
       name ? `Walk-in: ${name}` : 'Walk-in',
       phone ? `Ph: +91${phone}` : '',
     ].filter(Boolean).join(' | ');
-    setOrderData((prev) => ({ ...prev, notes: label }));
+    setOrderData((prev) => ({
+      ...prev,
+      walkInName: name || '',
+      walkInPhone: phone || '',
+      notes: label,
+    }));
   };
 
   /**

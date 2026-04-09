@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { recordPayment } from '../../services/paymentService';
 import { getOrders } from '../../services/orderService';
+import { getBankAccounts } from '../../services/bankLedgerService';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -35,6 +36,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [formData, setFormData] = useState({
     orderId: '',
     amount: '',
@@ -42,6 +44,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
     transactionRef: '',
     paymentDate: format(new Date(), 'yyyy-MM-dd'),
     notes: '',
+    bankAccountId: '',
   });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [errors, setErrors] = useState({});
@@ -49,8 +52,18 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   useEffect(() => {
     if (open) {
       fetchOutstandingOrders();
+      fetchBankAccounts();
     }
   }, [open]);
+
+  const fetchBankAccounts = async () => {
+    try {
+      const response = await getBankAccounts();
+      setBankAccounts(response.data || response.accounts || []);
+    } catch (error) {
+      console.error('Error fetching bank accounts:', error);
+    }
+  };
 
   const fetchOutstandingOrders = async () => {
     setLoadingOrders(true);
@@ -126,6 +139,11 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
         paymentData.notes = formData.notes.trim();
       }
 
+      // Include bank account if selected (for non-cash methods)
+      if (formData.bankAccountId) {
+        paymentData.bank_account_id = formData.bankAccountId;
+      }
+
       console.log('Recording payment with data:', paymentData);
 
       await recordPayment(paymentData);
@@ -168,6 +186,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
       transactionRef: '',
       paymentDate: format(new Date(), 'yyyy-MM-dd'),
       notes: '',
+      bankAccountId: '',
     });
     setSelectedOrder(null);
     setErrors({});
@@ -273,6 +292,28 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
                 ))}
               </TextField>
             </Grid>
+
+            {bankAccounts.length > 0 && formData.paymentMethod !== 'cash' && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Bank Account (Optional)"
+                  value={formData.bankAccountId}
+                  onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
+                  helperText="Select the bank account where this payment will be received"
+                >
+                  <MenuItem value=""><em>— Not specified —</em></MenuItem>
+                  {bankAccounts.map((acc) => (
+                    <MenuItem key={acc.id} value={acc.id}>
+                      {acc.account_name}
+                      {acc.bank_name ? ` — ${acc.bank_name}` : ''}
+                      {acc.account_number ? ` (****${acc.account_number.slice(-4)})` : ''}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )}
 
             {(formData.paymentMethod === 'bank_transfer' ||
               formData.paymentMethod === 'upi' ||

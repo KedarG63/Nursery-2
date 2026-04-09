@@ -52,6 +52,7 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
   const [creditAmount, setCreditAmount] = useState('');
   const [loadingPurchases, setLoadingPurchases] = useState(false);
   const [applyingCredit, setApplyingCredit] = useState(false);
+  const [creditSearch, setCreditSearch] = useState('');
 
   useEffect(() => {
     if (open && purchase) {
@@ -133,6 +134,7 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
     const available = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
     setCreditAmount(available.toFixed(2));
     setTargetPurchaseId('');
+    setCreditSearch('');
     setLoadingPurchases(true);
     try {
       // Use vendor-bills endpoint (same as Vendor Bills page) — fetch all with high limit
@@ -914,49 +916,81 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
                 <TextField
-                  select
                   fullWidth
-                  label="Select bill to apply credit to"
-                  value={targetPurchaseId}
+                  size="small"
+                  label="Search bills (purchase #, invoice #, product)"
+                  placeholder="Type to filter..."
+                  value={creditSearch}
                   onChange={(e) => {
-                    setTargetPurchaseId(e.target.value);
-                    // Auto-cap credit amount to the bill's outstanding balance
-                    const bill = vendorPurchases.find(b => b.id === e.target.value);
-                    if (bill) {
-                      const maxCredit = parseFloat(creditDialog.return_amount) - parseFloat(creditDialog.credited_amount || 0);
-                      const outstanding = parseFloat(bill.balance_due);
-                      setCreditAmount(Math.min(maxCredit, outstanding).toFixed(2));
+                    setCreditSearch(e.target.value);
+                    // Clear selection if it's no longer in filtered list
+                    if (targetPurchaseId) {
+                      const term = e.target.value.toLowerCase();
+                      const still = vendorPurchases.find(b => b.id === targetPurchaseId && (
+                        (b.purchase_number || '').toLowerCase().includes(term) ||
+                        (b.invoice_number || '').toLowerCase().includes(term) ||
+                        (b.product_name || '').toLowerCase().includes(term)
+                      ));
+                      if (!still) setTargetPurchaseId('');
                     }
                   }}
-                  SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 320 } } } }}
-                >
-                  {vendorPurchases.map((b) => {
-                    const isOriginatingBill = b.id === creditDialog?.seed_purchase_id;
-                    return (
-                      <MenuItem key={b.id} value={b.id}>
-                        <Box sx={{ width: '100%' }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" fontWeight="medium">
-                              {b.purchase_number}
-                              {b.invoice_number ? ` · Inv ${b.invoice_number}` : ''}
-                              {isOriginatingBill ? ' (this return\'s purchase)' : ''}
-                            </Typography>
-                            <Chip
-                              label={`₹${parseFloat(b.balance_due).toLocaleString('en-IN', { maximumFractionDigits: 2 })} due`}
-                              size="small"
-                              color={b.payment_status === 'partial' ? 'warning' : 'error'}
-                              sx={{ ml: 1 }}
-                            />
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {b.product_name} · Bill: {formatCurrency(b.grand_total)}
-                            {b.due_date ? ` · Due: ${formatDate(b.due_date)}` : ''}
-                          </Typography>
-                        </Box>
-                      </MenuItem>
-                    );
-                  })}
-                </TextField>
+                />
+                {(() => {
+                  const term = creditSearch.toLowerCase();
+                  const filtered = vendorPurchases.filter(b =>
+                    !term ||
+                    (b.purchase_number || '').toLowerCase().includes(term) ||
+                    (b.invoice_number || '').toLowerCase().includes(term) ||
+                    (b.product_name || '').toLowerCase().includes(term)
+                  );
+                  return (
+                    <TextField
+                      select
+                      fullWidth
+                      label={`Select bill to apply credit to${filtered.length < vendorPurchases.length ? ` (${filtered.length} of ${vendorPurchases.length} shown)` : ''}`}
+                      value={targetPurchaseId}
+                      onChange={(e) => {
+                        setTargetPurchaseId(e.target.value);
+                        const bill = vendorPurchases.find(b => b.id === e.target.value);
+                        if (bill) {
+                          const maxCredit = parseFloat(creditDialog.return_amount) - parseFloat(creditDialog.credited_amount || 0);
+                          const outstanding = parseFloat(bill.balance_due);
+                          setCreditAmount(Math.min(maxCredit, outstanding).toFixed(2));
+                        }
+                      }}
+                      SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 320 } } } }}
+                    >
+                      {filtered.length === 0 ? (
+                        <MenuItem disabled value="">No bills match your search</MenuItem>
+                      ) : filtered.map((b) => {
+                        const isOriginatingBill = b.id === creditDialog?.seed_purchase_id;
+                        return (
+                          <MenuItem key={b.id} value={b.id}>
+                            <Box sx={{ width: '100%' }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {b.purchase_number}
+                                  {b.invoice_number ? ` · Inv ${b.invoice_number}` : ''}
+                                  {isOriginatingBill ? ' ★' : ''}
+                                </Typography>
+                                <Chip
+                                  label={`₹${parseFloat(b.balance_due).toLocaleString('en-IN', { maximumFractionDigits: 2 })} due`}
+                                  size="small"
+                                  color={b.payment_status === 'partial' ? 'warning' : 'error'}
+                                  sx={{ ml: 1 }}
+                                />
+                              </Box>
+                              <Typography variant="caption" color="text.secondary">
+                                {b.product_name} · Bill: {formatCurrency(b.grand_total)}
+                                {b.due_date ? ` · Due: ${formatDate(b.due_date)}` : ''}
+                              </Typography>
+                            </Box>
+                          </MenuItem>
+                        );
+                      })}
+                    </TextField>
+                  );
+                })()}
 
                 <TextField
                   fullWidth

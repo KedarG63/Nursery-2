@@ -362,7 +362,7 @@ const recordOfflinePayment = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { order_id, amount, payment_method, receipt_number, notes } =
+    const { order_id, amount, payment_method, receipt_number, notes, bank_account_id } =
       req.body;
     const userId = req.user?.id;
 
@@ -442,9 +442,9 @@ const recordOfflinePayment = async (req, res) => {
       `INSERT INTO payments (
          order_id, customer_id, payment_method, payment_gateway,
          amount, status, payment_date, receipt_number, received_by,
-         notes, created_by
+         notes, bank_account_id, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         order_id,
@@ -456,6 +456,7 @@ const recordOfflinePayment = async (req, res) => {
         receipt_number,
         userId,
         notes,
+        bank_account_id || null,
         userId,
       ]
     );

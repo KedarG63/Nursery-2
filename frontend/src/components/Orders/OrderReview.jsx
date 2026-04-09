@@ -20,7 +20,10 @@ import { formatCurrency } from '../../utils/formatters';
  * Issue #57: Order creation wizard - Step 5
  */
 const OrderReview = ({ orderData }) => {
-  const { customer, items, deliveryAddress, deliveryDate, deliverySlot, paymentMethod, notes } = orderData;
+  const { customer, items, deliveryAddress, deliveryDate, deliverySlot, paymentMethod, notes, walkInName, walkInPhone } = orderData;
+  const isWalkIn = customer?.name === 'Walk-in Customer';
+  const displayName = isWalkIn && walkInName ? walkInName : customer?.name;
+  const displayPhone = isWalkIn && walkInPhone ? `+91${walkInPhone}` : customer?.phone;
 
   const calculateSubtotal = () => {
     return items.reduce((sum, item) => sum + item.subtotal, 0);
@@ -44,15 +47,17 @@ const OrderReview = ({ orderData }) => {
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="text.secondary">Name:</Typography>
-            <Typography variant="body1">{customer?.name}</Typography>
+            <Typography variant="body1">{displayName}</Typography>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">Email:</Typography>
-            <Typography variant="body1">{customer?.email}</Typography>
-          </Grid>
+          {!isWalkIn && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">Email:</Typography>
+              <Typography variant="body1">{customer?.email}</Typography>
+            </Grid>
+          )}
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="text.secondary">Phone:</Typography>
-            <Typography variant="body1">{customer?.phone}</Typography>
+            <Typography variant="body1">{displayPhone}</Typography>
           </Grid>
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="text.secondary">Customer Type:</Typography>
