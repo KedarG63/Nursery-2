@@ -634,7 +634,7 @@ const syncFromPayments = async (req, res, next) => {
            COALESCE(c.name, 'Unknown Customer') AS customer_name
          FROM payments p
          LEFT JOIN customers c ON c.id = p.customer_id
-         WHERE p.payment_method IN ('bank_transfer', 'upi', 'cheque')
+         WHERE p.payment_method IN ('bank_transfer', 'upi')
            AND p.status = 'success'
            AND p.deleted_at IS NULL
            AND p.amount > 0
