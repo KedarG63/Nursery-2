@@ -626,20 +626,27 @@ const syncFromPayments = async (req, res, next) => {
     if (sync_credits) {
       const payments = await client.query(
         `SELECT
-           p.id, p.payment_date, p.amount, p.transaction_id,
-           c.name AS customer_name
+           p.id,
+           COALESCE(p.payment_date, p.created_at)::date AS entry_date,
+           p.amount,
+           p.transaction_id,
+           p.receipt_number,
+           COALESCE(c.name, 'Unknown Customer') AS customer_name
          FROM payments p
-         JOIN customers c ON c.id = p.customer_id
+         LEFT JOIN customers c ON c.id = p.customer_id
          WHERE p.payment_method IN ('bank_transfer', 'upi', 'cheque')
            AND p.status = 'success'
            AND p.deleted_at IS NULL
+           AND p.amount > 0
+           AND (p.bank_account_id = $1 OR p.bank_account_id IS NULL)
            AND NOT EXISTS (
              SELECT 1 FROM bank_ledger_entries
              WHERE source_type = 'customer_payment'
                AND source_id = p.id
                AND deleted_at IS NULL
            )
-         ORDER BY p.payment_date ASC`
+         ORDER BY entry_date ASC`,
+        [id]
       );
 
       for (const pmt of payments.rows) {
@@ -650,10 +657,10 @@ const syncFromPayments = async (req, res, next) => {
            VALUES ($1, $2, 'credit', $3, $4, 'Customer payment', $5, 'customer_payment', $6, $7)`,
           [
             id,
-            pmt.payment_date,
+            pmt.entry_date,
             parseFloat(pmt.amount),
             pmt.customer_name,
-            pmt.transaction_id || null,
+            pmt.transaction_id || pmt.receipt_number || null,
             pmt.id,
             req.user.id,
           ]
@@ -666,19 +673,23 @@ const syncFromPayments = async (req, res, next) => {
     if (sync_debits) {
       const vendorPayments = await client.query(
         `SELECT
-           spp.id, spp.payment_date, spp.amount, spp.transaction_reference,
-           v.vendor_name
+           spp.id,
+           COALESCE(spp.payment_date, spp.created_at)::date AS entry_date,
+           spp.amount,
+           spp.transaction_reference,
+           COALESCE(v.vendor_name, 'Unknown Vendor') AS vendor_name
          FROM seed_purchase_payments spp
          JOIN seed_purchases sp ON sp.id = spp.seed_purchase_id
-         JOIN vendors v ON v.id = sp.vendor_id
+         LEFT JOIN vendors v ON v.id = sp.vendor_id
          WHERE spp.payment_method IN ('bank_transfer', 'cheque')
+           AND spp.amount > 0
            AND NOT EXISTS (
              SELECT 1 FROM bank_ledger_entries
              WHERE source_type = 'vendor_payment'
                AND source_id = spp.id
                AND deleted_at IS NULL
            )
-         ORDER BY spp.payment_date ASC`
+         ORDER BY entry_date ASC`
       );
 
       for (const pmt of vendorPayments.rows) {
@@ -689,7 +700,7 @@ const syncFromPayments = async (req, res, next) => {
            VALUES ($1, $2, 'debit', $3, $4, 'Vendor payment', $5, 'vendor_payment', $6, $7)`,
           [
             id,
-            pmt.payment_date,
+            pmt.entry_date,
             parseFloat(pmt.amount),
             pmt.vendor_name,
             pmt.transaction_reference || null,

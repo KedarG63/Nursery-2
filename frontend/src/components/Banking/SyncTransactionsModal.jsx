@@ -33,7 +33,9 @@ const SyncTransactionsModal = ({ open, onClose, accountId, accountName, onSucces
       onSuccess(result.message);
       handleClose();
     } catch (err) {
-      setError(err.message || 'Sync failed. Please try again.');
+      // Error handler returns { error: { message } }, service throws that object
+      const msg = err?.error?.message || err?.message || 'Sync failed. Please try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
