@@ -15,6 +15,9 @@ import {
   CardContent,
   Alert,
   LinearProgress,
+  TextField,
+  MenuItem,
+  CircularProgress,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -22,18 +25,32 @@ import {
   CheckCircle as CheckCircleIcon,
   Inventory as InventoryIcon,
 } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import purchaseService from '../../services/purchaseService';
 import lotService from '../../services/lotService';
 import vendorReturnService from '../../services/vendorReturnService';
 import VendorReturnForm from './VendorReturnForm';
+import useAuth from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 const PurchaseDetails = ({ open, onClose, purchase }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdminOrManager = user?.roles?.some(r => ['Admin', 'Manager'].includes(r));
+
   const [usageHistory, setUsageHistory] = useState([]);
   const [loadingUsage, setLoadingUsage] = useState(false);
   const [returnNotes, setReturnNotes] = useState([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null); // vrnId being actioned
+
+  // Apply Credit dialog state
+  const [creditDialog, setCreditDialog] = useState(null); // vrn row or null
+  const [vendorPurchases, setVendorPurchases] = useState([]);
+  const [targetPurchaseId, setTargetPurchaseId] = useState('');
+  const [creditAmount, setCreditAmount] = useState('');
+  const [loadingPurchases, setLoadingPurchases] = useState(false);
+  const [applyingCredit, setApplyingCredit] = useState(false);
 
   useEffect(() => {
     if (open && purchase) {
@@ -64,6 +81,78 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
       setReturnNotes(response.data || []);
     } catch (error) {
       console.error('Failed to fetch return notes:', error);
+    }
+  };
+
+  const handleSubmit = async (vrn) => {
+    setActionLoading(vrn.id);
+    try {
+      await vendorReturnService.submitReturn(vrn.id);
+      toast.success('Return note submitted to vendor');
+      fetchReturnNotes();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit return note');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAccept = async (vrn) => {
+    setActionLoading(vrn.id);
+    try {
+      await vendorReturnService.acceptReturn(vrn.id);
+      toast.success('Return accepted — seed inventory updated');
+      fetchReturnNotes();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to accept return');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (vrn) => {
+    setActionLoading(vrn.id);
+    try {
+      await vendorReturnService.rejectReturn(vrn.id, '');
+      toast.info('Return note rejected');
+      fetchReturnNotes();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to reject return');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openCreditDialog = async (vrn) => {
+    setCreditDialog(vrn);
+    const available = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
+    setCreditAmount(available.toFixed(2));
+    setTargetPurchaseId('');
+    setLoadingPurchases(true);
+    try {
+      const response = await purchaseService.getAllPurchases({ vendor_id: vrn.vendor_id, limit: 100 });
+      // Exclude the originating purchase
+      const others = (response.data || response.purchases || []).filter(p => p.id !== vrn.seed_purchase_id);
+      setVendorPurchases(others);
+    } catch (err) {
+      toast.error('Failed to load vendor purchases');
+    } finally {
+      setLoadingPurchases(false);
+    }
+  };
+
+  const handleApplyCredit = async () => {
+    if (!targetPurchaseId || !creditAmount) return;
+    setApplyingCredit(true);
+    try {
+      await vendorReturnService.applyCredit(creditDialog.id, targetPurchaseId, parseFloat(creditAmount));
+      toast.success(`Credit of ₹${creditAmount} applied`);
+      setCreditDialog(null);
+      fetchReturnNotes();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to apply credit');
+    } finally {
+      setApplyingCredit(false);
     }
   };
 
@@ -553,48 +642,115 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
               </Grid>
 
               <Grid item xs={12}>
-                {returnNotes.map((vrn, index) => (
-                  <Card
-                    key={vrn.id}
-                    variant="outlined"
-                    sx={{ mb: index < returnNotes.length - 1 ? 1 : 0 }}
-                  >
-                    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                      <Grid container spacing={1} alignItems="center">
-                        <Grid item xs={12} sm={3}>
-                          <Typography variant="caption" color="text.secondary">Return #</Typography>
-                          <Typography variant="body2" fontWeight="bold">{vrn.return_number}</Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={2}>
-                          <Typography variant="caption" color="text.secondary">Packets</Typography>
-                          <Typography variant="body2">{vrn.packets_returned}</Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={2}>
-                          <Typography variant="caption" color="text.secondary">Amount</Typography>
-                          <Typography variant="body2">{formatCurrency(vrn.return_amount)}</Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={2}>
-                          <Typography variant="caption" color="text.secondary">Date</Typography>
-                          <Typography variant="body2">{formatDate(vrn.return_date)}</Typography>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                          <Chip
-                            label={vendorReturnService.getStatusLabel(vrn.status)}
-                            color={vendorReturnService.getStatusColor(vrn.status)}
-                            size="small"
-                          />
-                        </Grid>
-                        {vrn.reason && (
-                          <Grid item xs={12}>
-                            <Typography variant="caption" color="text.secondary">
-                              Reason: {vrn.reason}
-                            </Typography>
+                {returnNotes.map((vrn, index) => {
+                  const availableCredit = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
+                  const isActioning = actionLoading === vrn.id;
+                  return (
+                    <Card
+                      key={vrn.id}
+                      variant="outlined"
+                      sx={{ mb: index < returnNotes.length - 1 ? 1.5 : 0 }}
+                    >
+                      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        {/* Info row */}
+                        <Grid container spacing={1} alignItems="center">
+                          <Grid item xs={12} sm={3}>
+                            <Typography variant="caption" color="text.secondary">Return #</Typography>
+                            <Typography variant="body2" fontWeight="bold">{vrn.return_number}</Typography>
                           </Grid>
-                        )}
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                ))}
+                          <Grid item xs={6} sm={2}>
+                            <Typography variant="caption" color="text.secondary">Packets</Typography>
+                            <Typography variant="body2">{vrn.packets_returned}</Typography>
+                          </Grid>
+                          <Grid item xs={6} sm={2}>
+                            <Typography variant="caption" color="text.secondary">Amount</Typography>
+                            <Typography variant="body2">{formatCurrency(vrn.return_amount)}</Typography>
+                          </Grid>
+                          <Grid item xs={6} sm={2}>
+                            <Typography variant="caption" color="text.secondary">Date</Typography>
+                            <Typography variant="body2">{formatDate(vrn.return_date)}</Typography>
+                          </Grid>
+                          <Grid item xs={6} sm={3}>
+                            <Chip
+                              label={vendorReturnService.getStatusLabel(vrn.status)}
+                              color={vendorReturnService.getStatusColor(vrn.status)}
+                              size="small"
+                            />
+                          </Grid>
+                          {vrn.reason && (
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="text.secondary">
+                                Reason: {vrn.reason}
+                              </Typography>
+                            </Grid>
+                          )}
+                          {vrn.status === 'credited' && vrn.credited_amount && (
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="success.main">
+                                ₹{parseFloat(vrn.credited_amount).toFixed(2)} credited to a future purchase
+                              </Typography>
+                            </Grid>
+                          )}
+                          {vrn.status === 'accepted' && availableCredit > 0 && (
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="warning.main">
+                                ₹{availableCredit.toFixed(2)} credit pending — not yet applied to any bill
+                              </Typography>
+                            </Grid>
+                          )}
+                        </Grid>
+
+                        {/* Action buttons */}
+                        <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {vrn.status === 'draft' && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={isActioning}
+                              onClick={() => handleSubmit(vrn)}
+                              startIcon={isActioning ? <CircularProgress size={14} /> : null}
+                            >
+                              Submit to Vendor
+                            </Button>
+                          )}
+                          {vrn.status === 'submitted' && isAdminOrManager && (
+                            <>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                disabled={isActioning}
+                                onClick={() => handleAccept(vrn)}
+                                startIcon={isActioning ? <CircularProgress size={14} /> : null}
+                              >
+                                Accept Return
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                disabled={isActioning}
+                                onClick={() => handleReject(vrn)}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {vrn.status === 'accepted' && availableCredit > 0 && isAdminOrManager && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="warning"
+                              onClick={() => openCreditDialog(vrn)}
+                            >
+                              Apply Credit to a Bill — ₹{availableCredit.toFixed(2)}
+                            </Button>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </Grid>
             </>
           )}
@@ -722,6 +878,75 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
           setShowReturnForm(false);
         }}
       />
+
+      {/* Apply Credit Dialog */}
+      {creditDialog && (
+        <Dialog open onClose={() => setCreditDialog(null)} maxWidth="sm" fullWidth>
+          <DialogTitle>Apply Credit to a Future Bill</DialogTitle>
+          <DialogContent dividers>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Return <strong>{creditDialog.return_number}</strong> — credit available:{' '}
+              <strong>{formatCurrency(parseFloat(creditDialog.return_amount) - parseFloat(creditDialog.credited_amount || 0))}</strong>
+            </Alert>
+
+            {loadingPurchases ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : vendorPurchases.length === 0 ? (
+              <Alert severity="warning">
+                No other purchases found for this vendor to apply the credit to.
+              </Alert>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Apply credit to which purchase?"
+                  value={targetPurchaseId}
+                  onChange={(e) => setTargetPurchaseId(e.target.value)}
+                >
+                  {vendorPurchases.map((p) => (
+                    <MenuItem key={p.id} value={p.id}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {p.purchase_number} — {p.product_name || p.seed_lot_number}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Bill: {formatCurrency(p.grand_total)} · Paid: {formatCurrency(p.amount_paid || 0)}
+                          {parseFloat(p.vendor_credit_applied) > 0 && ` · Credit already applied: ${formatCurrency(p.vendor_credit_applied)}`}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  fullWidth
+                  label="Amount to apply (₹)"
+                  type="number"
+                  value={creditAmount}
+                  onChange={(e) => setCreditAmount(e.target.value)}
+                  inputProps={{ min: 0.01, step: 0.01 }}
+                  helperText="Cannot exceed the available credit or the outstanding balance of the target bill"
+                />
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCreditDialog(null)}>Cancel</Button>
+            <Button
+              variant="contained"
+              color="success"
+              disabled={!targetPurchaseId || !creditAmount || applyingCredit}
+              onClick={handleApplyCredit}
+              startIcon={applyingCredit ? <CircularProgress size={16} /> : null}
+            >
+              Apply Credit
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Dialog>
   );
 };

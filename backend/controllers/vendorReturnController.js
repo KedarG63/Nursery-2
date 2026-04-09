@@ -341,10 +341,21 @@ const acceptReturn = async (req, res, next) => {
       [req.user.id, id]
     );
 
-    // Increment packets_returned on the originating purchase
+    // Increment packets_returned and decrement seeds_remaining on the originating purchase.
+    // seeds_remaining cannot go below 0.
+    // Recalculate inventory_status based on new seeds_remaining.
     await client.query(
       `UPDATE seed_purchases
-       SET packets_returned = packets_returned + $1, updated_at = NOW()
+       SET packets_returned  = packets_returned + $1,
+           seeds_remaining   = GREATEST(0, seeds_remaining - ($1 * seeds_per_packet)),
+           inventory_status  = CASE
+             WHEN GREATEST(0, seeds_remaining - ($1 * seeds_per_packet)) <= 0
+               THEN 'exhausted'::seed_inventory_status_enum
+             WHEN GREATEST(0, seeds_remaining - ($1 * seeds_per_packet)) < (total_seeds * 0.2)
+               THEN 'low_stock'::seed_inventory_status_enum
+             ELSE 'available'::seed_inventory_status_enum
+           END,
+           updated_at = NOW()
        WHERE id = $2`,
       [parseInt(packets_returned), seed_purchase_id]
     );
@@ -352,7 +363,7 @@ const acceptReturn = async (req, res, next) => {
     await client.query('COMMIT');
 
     logger.info('Vendor return accepted', { returnId: id, packetsReturned: packets_returned, userId: req.user.id });
-    res.json({ success: true, message: 'Return accepted. packets_returned updated on purchase.' });
+    res.json({ success: true, message: 'Return accepted. Seed inventory updated.' });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
