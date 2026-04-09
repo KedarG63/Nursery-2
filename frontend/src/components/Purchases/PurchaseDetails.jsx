@@ -29,6 +29,7 @@ import { toast } from 'react-toastify';
 import purchaseService from '../../services/purchaseService';
 import lotService from '../../services/lotService';
 import vendorReturnService from '../../services/vendorReturnService';
+import vendorBillService from '../../services/vendorBillService';
 import VendorReturnForm from './VendorReturnForm';
 import useAuth from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -124,18 +125,31 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
   };
 
   const openCreditDialog = async (vrn) => {
+    if (!vrn.vendor_id) {
+      toast.error('Return note has no vendor linked — cannot load bills');
+      return;
+    }
     setCreditDialog(vrn);
     const available = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
     setCreditAmount(available.toFixed(2));
     setTargetPurchaseId('');
     setLoadingPurchases(true);
     try {
-      const response = await purchaseService.getAllPurchases({ vendor_id: vrn.vendor_id, limit: 100 });
-      // Exclude the originating purchase
-      const others = (response.data || response.purchases || []).filter(p => p.id !== vrn.seed_purchase_id);
-      setVendorPurchases(others);
+      // Use vendor-bills endpoint (same as Vendor Bills page) — fetch all with high limit
+      const response = await vendorBillService.getVendorBills({
+        vendor_id: vrn.vendor_id,
+        page: 1,
+        limit: 500,
+      });
+      const bills = response.data || [];
+      // Only show bills with an outstanding balance (pending or partial payment)
+      const outstanding = bills.filter(
+        b => b.payment_status !== 'paid' && parseFloat(b.balance_due) > 0
+      );
+      setVendorPurchases(outstanding);
     } catch (err) {
-      toast.error('Failed to load vendor purchases');
+      toast.error('Failed to load vendor bills');
+      setVendorPurchases([]);
     } finally {
       setLoadingPurchases(false);
     }
@@ -895,30 +909,53 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
               </Box>
             ) : vendorPurchases.length === 0 ? (
               <Alert severity="warning">
-                No other purchases found for this vendor to apply the credit to.
+                No unpaid bills found for this vendor. Credit can only be applied to bills with an outstanding balance.
               </Alert>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
                 <TextField
                   select
                   fullWidth
-                  label="Apply credit to which purchase?"
+                  label="Select bill to apply credit to"
                   value={targetPurchaseId}
-                  onChange={(e) => setTargetPurchaseId(e.target.value)}
+                  onChange={(e) => {
+                    setTargetPurchaseId(e.target.value);
+                    // Auto-cap credit amount to the bill's outstanding balance
+                    const bill = vendorPurchases.find(b => b.id === e.target.value);
+                    if (bill) {
+                      const maxCredit = parseFloat(creditDialog.return_amount) - parseFloat(creditDialog.credited_amount || 0);
+                      const outstanding = parseFloat(bill.balance_due);
+                      setCreditAmount(Math.min(maxCredit, outstanding).toFixed(2));
+                    }
+                  }}
+                  SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 320 } } } }}
                 >
-                  {vendorPurchases.map((p) => (
-                    <MenuItem key={p.id} value={p.id}>
-                      <Box>
-                        <Typography variant="body2" fontWeight="medium">
-                          {p.purchase_number} — {p.product_name || p.seed_lot_number}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Bill: {formatCurrency(p.grand_total)} · Paid: {formatCurrency(p.amount_paid || 0)}
-                          {parseFloat(p.vendor_credit_applied) > 0 && ` · Credit already applied: ${formatCurrency(p.vendor_credit_applied)}`}
-                        </Typography>
-                      </Box>
-                    </MenuItem>
-                  ))}
+                  {vendorPurchases.map((b) => {
+                    const isOriginatingBill = b.id === creditDialog?.seed_purchase_id;
+                    return (
+                      <MenuItem key={b.id} value={b.id}>
+                        <Box sx={{ width: '100%' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="body2" fontWeight="medium">
+                              {b.purchase_number}
+                              {b.invoice_number ? ` · Inv ${b.invoice_number}` : ''}
+                              {isOriginatingBill ? ' (this return\'s purchase)' : ''}
+                            </Typography>
+                            <Chip
+                              label={`₹${parseFloat(b.balance_due).toLocaleString('en-IN', { maximumFractionDigits: 2 })} due`}
+                              size="small"
+                              color={b.payment_status === 'partial' ? 'warning' : 'error'}
+                              sx={{ ml: 1 }}
+                            />
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {b.product_name} · Bill: {formatCurrency(b.grand_total)}
+                            {b.due_date ? ` · Due: ${formatDate(b.due_date)}` : ''}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
 
                 <TextField
@@ -928,7 +965,14 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
                   value={creditAmount}
                   onChange={(e) => setCreditAmount(e.target.value)}
                   inputProps={{ min: 0.01, step: 0.01 }}
-                  helperText="Cannot exceed the available credit or the outstanding balance of the target bill"
+                  helperText={
+                    targetPurchaseId
+                      ? `Max: ₹${Math.min(
+                          parseFloat(creditDialog?.return_amount) - parseFloat(creditDialog?.credited_amount || 0),
+                          parseFloat(vendorPurchases.find(b => b.id === targetPurchaseId)?.balance_due || 0)
+                        ).toFixed(2)} (lesser of available credit or outstanding balance)`
+                      : 'Select a bill first'
+                  }
                 />
               </Box>
             )}

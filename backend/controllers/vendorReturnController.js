@@ -451,9 +451,10 @@ const applyCredit = async (req, res, next) => {
       });
     }
 
-    // Validate the target purchase belongs to the same vendor
+    // Validate the target purchase: same vendor, not fully paid, credit won't exceed outstanding balance
     const purchaseCheck = await client.query(
-      `SELECT id, vendor_id, grand_total, vendor_credit_applied
+      `SELECT id, vendor_id, grand_total, amount_paid, payment_status,
+              COALESCE(vendor_credit_applied, 0) AS vendor_credit_applied
        FROM seed_purchases
        WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
       [target_purchase_id]
@@ -462,17 +463,36 @@ const applyCredit = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Target purchase not found' });
     }
-    if (purchaseCheck.rows[0].vendor_id !== vrn.vendor_id) {
+    const tp = purchaseCheck.rows[0];
+    if (tp.vendor_id !== vrn.vendor_id) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Target purchase must belong to the same vendor' });
     }
+    if (tp.payment_status === 'paid') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Target bill is already fully paid — no outstanding balance to apply credit to' });
+    }
+    const outstanding = parseFloat(tp.grand_total) - parseFloat(tp.amount_paid) - parseFloat(tp.vendor_credit_applied);
+    if (applyAmt > outstanding + 0.001) { // 0.001 tolerance for float rounding
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Credit amount ₹${applyAmt.toFixed(2)} exceeds outstanding balance ₹${outstanding.toFixed(2)} on this bill`,
+      });
+    }
 
-    // Apply credit to the target purchase
+    // Apply credit to the target purchase; auto-mark as paid if credit clears the balance
+    const newCreditTotal = parseFloat(tp.vendor_credit_applied) + applyAmt;
+    const newBalance = parseFloat(tp.grand_total) - parseFloat(tp.amount_paid) - newCreditTotal;
+    const newPaymentStatus = newBalance <= 0.001 ? 'paid' : tp.payment_status;
+
     await client.query(
       `UPDATE seed_purchases
-       SET vendor_credit_applied = vendor_credit_applied + $1, updated_at = NOW()
-       WHERE id = $2`,
-      [applyAmt, target_purchase_id]
+       SET vendor_credit_applied = $1,
+           payment_status        = $2,
+           updated_at            = NOW()
+       WHERE id = $3`,
+      [newCreditTotal, newPaymentStatus, target_purchase_id]
     );
 
     // Mark return note as credited
