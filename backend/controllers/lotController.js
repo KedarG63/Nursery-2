@@ -38,7 +38,8 @@ const createLot = async (req, res) => {
       current_location = 'greenhouse',
       planted_date,
       notes,
-      skip_seed_check = false, // Allow skipping for backward compatibility
+      seed_purchase_id = null,   // User-selected seed purchase (overrides auto-allocation)
+      skip_seed_check = false,   // Allow skipping for backward compatibility
     } = req.body;
 
     const userId = req.user.id;
@@ -64,20 +65,46 @@ const createLot = async (req, res) => {
 
     const { sku_code, variety, product_id, growth_period_days = 120, product_name } = skuResult.rows[0];
 
-    // Phase 22: Check seed availability BEFORE creating lot
+    // Resolve seed allocation — user-selected purchase takes priority over auto-allocation
     let seedAllocation = null;
-    let seedPurchaseSeq = null;
 
-    if (!skip_seed_check) {
+    if (seed_purchase_id) {
+      // Load the specific purchase the user chose
+      const purchaseResult = await client.query(
+        `SELECT sp.*, v.vendor_name
+         FROM seed_purchases sp
+         JOIN vendors v ON v.id = sp.vendor_id
+         WHERE sp.id = $1 AND sp.deleted_at IS NULL`,
+        [seed_purchase_id]
+      );
+
+      if (purchaseResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Selected seed purchase not found' });
+      }
+
+      const purchase = purchaseResult.rows[0];
+      if (purchase.seeds_remaining < quantity) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `Selected purchase only has ${purchase.seeds_remaining} seeds remaining, but ${quantity} are needed`,
+        });
+      }
+
+      seedAllocation = {
+        available: true,
+        seeds_allocated: quantity,
+        cost_per_seed: purchase.total_seeds > 0 ? (purchase.grand_total / purchase.total_seeds) : null,
+        seedPurchase: purchase,
+      };
+    } else if (!skip_seed_check) {
+      // Auto-allocate from best available purchase
       seedAllocation = await checkAndAllocateSeed(product_id, sku_id, quantity, client);
 
       if (!seedAllocation.available) {
-        // Log warning but don't block lot creation — seeds may exist but not match SKU exactly
         console.warn(`Seed allocation skipped for lot: ${seedAllocation.message}. product_id=${product_id}, sku_id=${sku_id}, quantity=${quantity}`);
         seedAllocation = null;
-      } else {
-        // Extract seed purchase sequence for lot number
-        seedPurchaseSeq = seedAllocation.seedPurchase.purchase_number.split('-').pop();
       }
     }
 

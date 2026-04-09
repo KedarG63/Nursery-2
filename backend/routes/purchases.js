@@ -57,6 +57,17 @@ router.get(
 );
 
 /**
+ * @route   GET /api/purchases/available-for-lot
+ * @desc    Get available seed purchases for lot creation (user-selectable)
+ * @access  Admin, Manager, Warehouse
+ */
+router.get(
+  '/available-for-lot',
+  authorize(['Admin', 'Manager', 'Warehouse']),
+  purchaseController.getAvailableForLot
+);
+
+/**
  * @route   GET /api/purchases/expiring-soon
  * @desc    Get seeds expiring soon
  * @access  Admin, Manager, Warehouse

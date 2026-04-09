@@ -542,6 +542,60 @@ const checkAvailability = async (req, res) => {
 };
 
 /**
+ * Get available seed purchases for lot creation (user selects which purchase to use)
+ * GET /api/purchases/available-for-lot?product_id=X&sku_id=Y
+ */
+const getAvailableForLot = async (req, res) => {
+  try {
+    const { product_id, sku_id } = req.query;
+
+    if (!product_id) {
+      return res.status(400).json({ success: false, message: 'product_id is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT
+        sp.id,
+        sp.purchase_number,
+        sp.seed_lot_number,
+        sp.purchase_date,
+        sp.expiry_date,
+        sp.total_seeds,
+        sp.seeds_remaining,
+        sp.inventory_status,
+        sp.notes,
+        v.vendor_name,
+        p.name as product_name,
+        s.sku_code,
+        s.variety
+      FROM seed_purchases sp
+      JOIN vendors v ON sp.vendor_id = v.id
+      JOIN products p ON sp.product_id = p.id
+      LEFT JOIN skus s ON sp.sku_id = s.id
+      WHERE sp.product_id = $1
+        AND ($2::uuid IS NULL OR sp.sku_id IS NULL OR sp.sku_id = $2)
+        AND sp.inventory_status IN ('available', 'low_stock')
+        AND sp.seeds_remaining > 0
+        AND sp.deleted_at IS NULL
+      ORDER BY sp.expiry_date ASC, sp.purchase_date ASC`,
+      [product_id, sku_id || null]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error('Error fetching available purchases for lot:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch available seed purchases',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Get seeds expiring soon
  * GET /api/purchases/expiring-soon
  */
@@ -740,6 +794,7 @@ module.exports = {
   updatePurchase,
   deletePurchase,
   checkAvailability,
+  getAvailableForLot,
   getExpiringSoon,
   getLowStock,
   recordPayment,

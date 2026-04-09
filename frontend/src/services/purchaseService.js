@@ -53,6 +53,14 @@ const purchaseService = {
     return response.data;
   },
 
+  // Get available seed purchases for lot creation (user selects which one to use)
+  getAvailableForLot: async (productId, skuId = null) => {
+    const params = { product_id: productId };
+    if (skuId) params.sku_id = skuId;
+    const response = await api.get('/api/purchases/available-for-lot', { params });
+    return response.data;
+  },
+
   // Record seed usage (when creating lots)
   recordSeedUsage: async (purchaseId, seedsUsed) => {
     const response = await api.post(`/api/purchases/${purchaseId}/use-seeds`, {

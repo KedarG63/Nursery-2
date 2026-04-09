@@ -565,7 +565,7 @@ const getOrderById = async (orderId) => {
   const itemsResult = await pool.query(
     `SELECT
        oi.*,
-       s.sku_code, p.name as sku_name, s.price as current_price,
+       s.sku_code, s.variety, p.name as product_name, s.price as current_price,
        l.lot_number, l.growth_stage, l.expected_ready_date as lot_ready_date
      FROM order_items oi
      JOIN skus s ON oi.sku_id = s.id

@@ -14,15 +14,8 @@ import {
   Autocomplete,
   Alert,
   Chip,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
 } from '@mui/material';
-import { Close as CloseIcon, CheckCircle as CheckCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -55,6 +48,7 @@ const LotForm = ({ open, onClose, onSuccess }) => {
   const [availableSeeds, setAvailableSeeds] = useState([]);
   const [loadingSeeds, setLoadingSeeds] = useState(false);
   const [seedAvailabilityChecked, setSeedAvailabilityChecked] = useState(false);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState('');
 
   const stages = lotService.getStages();
 
@@ -106,6 +100,7 @@ const LotForm = ({ open, onClose, onSuccess }) => {
       const lotData = {
         ...data,
         notes: data.notes || undefined,
+        seed_purchase_id: selectedPurchaseId || undefined,
       };
 
       await lotService.createLot(lotData);
@@ -113,6 +108,7 @@ const LotForm = ({ open, onClose, onSuccess }) => {
 
       reset(defaultValues);
       setSelectedSKU(null);
+      setSelectedPurchaseId('');
       onSuccess && onSuccess();
     } catch (error) {
       console.error('Failed to create lot:', error);
@@ -126,42 +122,38 @@ const LotForm = ({ open, onClose, onSuccess }) => {
     if (!loading) {
       reset(defaultValues);
       setSelectedSKU(null);
+      setSelectedPurchaseId('');
       onClose();
     }
   };
 
   const handleSKUChange = (event, newValue) => {
     setSelectedSKU(newValue);
+    setSelectedPurchaseId('');
     setValue('sku_id', newValue?.id || '');
 
-    // Check seed availability when SKU is selected
     if (newValue && newValue.product_id) {
-      checkSeedAvailability(newValue.product_id, newValue.id);
+      loadAvailablePurchases(newValue.product_id, newValue.id);
     } else {
       setAvailableSeeds([]);
       setSeedAvailabilityChecked(false);
     }
   };
 
-  const checkSeedAvailability = async (productId, skuId = null) => {
+  const loadAvailablePurchases = async (productId, skuId = null) => {
     setLoadingSeeds(true);
     setSeedAvailabilityChecked(false);
     try {
-      const response = await purchaseService.getAvailableSeeds(productId, skuId);
-      setAvailableSeeds(response.data || response.purchases || []);
+      const response = await purchaseService.getAvailableForLot(productId, skuId);
+      setAvailableSeeds(response.data || []);
       setSeedAvailabilityChecked(true);
     } catch (error) {
-      console.error('Failed to check seed availability:', error);
-      // Don't show error toast - it's optional information
+      console.error('Failed to load seed purchases:', error);
       setAvailableSeeds([]);
       setSeedAvailabilityChecked(true);
     } finally {
       setLoadingSeeds(false);
     }
-  };
-
-  const getTotalAvailableSeeds = () => {
-    return availableSeeds.reduce((total, purchase) => total + (purchase.seeds_remaining || 0), 0);
   };
 
   const formatDate = (dateString) => {
@@ -329,82 +321,60 @@ const LotForm = ({ open, onClose, onSuccess }) => {
               )}
             />
 
-            {/* Seed Availability Section */}
+            {/* Seed Purchase Selection */}
             {selectedSKU && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom sx={{ mb: 2 }}>
-                  Seed Availability
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Seed Purchase
                 </Typography>
 
                 {loadingSeeds ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={20} />
                     <Typography variant="body2" color="textSecondary">
-                      Checking seed availability...
+                      Loading available purchases...
                     </Typography>
                   </Box>
                 ) : seedAvailabilityChecked ? (
-                  <>
-                    {availableSeeds.length > 0 ? (
-                      <>
-                        <Alert
-                          severity="success"
-                          icon={<CheckCircleIcon />}
-                          sx={{ mb: 2 }}
-                        >
-                          <Typography variant="body2">
-                            <strong>{getTotalAvailableSeeds()} seeds</strong> available from{' '}
-                            {availableSeeds.length} purchase{availableSeeds.length > 1 ? 's' : ''}
-                          </Typography>
-                        </Alert>
-
-                        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200 }}>
-                          <Table size="small" stickyHeader>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>Purchase #</TableCell>
-                                <TableCell>Vendor</TableCell>
-                                <TableCell align="right">Available</TableCell>
-                                <TableCell>Expiry</TableCell>
-                                <TableCell>Status</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {availableSeeds.map((purchase) => (
-                                <TableRow key={purchase.id}>
-                                  <TableCell>{purchase.purchase_number}</TableCell>
-                                  <TableCell>{purchase.vendor_name || '-'}</TableCell>
-                                  <TableCell align="right">
-                                    <strong>{purchase.seeds_remaining}</strong>
-                                  </TableCell>
-                                  <TableCell>{formatDate(purchase.expiry_date)}</TableCell>
-                                  <TableCell>
-                                    <Chip
-                                      label={purchaseService.getInventoryStatusDisplay(
-                                        purchase.inventory_status
-                                      )}
-                                      color={purchaseService.getInventoryStatusColor(
-                                        purchase.inventory_status
-                                      )}
-                                      size="small"
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
-                      </>
-                    ) : (
-                      <Alert severity="warning" icon={<WarningIcon />}>
-                        <Typography variant="body2">
-                          No seeds available in inventory for this product.
-                          <br />
-                          Consider purchasing seeds before creating this lot.
-                        </Typography>
-                      </Alert>
-                    )}
-                  </>
+                  availableSeeds.length > 0 ? (
+                    <TextField
+                      select
+                      fullWidth
+                      label="Select Seed Purchase (optional — auto-selects if blank)"
+                      value={selectedPurchaseId}
+                      onChange={(e) => setSelectedPurchaseId(e.target.value)}
+                      disabled={loading}
+                    >
+                      <MenuItem value="">
+                        <em>Auto-select (use earliest expiry)</em>
+                      </MenuItem>
+                      {availableSeeds.map((purchase) => (
+                        <MenuItem key={purchase.id} value={purchase.id}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', py: 0.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" fontWeight="medium">
+                                {purchase.seed_lot_number || purchase.purchase_number}
+                              </Typography>
+                              <Chip
+                                label={`${purchase.seeds_remaining} seeds`}
+                                size="small"
+                                color={purchase.inventory_status === 'low_stock' ? 'warning' : 'success'}
+                              />
+                            </Box>
+                            <Typography variant="caption" color="textSecondary">
+                              {purchase.vendor_name} · Expiry: {formatDate(purchase.expiry_date)}
+                            </Typography>
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  ) : (
+                    <Alert severity="warning" icon={<WarningIcon />}>
+                      <Typography variant="body2">
+                        No seeds available for this product. Consider purchasing seeds first.
+                      </Typography>
+                    </Alert>
+                  )
                 ) : null}
               </Box>
             )}
