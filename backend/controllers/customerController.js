@@ -230,7 +230,7 @@ const createCustomer = async (req, res) => {
       });
     }
 
-    // Check for soft-deleted customer with same phone — restore instead of creating new
+    // Check for soft-deleted customer with same phone — restore and overwrite with new details
     const softDeleted = await client.query(
       'SELECT id FROM customers WHERE phone = $1 AND deleted_at IS NOT NULL',
       [phone]
@@ -239,8 +239,33 @@ const createCustomer = async (req, res) => {
     if (softDeleted.rows.length > 0) {
       const restoredId = softDeleted.rows[0].id;
       await client.query(
-        `UPDATE customers SET deleted_at = NULL, status = 'active', updated_by = $1, updated_at = NOW() WHERE id = $2`,
-        [req.user.id, restoredId]
+        `UPDATE customers SET
+           deleted_at = NULL,
+           deleted_by = NULL,
+           status = 'active',
+           name = $3,
+           email = $4,
+           whatsapp_number = $5,
+           customer_type = $6,
+           gst_number = $7,
+           credit_limit = $8,
+           credit_days = $9,
+           notes = $10,
+           updated_by = $1,
+           updated_at = NOW()
+         WHERE id = $2`,
+        [
+          req.user.id,
+          restoredId,
+          name,
+          email || null,
+          whatsapp_number || phone,
+          customer_type,
+          gst_number || null,
+          credit_limit,
+          credit_days,
+          notes || null,
+        ]
       );
       await client.query('COMMIT');
       const restored = await pool.query(
@@ -252,7 +277,7 @@ const createCustomer = async (req, res) => {
       return res.status(200).json({
         success: true,
         data: restored.rows[0],
-        message: 'Customer restored successfully'
+        message: 'Customer created successfully'
       });
     }
 
