@@ -146,38 +146,38 @@ const allocateLotsToOrder = async (orderId, options = {}) => {
  * @returns {Promise<object>} Allocation result
  */
 const allocateSingleItem = async (client, item, deliveryDate, options = {}) => {
-  const { preferReady = true } = options;
   let remainingQuantity = item.quantity;
   const allocatedLots = [];
 
-  // Query available lots with locking
-  // Prioritize by: 1) ready stage, 2) expected ready date, 3) available quantity
+  // Use expected_ready_date as the gate instead of growth_stage.
+  // For orders with a delivery date: include lots ready by that date.
+  // For walk-in / no delivery date: include lots already ready (by today).
+  // Only exclude 'sold' lots — all other stages are eligible if the date qualifies.
   const lotsQuery = `
     SELECT id, lot_number, quantity, allocated_quantity, available_quantity,
            growth_stage, expected_ready_date, current_location
     FROM lots
     WHERE sku_id = $1
-      AND growth_stage IN ('transplant', 'ready')
+      AND growth_stage != 'sold'
       AND available_quantity > 0
       AND deleted_at IS NULL
+      AND (
+        expected_ready_date IS NULL
+        OR expected_ready_date <= COALESCE($2::date, CURRENT_DATE)
+      )
     ORDER BY
-      CASE
-        WHEN growth_stage = 'ready' THEN 1
-        WHEN growth_stage = 'transplant' THEN 2
-        ELSE 3
-      END,
       expected_ready_date ASC NULLS LAST,
       available_quantity DESC
     FOR UPDATE
   `;
 
-  const lotsResult = await client.query(lotsQuery, [item.sku_id]);
+  const lotsResult = await client.query(lotsQuery, [item.sku_id, deliveryDate || null]);
 
   if (lotsResult.rows.length === 0) {
     return {
       fullyAllocated: false,
       partiallyAllocated: false,
-      reason: 'No available lots found for this SKU',
+      reason: 'No lots ready by the required date. Check expected_ready_date or push delivery date further out.',
     };
   }
 
@@ -279,7 +279,7 @@ const checkLotAvailability = async (skuId, quantity) => {
        MIN(expected_ready_date) as earliest_ready_date
      FROM lots
      WHERE sku_id = $1
-       AND growth_stage IN ('transplant', 'ready')
+       AND growth_stage != 'sold'
        AND available_quantity > 0
        AND deleted_at IS NULL`,
     [skuId]
@@ -380,7 +380,7 @@ const getOptimalLots = async (skuId, quantity, deliveryDate = null) => {
            growth_stage, expected_ready_date, current_location
     FROM lots
     WHERE sku_id = $1
-      AND growth_stage IN ('transplant', 'ready')
+      AND growth_stage != 'sold'
       AND available_quantity > 0
       AND deleted_at IS NULL
   `;

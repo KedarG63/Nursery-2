@@ -877,6 +877,7 @@ const checkAvailability = async (req, res) => {
         JOIN products p ON s.product_id = p.id
         WHERE l.sku_id = $1
           AND l.deleted_at IS NULL
+          AND l.growth_stage != 'sold'
           AND l.available_quantity > 0
         ORDER BY l.expected_ready_date ASC
       `;
