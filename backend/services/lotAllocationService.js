@@ -47,7 +47,7 @@ const allocateLotsToOrder = async (orderId, options = {}) => {
     // Fetch unallocated order items
     const itemsResult = await client.query(
       `SELECT oi.id, oi.sku_id, oi.quantity, oi.status,
-              s.sku_code, s.name as sku_name
+              s.sku_code, COALESCE(s.variety, s.sku_code) as sku_name
        FROM order_items oi
        JOIN skus s ON oi.sku_id = s.id
        WHERE oi.order_id = $1

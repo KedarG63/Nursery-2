@@ -93,7 +93,8 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
       toast.success('Lots allocated successfully');
       if (onStatusUpdate) onStatusUpdate();
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || 'Allocation failed — no suitable lots in transplant/ready stage');
+      const msg = error?.error || error?.message || error?.response?.data?.message || 'Allocation failed — no lots ready by the required date';
+      toast.error(msg);
     } finally {
       setAllocating(false);
     }
@@ -173,7 +174,7 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                   Expected Delivery
                 </Typography>
                 <Typography variant="body1">
-                  {formatDate(order.expected_delivery_date) || '-'}
+                  {formatDate(order.delivery_date || order.expected_delivery_date) || '-'}
                 </Typography>
               </Grid>
 
