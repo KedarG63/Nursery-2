@@ -870,6 +870,7 @@ const checkAvailability = async (req, res) => {
           p.name as product_name,
           p.growth_period_days,
           s.sku_code,
+          s.variety,
           EXTRACT(DAY FROM (l.expected_ready_date - CURRENT_DATE)) as days_until_ready
         FROM lots l
         JOIN skus s ON l.sku_id = s.id
@@ -882,6 +883,24 @@ const checkAvailability = async (req, res) => {
 
       const lotsResult = await pool.query(lotsQuery, [item.sku_id]);
       const allLots = lotsResult.rows;
+
+      // Fallback: get product/SKU info even when no lots exist
+      let productName = lotsResult.rows[0]?.product_name || null;
+      let variety = lotsResult.rows[0]?.variety || lotsResult.rows[0]?.sku_code || null;
+      let skuCode = lotsResult.rows[0]?.sku_code || null;
+      if (!productName) {
+        const skuInfo = await pool.query(
+          `SELECT s.sku_code, s.variety, p.name as product_name
+           FROM skus s JOIN products p ON s.product_id = p.id
+           WHERE s.id = $1`,
+          [item.sku_id]
+        );
+        if (skuInfo.rows.length > 0) {
+          productName = skuInfo.rows[0].product_name;
+          variety = skuInfo.rows[0].variety || skuInfo.rows[0].sku_code;
+          skuCode = skuInfo.rows[0].sku_code;
+        }
+      }
 
       // Lots ready by delivery date
       const lotsReadyByDate = allLots.filter(
@@ -910,8 +929,9 @@ const checkAvailability = async (req, res) => {
 
       availabilityChecks.push({
         sku_id: item.sku_id,
-        sku_code: lotsResult.rows[0]?.sku_code || 'Unknown',
-        product_name: lotsResult.rows[0]?.product_name || 'Unknown',
+        sku_code: skuCode || 'Unknown',
+        variety: variety || skuCode || 'Unknown',
+        product_name: productName || 'Unknown',
         requested_quantity: item.quantity,
         requested_delivery_date: delivery_date,
         available_quantity: totalAvailable,
