@@ -142,8 +142,11 @@ const validateUpdateStatus = (req, res, next) => {
  * Validate allocate lots request
  */
 const validateAllocateLots = (req, res, next) => {
-  const { allocations } = req.body;
+  const { allocations, auto } = req.body;
   const errors = [];
+
+  // Auto-allocation doesn't need an allocations array
+  if (auto) return next();
 
   if (!allocations || !Array.isArray(allocations)) {
     errors.push('allocations must be an array');

@@ -937,7 +937,8 @@ const checkAvailability = async (req, res) => {
         requested_delivery_date: delivery_date,
         available_quantity: totalAvailable,
         available: canFulfill,
-        lots_ready_by_date: lotsReadyByDate.length,
+        ready_lots_count: lotsReadyByDate.length,
+        pending_lots_count: allLots.length - lotsReadyByDate.length,
         total_lots_available: allLots.length,
         next_available_date: nextAvailableDate,
         lots_details: lotsReadyByDate.slice(0, 5).map(lot => ({
