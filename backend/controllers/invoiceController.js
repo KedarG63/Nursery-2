@@ -113,7 +113,7 @@ const getInvoice = async (req, res, next) => {
          i.*,
          c.name AS customer_name, c.customer_code, c.phone AS customer_phone,
          c.email AS customer_email, c.gst_number AS customer_gst,
-         o.order_number, o.order_date, o.status AS order_status
+         o.order_number, o.order_date, o.status AS order_status, o.notes AS order_notes
        FROM invoices i
        LEFT JOIN customers c ON c.id = i.customer_id
        LEFT JOIN orders    o ON o.id = i.order_id
@@ -126,6 +126,16 @@ const getInvoice = async (req, res, next) => {
     }
 
     const invoice = invoiceResult.rows[0];
+
+    // For walk-in orders, extract typed name/phone from order notes
+    // Notes format: "Walk-in: {name} | Ph: +91{phone}"
+    if (invoice.customer_name === 'Walk-in Customer' && invoice.order_notes) {
+      const walkInMatch = invoice.order_notes.match(/^Walk-in:\s*(.+?)\s*\|\s*Ph:\s*\+91(\d+)/);
+      if (walkInMatch) {
+        invoice.customer_name = walkInMatch[1];
+        invoice.customer_phone = `+91${walkInMatch[2]}`;
+      }
+    }
 
     // Fetch items with lot traceability (via direct lot_id or via order_item → lot)
     const itemsResult = await db.query(
