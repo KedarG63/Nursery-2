@@ -237,13 +237,13 @@ const allocateSingleItem = async (client, item, deliveryDate, options = {}) => {
   }
 
   // Check stock level after allocation (Issue #80)
+  // Run outside the transaction client so a stock-alert failure cannot abort the allocation.
   if (allocatedLots.length > 0) {
-    try {
-      await stockAlertService.checkStockLevel(item.sku_id, client);
-    } catch (error) {
-      // Log error but don't fail allocation
-      console.error('Error checking stock level after allocation:', error.message);
-    }
+    setImmediate(() => {
+      stockAlertService.checkStockLevel(item.sku_id, null).catch((error) => {
+        console.error('Error checking stock level after allocation:', error.message);
+      });
+    });
   }
 
   // Delete original item if it was split into multiple lots
