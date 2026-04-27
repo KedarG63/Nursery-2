@@ -23,7 +23,8 @@ import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import StatusBadge from '../Common/StatusBadge';
 import { formatDate, formatCurrency, formatAddress, formatOrderNumber } from '../../utils/formatters';
-import { updateOrderStatus, allocateLots } from '../../services/orderService';
+import { updateOrderStatus } from '../../services/orderService';
+import LotSelectionDialog from './LotSelectionDialog';
 
 /**
  * Order Summary Component
@@ -32,7 +33,7 @@ import { updateOrderStatus, allocateLots } from '../../services/orderService';
 const OrderSummary = ({ order, onStatusUpdate }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [updating, setUpdating] = useState(false);
-  const [allocating, setAllocating] = useState(false);
+  const [selectionOpen, setSelectionOpen] = useState(false);
 
   const statusTransitions = {
     pending: ['confirmed', 'cancelled'],
@@ -86,19 +87,6 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
   const hasUnallocatedItems = (order.items || []).some(item => !item.lot_id && !item.lot_number);
   const canAllocate = ['pending', 'confirmed', 'preparing'].includes(order.status) && hasUnallocatedItems;
 
-  const handleAutoAllocate = async () => {
-    setAllocating(true);
-    try {
-      await allocateLots(order.id, { auto: true });
-      toast.success('Lots allocated successfully');
-      if (onStatusUpdate) onStatusUpdate();
-    } catch (error) {
-      const msg = error?.error || error?.message || error?.response?.data?.message || 'Allocation failed — no lots ready by the required date';
-      toast.error(msg);
-    } finally {
-      setAllocating(false);
-    }
-  };
 
   return (
     <Grid container spacing={3}>
@@ -117,10 +105,9 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                     variant="outlined"
                     size="small"
                     color="warning"
-                    onClick={handleAutoAllocate}
-                    disabled={allocating}
+                    onClick={() => setSelectionOpen(true)}
                   >
-                    {allocating ? 'Allocating...' : 'Allocate Lots'}
+                    Allocate Lots
                   </Button>
                 )}
                 {allowedStatuses.length > 0 && (
@@ -500,6 +487,16 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
           </Card>
         </Grid>
       )}
+
+      <LotSelectionDialog
+        open={selectionOpen}
+        order={order}
+        onClose={() => setSelectionOpen(false)}
+        onAllocated={() => {
+          setSelectionOpen(false);
+          if (onStatusUpdate) onStatusUpdate();
+        }}
+      />
     </Grid>
   );
 };

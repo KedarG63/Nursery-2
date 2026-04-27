@@ -306,6 +306,12 @@ const listLots = async (req, res) => {
       conditions.push(`l.expected_ready_date < NOW()::date AND l.growth_stage != 'sold'`);
     }
 
+    // available_only: only lots that can be allocated (not sold, has stock)
+    const { available_only } = req.query;
+    if (available_only === 'true') {
+      conditions.push(`l.growth_stage != 'sold' AND l.available_quantity > 0`);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     // Validate sort parameters
