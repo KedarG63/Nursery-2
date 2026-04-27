@@ -134,7 +134,7 @@ const LotsList = () => {
 
       const response = await lotService.getAllLots(params);
       setLots(response.data || response.lots || []);
-      setTotalPages(response.pagination?.totalPages || 1);
+      setTotalPages(response.pagination?.pages || response.pagination?.totalPages || 1);
     } catch (error) {
       console.error('Failed to fetch lots:', error);
       toast.error('Failed to load lots');

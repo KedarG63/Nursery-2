@@ -122,9 +122,7 @@ const LotsTable = ({
           No lots found
         </Typography>
         <Typography variant="body2" color="textSecondary">
-          {canManageWarehouse(userRole)
-            ? 'Create your first lot to get started'
-            : 'No lots available at the moment'}
+          No lots available at the moment
         </Typography>
       </Box>
     );

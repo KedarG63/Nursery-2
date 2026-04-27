@@ -400,8 +400,8 @@ const getInventoryStatistics = async () => {
       SUM(quantity) as total_quantity,
       SUM(available_quantity) as total_available,
       SUM(allocated_quantity) as total_allocated,
-      COUNT(CASE WHEN growth_stage = 'ready' THEN 1 END) as ready_count,
-      COUNT(CASE WHEN growth_stage = 'ready' AND available_quantity > 0 THEN 1 END) as ready_available_count
+      COUNT(CASE WHEN expected_ready_date <= CURRENT_DATE AND growth_stage != 'sold' THEN 1 END) as ready_count,
+      COUNT(CASE WHEN expected_ready_date <= CURRENT_DATE AND growth_stage != 'sold' AND available_quantity > 0 THEN 1 END) as ready_available_count
     FROM lots
     WHERE deleted_at IS NULL
   `;
