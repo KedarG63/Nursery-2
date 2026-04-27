@@ -27,6 +27,7 @@ import DeliveryDetails from '../../components/Orders/DeliveryDetails';
 import PaymentMethod from '../../components/Orders/PaymentMethod';
 import OrderReview from '../../components/Orders/OrderReview';
 import { createOrder, checkAvailability } from '../../services/orderService';
+import { formatDate } from '../../utils/formatters';
 
 /**
  * Create Order Page with Multi-Step Wizard
@@ -169,6 +170,7 @@ const CreateOrder = () => {
         requestedQty: item.requested_quantity,
         availableQty: item.available_quantity,
         nextAvailableDate: item.next_available_date,
+        growthPeriodDays: item.growth_period_days,
         available: item.available,
         lots: item.lots || [],
         readyLotsCount: item.ready_lots_count || 0,
@@ -183,6 +185,7 @@ const CreateOrder = () => {
           requestedQty: item.requested_quantity,
           availableQty: item.available_quantity,
           nextAvailableDate: item.next_available_date,
+          growthPeriodDays: item.growth_period_days,
           shortfall: item.requested_quantity - item.available_quantity,
           message: `${item.product_name} (${item.variety || item.sku_code}): Only ${item.available_quantity} of ${item.requested_quantity} available by ${orderData.deliveryDate}. Shortfall: ${item.requested_quantity - item.available_quantity}. Next availability: ${item.next_available_date || 'Not available'}`
         })));
@@ -410,9 +413,27 @@ const CreateOrder = () => {
                               />
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2">
-                                {error.nextAvailableDate || 'Not available'}
-                              </Typography>
+                              {error.nextAvailableDate ? (
+                                <Typography variant="body2" color="warning.main">
+                                  {formatDate(error.nextAvailableDate)}
+                                </Typography>
+                              ) : (
+                                <Box>
+                                  <Typography variant="body2" color="error.main" fontWeight="medium">
+                                    Insufficient inventory
+                                  </Typography>
+                                  {error.growthPeriodDays ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Create a new lot today — ready by{' '}
+                                      {formatDate(new Date(Date.now() + error.growthPeriodDays * 86400000))}
+                                    </Typography>
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                      No lots in inventory
+                                    </Typography>
+                                  )}
+                                </Box>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

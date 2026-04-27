@@ -889,9 +889,10 @@ const checkAvailability = async (req, res) => {
       let productName = lotsResult.rows[0]?.product_name || null;
       let variety = lotsResult.rows[0]?.variety || lotsResult.rows[0]?.sku_code || null;
       let skuCode = lotsResult.rows[0]?.sku_code || null;
+      let growthPeriodDays = lotsResult.rows[0]?.growth_period_days || null;
       if (!productName) {
         const skuInfo = await pool.query(
-          `SELECT s.sku_code, s.variety, p.name as product_name
+          `SELECT s.sku_code, s.variety, p.name as product_name, p.growth_period_days
            FROM skus s JOIN products p ON s.product_id = p.id
            WHERE s.id = $1`,
           [item.sku_id]
@@ -900,6 +901,7 @@ const checkAvailability = async (req, res) => {
           productName = skuInfo.rows[0].product_name;
           variety = skuInfo.rows[0].variety || skuInfo.rows[0].sku_code;
           skuCode = skuInfo.rows[0].sku_code;
+          growthPeriodDays = skuInfo.rows[0].growth_period_days;
         }
       }
 
@@ -941,6 +943,7 @@ const checkAvailability = async (req, res) => {
         pending_lots_count: allLots.length - lotsReadyByDate.length,
         total_lots_available: allLots.length,
         next_available_date: nextAvailableDate,
+        growth_period_days: growthPeriodDays,
         lots_details: lotsReadyByDate.slice(0, 5).map(lot => ({
           lot_number: lot.lot_number,
           available_quantity: parseInt(lot.available_quantity),
