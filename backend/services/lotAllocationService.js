@@ -187,15 +187,9 @@ const allocateSingleItem = async (client, item, deliveryDate, options = {}) => {
 
     const quantityToAllocate = Math.min(remainingQuantity, lot.available_quantity);
 
-    // Update lot quantities (Phase 21 - Part 4)
-    await client.query(
-      `UPDATE lots
-       SET allocated_quantity = allocated_quantity + $1,
-           available_quantity = available_quantity - $1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [quantityToAllocate, lot.id]
-    );
+    // NOTE: lot quantities (allocated_quantity / available_quantity) are updated
+    // automatically by the trigger_update_lot_allocation trigger on order_items.
+    // Do NOT update lots manually here — that would double-count.
 
     // For first lot, update existing order item
     if (allocatedLots.length === 0) {
@@ -214,10 +208,10 @@ const allocateSingleItem = async (client, item, deliveryDate, options = {}) => {
       // For additional lots, create new order item entries
       const newItemResult = await client.query(
         `INSERT INTO order_items (
-           order_id, sku_id, lot_id, quantity, unit_price, status,
+           order_id, sku_id, lot_id, quantity, unit_price, line_total, status,
            allocated_at, ready_date
          )
-         SELECT order_id, sku_id, $1, $2, unit_price, 'allocated', NOW(), $3
+         SELECT order_id, sku_id, $1, $2, unit_price, (unit_price * $2), 'allocated', NOW(), $3
          FROM order_items
          WHERE id = $4
          RETURNING id`,
