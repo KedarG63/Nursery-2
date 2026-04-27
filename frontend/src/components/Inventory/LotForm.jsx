@@ -33,9 +33,6 @@ const lotSchema = z.object({
   current_location: z.enum(['greenhouse', 'field', 'warehouse', 'transit'], {
     errorMap: () => ({ message: 'Please select a location' }),
   }),
-  growth_stage: z.enum(['seed', 'germination', 'seedling', 'transplant', 'ready'], {
-    errorMap: () => ({ message: 'Please select a stage' }),
-  }),
   planted_date: z.string().min(1, 'Planted date is required'),
   notes: z.string().max(500, 'Notes must be less than 500 characters').optional(),
 });
@@ -50,13 +47,10 @@ const LotForm = ({ open, onClose, onSuccess }) => {
   const [seedAvailabilityChecked, setSeedAvailabilityChecked] = useState(false);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState('');
 
-  const stages = lotService.getStages();
-
   const defaultValues = {
     sku_id: '',
     quantity: 1,
     current_location: 'greenhouse',
-    growth_stage: 'seed',
     planted_date: new Date().toISOString().split('T')[0],
     notes: '',
   };
@@ -255,30 +249,6 @@ const LotForm = ({ open, onClose, onSuccess }) => {
                   <MenuItem value="field">Field</MenuItem>
                   <MenuItem value="warehouse">Warehouse</MenuItem>
                   <MenuItem value="transit">Transit</MenuItem>
-                </TextField>
-              )}
-            />
-
-            {/* Growth Stage */}
-            <Controller
-              name="growth_stage"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  select
-                  label="Growth Stage"
-                  required
-                  fullWidth
-                  error={!!errors.growth_stage}
-                  helperText={errors.growth_stage?.message}
-                  disabled={loading}
-                >
-                  {stages.map((stage) => (
-                    <MenuItem key={stage} value={stage}>
-                      {stage.charAt(0).toUpperCase() + stage.slice(1)}
-                    </MenuItem>
-                  ))}
                 </TextField>
               )}
             />

@@ -18,8 +18,6 @@ import {
   DialogActions,
   FormControlLabel,
   Checkbox,
-  Autocomplete,
-  Chip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -46,7 +44,6 @@ const LotsList = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 500);
-  const [stageFilter, setStageFilter] = useState([]);
   const [locationFilter, setLocationFilter] = useState('');
   const [skuFilter, setSkuFilter] = useState('');
   const [showOverdue, setShowOverdue] = useState(false);
@@ -67,8 +64,6 @@ const LotsList = () => {
   const [locations, setLocations] = useState([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
 
-  const stages = lotService.getStages();
-
   // Fetch filter data
   useEffect(() => {
     fetchFilterData();
@@ -88,7 +83,7 @@ const LotsList = () => {
   // Fetch lots
   useEffect(() => {
     fetchLots();
-  }, [debouncedSearch, stageFilter, locationFilter, skuFilter, showOverdue, page]);
+  }, [debouncedSearch, locationFilter, skuFilter, showOverdue, page]);
 
   const fetchFilterData = async () => {
     setLoadingFilters(true);
@@ -125,10 +120,6 @@ const LotsList = () => {
         params.search = debouncedSearch;
       }
 
-      if (stageFilter.length > 0) {
-        params.stage = stageFilter.join(',');
-      }
-
       if (locationFilter) {
         params.location = locationFilter;
       }
@@ -154,11 +145,6 @@ const LotsList = () => {
 
   const handleSearchChange = (event) => {
     setSearchQuery(event.target.value);
-    setPage(1);
-  };
-
-  const handleStageFilterChange = (event) => {
-    setStageFilter(event.target.value);
     setPage(1);
   };
 
@@ -188,17 +174,6 @@ const LotsList = () => {
   const handleQRCode = (lot) => {
     setSelectedLotForQR(lot);
     setQrModalOpen(true);
-  };
-
-  const handleStageChange = async (lotId, newStage) => {
-    try {
-      await lotService.updateLotStage(lotId, newStage);
-      toast.success('Stage updated successfully');
-      fetchLots();
-    } catch (error) {
-      console.error('Failed to update stage:', error);
-      toast.error(error.response?.data?.message || 'Failed to update stage');
-    }
   };
 
   const handleLocationChange = (lot) => {
@@ -299,32 +274,6 @@ const LotsList = () => {
             />
           </Grid>
 
-          {/* Stage Filter */}
-          <Grid item xs={12} sm={6} md={2}>
-            <FormControl fullWidth>
-              <InputLabel>Stage</InputLabel>
-              <Select
-                multiple
-                value={stageFilter}
-                onChange={handleStageFilterChange}
-                label="Stage"
-                renderValue={(selected) => (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selected.map((value) => (
-                      <Chip key={value} label={value} size="small" />
-                    ))}
-                  </Box>
-                )}
-              >
-                {stages.map((stage) => (
-                  <MenuItem key={stage} value={stage}>
-                    {stage.charAt(0).toUpperCase() + stage.slice(1)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
           {/* Location Filter */}
           <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth>
@@ -385,7 +334,6 @@ const LotsList = () => {
         lots={lots}
         loading={loading}
         onQRCode={handleQRCode}
-        onStageChange={handleStageChange}
         onLocationChange={handleLocationChange}
         onDelete={handleDeleteClick}
       />

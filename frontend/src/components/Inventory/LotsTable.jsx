@@ -13,8 +13,6 @@ import {
   Box,
   Typography,
   Tooltip,
-  Select,
-  MenuItem,
 } from '@mui/material';
 import {
   QrCode as QrCodeIcon,
@@ -22,18 +20,17 @@ import {
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import dayjs from 'dayjs';
-import { canManageWarehouse, canDelete } from '../../utils/roleCheck';
+import { canDelete } from '../../utils/roleCheck';
 
-const getStageColor = (stage) => {
-  const colors = {
-    seed: 'default',
-    germination: 'info',
-    seedling: 'success',
-    transplant: 'warning',
-    ready: 'primary',
-    sold: 'default',
-  };
-  return colors[stage] || 'default';
+const getEffectiveStatus = (lot) => {
+  if (lot.growth_stage === 'sold') return { label: 'Sold', color: 'default' };
+  if (lot.expected_ready_date && dayjs(lot.expected_ready_date).isBefore(dayjs(), 'day')) {
+    return { label: 'Ready', color: 'success' };
+  }
+  if (lot.expected_ready_date && dayjs(lot.expected_ready_date).isSame(dayjs(), 'day')) {
+    return { label: 'Ready Today', color: 'success' };
+  }
+  return { label: 'Growing', color: 'info' };
 };
 
 const getExpectedReadyDisplay = (dateCreated, growthPeriodDays) => {
@@ -67,18 +64,11 @@ const LotsTable = ({
   lots,
   loading,
   onQRCode,
-  onStageChange,
   onLocationChange,
   onDelete,
 }) => {
   const { user } = useSelector((state) => state.auth);
   const userRole = user?.roles;
-
-  const handleStageChange = (lotId, currentStage, newStage) => {
-    if (newStage !== currentStage && onStageChange) {
-      onStageChange(lotId, newStage);
-    }
-  };
 
   if (loading) {
     return (
@@ -186,39 +176,10 @@ const LotsTable = ({
                 </TableCell>
 
                 <TableCell>
-                  {canManageWarehouse(userRole) ? (
-                    <Select
-                      value={lot.growth_stage}
-                      onChange={(e) => handleStageChange(lot.id, lot.growth_stage, e.target.value)}
-                      size="small"
-                      sx={{ minWidth: 120 }}
-                    >
-                      <MenuItem value="seed">
-                        <Chip label="Seed" size="small" color={getStageColor('seed')} />
-                      </MenuItem>
-                      <MenuItem value="germination">
-                        <Chip label="Germination" size="small" color={getStageColor('germination')} />
-                      </MenuItem>
-                      <MenuItem value="seedling">
-                        <Chip label="Seedling" size="small" color={getStageColor('seedling')} />
-                      </MenuItem>
-                      <MenuItem value="transplant">
-                        <Chip label="Transplant" size="small" color={getStageColor('transplant')} />
-                      </MenuItem>
-                      <MenuItem value="ready">
-                        <Chip label="Ready" size="small" color={getStageColor('ready')} />
-                      </MenuItem>
-                      <MenuItem value="sold">
-                        <Chip label="Sold" size="small" color={getStageColor('sold')} />
-                      </MenuItem>
-                    </Select>
-                  ) : (
-                    <Chip
-                      label={lot.growth_stage}
-                      size="small"
-                      color={getStageColor(lot.growth_stage)}
-                    />
-                  )}
+                  {(() => {
+                    const status = getEffectiveStatus(lot);
+                    return <Chip label={status.label} size="small" color={status.color} />;
+                  })()}
                 </TableCell>
 
                 <TableCell>

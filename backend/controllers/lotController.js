@@ -303,7 +303,7 @@ const listLots = async (req, res) => {
 
     // Handle overdue filter
     if (overdue === 'true' || overdue === true) {
-      conditions.push(`l.expected_ready_date < NOW()::date AND l.growth_stage != 'ready' AND l.growth_stage != 'sold'`);
+      conditions.push(`l.expected_ready_date < NOW()::date AND l.growth_stage != 'sold'`);
     }
 
     const whereClause = conditions.join(' AND ');

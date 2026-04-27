@@ -58,7 +58,8 @@ const getKPIsData = async () => {
   const readyLotsResult = await pool.query(
     `SELECT COUNT(*) as count, COALESCE(SUM(available_quantity), 0) as total_units
      FROM lots
-     WHERE growth_stage = 'ready'
+     WHERE expected_ready_date <= CURRENT_DATE
+     AND growth_stage != 'sold'
      AND available_quantity > 0
      AND deleted_at IS NULL`
   );
@@ -240,7 +241,7 @@ const getInventoryInsights = async () => {
      JOIN skus s ON l.sku_id = s.id
      JOIN products p ON s.product_id = p.id
      WHERE l.expected_ready_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-     AND l.growth_stage != 'ready'
+     AND l.growth_stage != 'sold'
      AND l.deleted_at IS NULL
      ORDER BY l.expected_ready_date ASC
      LIMIT 10`
@@ -258,7 +259,7 @@ const getInventoryInsights = async () => {
        (s.min_stock_level - COALESCE(SUM(l.available_quantity), 0)) as stock_deficit
      FROM skus s
      JOIN products p ON s.product_id = p.id
-     LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.growth_stage = 'ready'
+     LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.expected_ready_date <= CURRENT_DATE AND l.growth_stage != 'sold'
      WHERE s.deleted_at IS NULL
      GROUP BY p.id, p.name, s.id, s.sku_code, s.min_stock_level
      HAVING COALESCE(SUM(l.available_quantity), 0) < s.min_stock_level
@@ -542,7 +543,7 @@ const getSystemAlerts = async () => {
   const lowStock = await pool.query(
     `SELECT COUNT(DISTINCT s.id) as count
      FROM skus s
-     LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.growth_stage = 'ready'
+     LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.expected_ready_date <= CURRENT_DATE AND l.growth_stage != 'sold'
      GROUP BY s.id
      HAVING COALESCE(SUM(l.available_quantity), 0) < s.min_stock_level`
   );

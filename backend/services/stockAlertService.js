@@ -35,7 +35,8 @@ class StockAlertService {
         FROM skus s
         JOIN products p ON s.product_id = p.id
         LEFT JOIN lots l ON l.sku_id = s.id
-          AND l.growth_stage IN ('ready', 'transplant', 'seedling')
+          AND l.expected_ready_date <= CURRENT_DATE
+          AND l.growth_stage != 'sold'
           AND l.available_quantity > 0
         WHERE s.id = $1
         GROUP BY s.id, s.sku_code, s.min_stock_level,

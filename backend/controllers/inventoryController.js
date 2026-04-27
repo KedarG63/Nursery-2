@@ -206,8 +206,8 @@ const getInventoryStats = async (req, res) => {
         COALESCE(SUM(l.quantity), 0) as total_units,
         COALESCE(SUM(l.available_quantity), 0) as available_units,
         COALESCE(SUM(l.allocated_quantity), 0) as allocated_units,
-        COUNT(CASE WHEN l.growth_stage = 'ready' THEN 1 END) as ready_lots,
-        COUNT(CASE WHEN l.growth_stage = 'ready' AND l.available_quantity > 0 THEN 1 END) as ready_available_lots
+        COUNT(CASE WHEN l.expected_ready_date <= CURRENT_DATE THEN 1 END) as ready_lots,
+        COUNT(CASE WHEN l.expected_ready_date <= CURRENT_DATE AND l.available_quantity > 0 THEN 1 END) as ready_available_lots
       FROM products p
       LEFT JOIN skus s ON s.product_id = p.id AND s.deleted_at IS NULL
       LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL
@@ -220,7 +220,7 @@ const getInventoryStats = async (req, res) => {
       FROM (
         SELECT s.id
         FROM skus s
-        LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.growth_stage = 'ready'
+        LEFT JOIN lots l ON l.sku_id = s.id AND l.deleted_at IS NULL AND l.expected_ready_date <= CURRENT_DATE AND l.growth_stage != 'sold'
         WHERE s.deleted_at IS NULL
         GROUP BY s.id, s.min_stock_level
         HAVING COALESCE(SUM(l.available_quantity), 0) < s.min_stock_level
