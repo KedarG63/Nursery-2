@@ -1054,10 +1054,6 @@ const deleteOrder = async (req, res) => {
       `UPDATE orders SET deleted_at = NOW(), deleted_by = $1, updated_at = NOW() WHERE id = $2`,
       [userId, id]
     );
-    await client.query(
-      `UPDATE order_items SET deleted_at = NOW(), updated_at = NOW() WHERE order_id = $1`,
-      [id]
-    );
 
     await client.query('COMMIT');
     res.json({ success: true, message: `Order ${order.order_number} deleted successfully` });
