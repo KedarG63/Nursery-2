@@ -31,6 +31,7 @@ const createOrder = async (req, res) => {
       notes,
       auto_allocate = false,
       skip_availability_check = false,
+      order_date = null,
     } = req.body;
 
     const userId = req.user?.id;
@@ -274,15 +275,16 @@ const createOrder = async (req, res) => {
     // 6. Create order (Phase 21: Include expected_ready_date)
     const orderResult = await client.query(
       `INSERT INTO orders (
-         customer_id, delivery_address_id, delivery_date, delivery_slot,
+         customer_id, delivery_address_id, order_date, delivery_date, delivery_slot,
          payment_type, subtotal_amount, discount_amount, tax_amount,
          total_amount, expected_ready_date, notes, created_by, updated_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
        RETURNING *`,
       [
         customer_id,
         delivery_address_id,
+        order_date || new Date().toISOString().split('T')[0],
         delivery_date,
         delivery_slot,
         payment_type,
@@ -290,7 +292,7 @@ const createOrder = async (req, res) => {
         discountAmountFinal,
         taxAmount,
         totalAmount,
-        maxReadyDate, // Phase 21: Add expected_ready_date
+        maxReadyDate,
         notes,
         userId,
       ]

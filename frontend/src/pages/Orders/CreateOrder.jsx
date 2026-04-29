@@ -44,6 +44,7 @@ const CreateOrder = () => {
     customer: null,
     items: [],
     deliveryAddress: null,
+    orderDate: new Date().toISOString().split('T')[0],
     deliveryDate: null,
     deliverySlot: 'morning',
     paymentMethod: 'advance',
@@ -240,6 +241,7 @@ const CreateOrder = () => {
           quantity: item.quantity,
           unit_price: item.unit_price
         })),
+        order_date: orderData.orderDate || new Date().toISOString().split('T')[0],
         notes: orderData.notes,
         skip_availability_check: availabilityOverridden || false,
       };
@@ -284,6 +286,7 @@ const CreateOrder = () => {
           <DeliveryDetails
             customer={orderData.customer}
             deliveryAddress={orderData.deliveryAddress}
+            orderDate={orderData.orderDate}
             deliveryDate={orderData.deliveryDate}
             deliverySlot={orderData.deliverySlot}
             onDeliveryChange={handleDeliveryChange}

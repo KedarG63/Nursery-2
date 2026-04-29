@@ -25,7 +25,7 @@ const WALK_IN_NAME = 'Walk-in Customer';
  * Select delivery address and date
  * Issue #57: Order creation wizard - Step 3
  */
-const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot, onDeliveryChange }) => {
+const DeliveryDetails = ({ customer, deliveryAddress, orderDate, deliveryDate, deliverySlot, onDeliveryChange }) => {
   const isWalkIn = customer?.name === WALK_IN_NAME;
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -59,6 +59,10 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
   const handleAddressChange = (event) => {
     const selectedAddress = addresses.find(addr => addr.id === event.target.value);
     onDeliveryChange('deliveryAddress', selectedAddress);
+  };
+
+  const handleOrderDateChange = (event) => {
+    onDeliveryChange('orderDate', event.target.value);
   };
 
   const handleDateChange = (event) => {
@@ -154,6 +158,20 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
             )}
           </>
         )}
+
+        {/* Order Date */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            type="date"
+            label="Order Date"
+            value={orderDate || new Date().toISOString().split('T')[0]}
+            onChange={handleOrderDateChange}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ max: '2099-12-31' }}
+            helperText="Defaults to today. Change to backdate the order."
+          />
+        </Grid>
 
         {/* Delivery Date */}
         <Grid item xs={12} md={6}>
