@@ -30,6 +30,7 @@ const createOrder = async (req, res) => {
       discount_amount = 0,
       notes,
       auto_allocate = false,
+      skip_availability_check = false,
     } = req.body;
 
     const userId = req.user?.id;
@@ -119,7 +120,8 @@ const createOrder = async (req, res) => {
     }
 
     // 3.5 Check lot availability and maturity dates (Phase 21 - Part 1)
-    for (const item of itemsWithPrices) {
+    // Skipped when skip_availability_check=true (user override for backdated/historical orders)
+    if (!skip_availability_check) for (const item of itemsWithPrices) {
       // Get available lots for this SKU that can fulfill the order by delivery date
       // Allow any growth stage as long as expected_ready_date is before delivery_date
       const lotsAvailableQuery = `

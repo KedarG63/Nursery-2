@@ -240,7 +240,8 @@ const CreateOrder = () => {
           quantity: item.quantity,
           unit_price: item.unit_price
         })),
-        notes: orderData.notes
+        notes: orderData.notes,
+        skip_availability_check: availabilityOverridden || false,
       };
 
       console.log('Creating order with payload:', JSON.stringify(payload, null, 2));
