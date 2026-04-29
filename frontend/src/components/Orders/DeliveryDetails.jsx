@@ -69,10 +69,6 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
     onDeliveryChange('deliverySlot', event.target.value);
   };
 
-  // Set minimum date to tomorrow
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split('T')[0];
 
   return (
     <Box>
@@ -171,7 +167,7 @@ const DeliveryDetails = ({ customer, deliveryAddress, deliveryDate, deliverySlot
               shrink: true,
             }}
             inputProps={{
-              min: isWalkIn ? undefined : minDate,
+              max: '2099-12-31',
             }}
           />
         </Grid>
