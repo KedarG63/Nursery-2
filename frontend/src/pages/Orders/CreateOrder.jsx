@@ -55,6 +55,7 @@ const CreateOrder = () => {
   const [availabilityChecked, setAvailabilityChecked] = useState(false);
   const [availabilityErrors, setAvailabilityErrors] = useState([]);
   const [availabilityDetails, setAvailabilityDetails] = useState([]);
+  const [availabilityOverridden, setAvailabilityOverridden] = useState(false);
 
   const steps = [
     'Select Customer',
@@ -154,6 +155,7 @@ const CreateOrder = () => {
       setLoading(true);
       setAvailabilityErrors([]);
       setAvailabilityDetails([]);
+      setAvailabilityOverridden(false);
 
       const items = orderData.items.map((item) => ({
         sku_id: item.sku_id,
@@ -219,7 +221,7 @@ const CreateOrder = () => {
   const handleSubmit = async () => {
     const isWalkIn = orderData.customer?.name === 'Walk-in Customer';
     // Walk-in orders skip availability check (immediate counter sale)
-    if (!isWalkIn && !availabilityChecked) {
+    if (!isWalkIn && !availabilityChecked && !availabilityOverridden) {
       toast.error('Please check availability before submitting the order');
       return;
     }
@@ -443,6 +445,28 @@ const CreateOrder = () => {
                   <Typography variant="body2" sx={{ mt: 2 }}>
                     💡 Suggestion: Adjust delivery date or reduce quantities
                   </Typography>
+                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {!availabilityOverridden ? (
+                      <Button
+                        variant="outlined"
+                        color="warning"
+                        size="small"
+                        onClick={() => {
+                          setAvailabilityOverridden(true);
+                          toast.warning('Proceeding with insufficient inventory. Lots must be allocated manually.');
+                        }}
+                      >
+                        Proceed Anyway
+                      </Button>
+                    ) : (
+                      <Chip
+                        label="Override active — inventory shortfall acknowledged"
+                        color="warning"
+                        size="small"
+                        onDelete={() => setAvailabilityOverridden(false)}
+                      />
+                    )}
+                  </Box>
                 </Alert>
               )}
             </Box>
