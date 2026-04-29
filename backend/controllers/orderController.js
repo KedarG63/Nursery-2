@@ -1018,6 +1018,58 @@ const getRecentOrders = async (req, res) => {
   }
 };
 
+/**
+ * Soft-delete an order (move to trash)
+ * DELETE /api/orders/:id
+ */
+const deleteOrder = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    await client.query('BEGIN');
+
+    const orderResult = await client.query(
+      `SELECT id, order_number, status FROM orders WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+
+    if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const order = orderResult.rows[0];
+
+    if (['delivered', 'out_for_delivery'].includes(order.status)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete an order with status "${order.status}"`,
+      });
+    }
+
+    await client.query(
+      `UPDATE orders SET deleted_at = NOW(), deleted_by = $1, updated_at = NOW() WHERE id = $2`,
+      [userId, id]
+    );
+    await client.query(
+      `UPDATE order_items SET deleted_at = NOW(), updated_at = NOW() WHERE order_id = $1`,
+      [id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: `Order ${order.order_number} deleted successfully` });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting order:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete order' });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   createOrder,
   listOrders,
@@ -1027,4 +1079,5 @@ module.exports = {
   allocateLots,
   getOrderTimeline,
   checkAvailability,
+  deleteOrder,
 };

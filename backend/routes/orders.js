@@ -89,4 +89,11 @@ router.post(
  */
 router.get('/:id/timeline', orderController.getOrderTimeline);
 
+/**
+ * DELETE /api/orders/:id
+ * Soft-delete an order
+ * Access: Admin, Manager
+ */
+router.delete('/:id', authorize(['Admin', 'Manager']), orderController.deleteOrder);
+
 module.exports = router;

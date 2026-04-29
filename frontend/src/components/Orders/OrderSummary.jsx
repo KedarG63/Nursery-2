@@ -152,7 +152,7 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                   Order Date
                 </Typography>
                 <Typography variant="body1">
-                  {formatDate(order.created_at || order.order_date)}
+                  {formatDate(order.order_date || order.created_at)}
                 </Typography>
               </Grid>
 

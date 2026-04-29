@@ -106,6 +106,15 @@ export const checkAvailability = async (items, deliveryDate = null) => {
   }
 };
 
+export const deleteOrder = async (id) => {
+  try {
+    const response = await api.delete(`/api/orders/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export default {
   getOrders,
   getOrder,
@@ -113,5 +122,6 @@ export default {
   updateOrderStatus,
   allocateLots,
   getOrderTimeline,
-  checkAvailability
+  checkAvailability,
+  deleteOrder,
 };

@@ -7,17 +7,24 @@ import {
   Breadcrumbs,
   Link,
   CircularProgress,
-  Grid
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
-  Print as PrintIcon
+  Print as PrintIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import OrderSummary from '../../components/Orders/OrderSummary';
 import OrderTimeline from '../../components/Orders/OrderTimeline';
-import { getOrder, getOrderTimeline } from '../../services/orderService';
+import { getOrder, getOrderTimeline, deleteOrder } from '../../services/orderService';
+import { canEdit } from '../../utils/roleCheck';
 
 /**
  * Order Details Page
@@ -26,10 +33,14 @@ import { getOrder, getOrderTimeline } from '../../services/orderService';
 const OrderDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
+  const userRole = user?.roles;
 
   const [order, setOrder] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /**
    * Fetch order details and timeline
@@ -79,6 +90,20 @@ const OrderDetails = () => {
    */
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      setDeleting(true);
+      await deleteOrder(id);
+      toast.success('Order deleted successfully');
+      navigate('/orders');
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete order');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
   };
 
   if (loading) {
@@ -141,14 +166,27 @@ const OrderDetails = () => {
           </div>
         </Box>
 
-        <Button
-          variant="outlined"
-          startIcon={<PrintIcon />}
-          onClick={handlePrint}
-          sx={{ height: 'fit-content' }}
-        >
-          Print
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {canEdit(userRole) && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => setDeleteDialogOpen(true)}
+              sx={{ height: 'fit-content' }}
+            >
+              Delete
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+            sx={{ height: 'fit-content' }}
+          >
+            Print
+          </Button>
+        </Box>
       </Box>
 
       {/* Order Summary */}
@@ -158,6 +196,23 @@ const OrderDetails = () => {
 
       {/* Order Timeline */}
       <OrderTimeline timeline={timeline} />
+
+      {/* Delete Confirmation */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete Order?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete <strong>Order #{order?.order_number}</strong>?
+            This will move the order to trash and can be restored later.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete Order'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
