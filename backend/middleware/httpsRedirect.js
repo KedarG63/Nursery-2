@@ -3,8 +3,9 @@ const logger = require('../config/logger');
 // Redirect HTTP to HTTPS in production
 const httpsRedirect = (req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
-    // Check if request is over HTTP
-    if (req.header('x-forwarded-proto') !== 'https') {
+    // Only redirect when a proxy explicitly signals HTTP (internal requests have no header)
+    const proto = req.header('x-forwarded-proto');
+    if (proto && proto !== 'https') {
       logger.warn('HTTP request redirected to HTTPS', {
         ip: req.ip,
         url: req.originalUrl,
