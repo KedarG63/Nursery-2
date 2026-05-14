@@ -78,6 +78,13 @@ router.get(
 );
 
 // ─── Applied Payments ─────────────────────────────────────────────────────
+// Record a brand-new payment and apply it to the invoice in one step
+router.post(
+  '/:id/record-payment',
+  authorize(['Admin', 'Manager', 'Sales']),
+  invoiceController.recordInvoicePayment
+);
+
 router.post(
   '/:id/payments',
   authorize(['Admin', 'Manager', 'Sales']),

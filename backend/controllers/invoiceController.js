@@ -571,6 +571,110 @@ const applyPayment = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECORD NEW PAYMENT DIRECTLY ON INVOICE
+// POST /api/invoices/:id/record-payment
+// Creates a payment + applies it to the invoice + syncs parent order — one step
+// ─────────────────────────────────────────────────────────────────────────────
+const recordInvoicePayment = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { amount, payment_method, payment_date, receipt_number, notes, bank_account_id } = req.body;
+    const userId = req.user.id;
+
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
+    }
+    if (!payment_method) {
+      return res.status(400).json({ success: false, message: 'payment_method is required' });
+    }
+
+    await client.query('BEGIN');
+
+    // Lock invoice
+    const invResult = await client.query(
+      `SELECT id, customer_id, order_id, status, balance_amount, total_amount
+       FROM invoices WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      [id]
+    );
+    if (invResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Invoice not found' });
+    }
+    const invoice = invResult.rows[0];
+
+    if (!['issued', 'partially_paid'].includes(invoice.status)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: `Cannot record payment on a ${invoice.status} invoice` });
+    }
+
+    const amountNum = Math.round(parseFloat(amount) * 100) / 100;
+    const balance = parseFloat(invoice.balance_amount);
+
+    if (amountNum > balance + 0.005) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: `Amount (₹${amountNum}) exceeds invoice balance (₹${balance.toFixed(2)})` });
+    }
+
+    const effectiveAmount = Math.min(amountNum, balance);
+
+    // Create payment record
+    const paymentResult = await client.query(
+      `INSERT INTO payments (
+         order_id, customer_id, payment_method, payment_gateway,
+         amount, status, payment_date, receipt_number, received_by,
+         notes, bank_account_id, created_by
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id`,
+      [
+        invoice.order_id || null,
+        invoice.customer_id,
+        payment_method,
+        'manual',
+        effectiveAmount,
+        'success',
+        payment_date || new Date().toISOString().split('T')[0],
+        receipt_number || null,
+        userId,
+        notes || null,
+        bank_account_id || null,
+        userId,
+      ]
+    );
+    const paymentId = paymentResult.rows[0].id;
+
+    // Apply to invoice (trigger updates invoices.paid_amount + status)
+    await client.query(
+      `INSERT INTO invoice_payments (invoice_id, payment_id, amount_applied, applied_by, notes)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, paymentId, effectiveAmount, userId, notes || null]
+    );
+
+    // Sync parent order paid_amount (capped at total to prevent overpayment)
+    if (invoice.order_id) {
+      await client.query(
+        `UPDATE orders
+         SET paid_amount = LEAST(total_amount, paid_amount + $1),
+             updated_at  = NOW()
+         WHERE id = $2`,
+        [effectiveAmount, invoice.order_id]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    logger.info('Payment recorded on invoice', { invoiceId: id, paymentId, amount: effectiveAmount, userId });
+    res.status(201).json({ success: true, message: 'Payment recorded successfully', data: { payment_id: paymentId, amount_applied: effectiveAmount } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REMOVE APPLIED PAYMENT
 // DELETE /api/invoices/:id/payments/:paymentId
 // ─────────────────────────────────────────────────────────────────────────────
@@ -775,6 +879,7 @@ module.exports = {
   updateInvoice,
   issueInvoice,
   voidInvoice,
+  recordInvoicePayment,
   applyPayment,
   removePayment,
   generatePDF,

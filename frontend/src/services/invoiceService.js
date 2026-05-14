@@ -59,6 +59,15 @@ export const voidInvoice = async (id) => {
   }
 };
 
+export const recordInvoicePayment = async (id, paymentData) => {
+  try {
+    const response = await api.post(`/api/invoices/${id}/record-payment`, paymentData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const applyPayment = async (id, paymentData) => {
   try {
     const response = await api.post(`/api/invoices/${id}/payments`, paymentData);

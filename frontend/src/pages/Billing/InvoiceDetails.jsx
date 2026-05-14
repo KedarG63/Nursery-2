@@ -4,6 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Alert, CircularProgress, Breadcrumbs, Link, IconButton, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  TextField, MenuItem, Select, FormControl, InputLabel,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -15,7 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { getInvoice, issueInvoice, voidInvoice, removePayment, openInvoicePDF } from '../../services/invoiceService';
+import { getInvoice, issueInvoice, voidInvoice, removePayment, openInvoicePDF, recordInvoicePayment } from '../../services/invoiceService';
 import BillingStatusBadge from '../../components/Billing/BillingStatusBadge';
 import InvoiceItemsTable from '../../components/Billing/InvoiceItemsTable';
 import ApplyPaymentModal from '../../components/Billing/ApplyPaymentModal';
@@ -30,6 +31,10 @@ const InvoiceDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const [recordPaymentForm, setRecordPaymentForm] = useState({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' });
+  const [recordPaymentError, setRecordPaymentError] = useState('');
+  const [recordPaymentLoading, setRecordPaymentLoading] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -96,6 +101,31 @@ const InvoiceDetails = () => {
       await openInvoicePDF(id);
     } catch {
       toast.error('Could not open invoice PDF');
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    setRecordPaymentError('');
+    const amt = parseFloat(recordPaymentForm.amount);
+    if (isNaN(amt) || amt <= 0) { setRecordPaymentError('Amount must be greater than 0'); return; }
+    if (!recordPaymentForm.payment_method) { setRecordPaymentError('Payment method is required'); return; }
+    setRecordPaymentLoading(true);
+    try {
+      await recordInvoicePayment(id, {
+        amount: amt,
+        payment_method: recordPaymentForm.payment_method,
+        payment_date: recordPaymentForm.payment_date || undefined,
+        receipt_number: recordPaymentForm.receipt_number || undefined,
+        notes: recordPaymentForm.notes || undefined,
+      });
+      toast.success('Payment recorded successfully');
+      setRecordPaymentOpen(false);
+      setRecordPaymentForm({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' });
+      fetchInvoice();
+    } catch (err) {
+      setRecordPaymentError(err?.message || 'Failed to record payment');
+    } finally {
+      setRecordPaymentLoading(false);
     }
   };
 
@@ -261,14 +291,28 @@ const InvoiceDetails = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="h6">Applied Payments</Typography>
           {canApplyPayment && (
-            <Button
-              startIcon={<AddIcon />}
-              size="small"
-              variant="outlined"
-              onClick={() => setApplyModalOpen(true)}
-            >
-              Apply Payment
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                startIcon={<AddIcon />}
+                size="small"
+                variant="contained"
+                color="success"
+                onClick={() => {
+                  setRecordPaymentForm((f) => ({ ...f, amount: parseFloat(invoice.balance_amount) || '' }));
+                  setRecordPaymentOpen(true);
+                }}
+              >
+                Record Payment
+              </Button>
+              <Button
+                startIcon={<AddIcon />}
+                size="small"
+                variant="outlined"
+                onClick={() => setApplyModalOpen(true)}
+              >
+                Apply Existing
+              </Button>
+            </Stack>
           )}
         </Box>
 
@@ -375,6 +419,68 @@ const InvoiceDetails = () => {
           <Button onClick={() => setVoidDialogOpen(false)} disabled={actionLoading}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleVoid} disabled={actionLoading}>
             {actionLoading ? 'Voiding…' : 'Void Invoice'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={recordPaymentOpen} onClose={() => !recordPaymentLoading && setRecordPaymentOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Record Payment</DialogTitle>
+        <DialogContent>
+          {recordPaymentError && <Alert severity="error" sx={{ mb: 2 }}>{recordPaymentError}</Alert>}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Amount"
+              type="number"
+              fullWidth
+              required
+              value={recordPaymentForm.amount}
+              onChange={(e) => setRecordPaymentForm((f) => ({ ...f, amount: e.target.value }))}
+              inputProps={{ min: 0, step: 0.01 }}
+              helperText={`Balance due: ${formatCurrency(invoice.balance_amount)}`}
+            />
+            <TextField
+              label="Payment Method"
+              select
+              fullWidth
+              required
+              value={recordPaymentForm.payment_method}
+              onChange={(e) => setRecordPaymentForm((f) => ({ ...f, payment_method: e.target.value }))}
+            >
+              <MenuItem value="cash">Cash</MenuItem>
+              <MenuItem value="upi">UPI</MenuItem>
+              <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+              <MenuItem value="card">Card</MenuItem>
+            </TextField>
+            <TextField
+              label="Payment Date"
+              type="date"
+              fullWidth
+              required
+              value={recordPaymentForm.payment_date}
+              onChange={(e) => setRecordPaymentForm((f) => ({ ...f, payment_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              label="Receipt / Reference Number"
+              fullWidth
+              value={recordPaymentForm.receipt_number}
+              onChange={(e) => setRecordPaymentForm((f) => ({ ...f, receipt_number: e.target.value }))}
+            />
+            <TextField
+              label="Notes (Optional)"
+              fullWidth
+              multiline
+              rows={2}
+              value={recordPaymentForm.notes}
+              onChange={(e) => setRecordPaymentForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRecordPaymentOpen(false)} disabled={recordPaymentLoading}>Cancel</Button>
+          <Button variant="contained" color="success" onClick={handleRecordPayment} disabled={recordPaymentLoading}>
+            {recordPaymentLoading ? 'Recording…' : 'Record Payment'}
           </Button>
         </DialogActions>
       </Dialog>
