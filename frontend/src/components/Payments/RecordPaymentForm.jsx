@@ -68,7 +68,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const fetchOutstandingOrders = async () => {
     setLoadingOrders(true);
     try {
-      const response = await getOrders({ has_balance: true, limit: 200 });
+      const response = await getOrders({ has_balance: true, limit: 100 });
       setOrders(response.data || response.orders || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
