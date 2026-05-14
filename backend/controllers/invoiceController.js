@@ -618,14 +618,24 @@ const recordInvoicePayment = async (req, res, next) => {
 
     const effectiveAmount = Math.min(amountNum, balance);
 
-    // Create payment record
+    // For non-cash/credit methods, gateway_transaction_id must not be null (DB constraint).
+    // Use receipt_number as the reference, or generate a manual placeholder.
+    const needsGatewayRef = !['cash', 'credit'].includes(payment_method);
+    const gatewayTransactionId = needsGatewayRef
+      ? (receipt_number || `MANUAL-${Date.now()}`)
+      : null;
+
+    // Create payment record.
+    // Note: the trigger `update_order_paid_amount` fires on INSERT (status='success')
+    // and already updates orders.paid_amount — no manual UPDATE needed.
     const paymentResult = await client.query(
       `INSERT INTO payments (
          order_id, customer_id, payment_method, payment_gateway,
-         amount, status, payment_date, receipt_number, received_by,
+         amount, status, payment_date, receipt_number,
+         gateway_transaction_id, received_by,
          notes, bank_account_id, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         invoice.order_id || null,
@@ -636,6 +646,7 @@ const recordInvoicePayment = async (req, res, next) => {
         'success',
         payment_date || new Date().toISOString().split('T')[0],
         receipt_number || null,
+        gatewayTransactionId,
         userId,
         notes || null,
         bank_account_id || null,
@@ -650,17 +661,6 @@ const recordInvoicePayment = async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [id, paymentId, effectiveAmount, userId, notes || null]
     );
-
-    // Sync parent order paid_amount (capped at total to prevent overpayment)
-    if (invoice.order_id) {
-      await client.query(
-        `UPDATE orders
-         SET paid_amount = LEAST(total_amount, paid_amount + $1),
-             updated_at  = NOW()
-         WHERE id = $2`,
-        [effectiveAmount, invoice.order_id]
-      );
-    }
 
     await client.query('COMMIT');
 
