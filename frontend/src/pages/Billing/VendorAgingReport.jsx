@@ -94,7 +94,6 @@ const VendorAgingReport = () => {
               selected={asOfDate}
               onChange={setAsOfDate}
               dateFormat="dd/MM/yyyy"
-              maxDate={new Date()}
               customInput={
                 <input
                   readOnly

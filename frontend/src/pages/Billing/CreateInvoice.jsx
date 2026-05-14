@@ -11,6 +11,7 @@ import { format, addDays } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { getOrders, getOrder } from '../../services/orderService';
+import { getCustomers } from '../../services/customerService';
 import { createInvoice } from '../../services/invoiceService';
 import InvoiceItemsTable from '../../components/Billing/InvoiceItemsTable';
 
@@ -24,10 +25,14 @@ const CreateInvoice = () => {
   const [error, setError] = useState('');
 
   // Step 1 state
+  const [manualMode, setManualMode] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
   const [orderOptions, setOrderOptions] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [customerOptions, setCustomerOptions] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [manualCustomer, setManualCustomer] = useState(null);
 
   // Step 2 state
   const [items, setItems] = useState([]);
@@ -60,6 +65,34 @@ const CreateInvoice = () => {
   const handleOrderSearch = useCallback((value) => {
     loadOrders(value);
   }, [loadOrders]);
+
+  const loadCustomers = useCallback(async (searchValue) => {
+    setLoadingCustomers(true);
+    try {
+      const params = { limit: 50 };
+      if (searchValue && searchValue.length >= 2) params.search = searchValue;
+      const result = await getCustomers(params);
+      setCustomerOptions(result.data || []);
+    } catch {
+      setCustomerOptions([]);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  }, []);
+
+  const handleEnterManualMode = () => {
+    setManualMode(true);
+    setSelectedOrder(null);
+    setItems([]);
+    setError('');
+  };
+
+  const handleEnterOrderMode = () => {
+    setManualMode(false);
+    setManualCustomer(null);
+    setItems([]);
+    setError('');
+  };
 
   // When order is selected: fetch its items and default due date
   const handleSelectOrder = async (order) => {
@@ -96,9 +129,15 @@ const CreateInvoice = () => {
 
   const handleNext = () => {
     setError('');
-    if (activeStep === 0 && !selectedOrder) {
-      setError('Please select an order to continue.');
-      return;
+    if (activeStep === 0) {
+      if (manualMode && !manualCustomer) {
+        setError('Please select a customer to continue.');
+        return;
+      }
+      if (!manualMode && !selectedOrder) {
+        setError('Please select an order to continue.');
+        return;
+      }
     }
     if (activeStep === 1 && items.length === 0) {
       setError('Please add at least one item.');
@@ -115,14 +154,13 @@ const CreateInvoice = () => {
   const handleSubmit = async (issue) => {
     if (!dueDate) { setError('Please set a due date.'); return; }
     if (!invoiceDate) { setError('Please set an invoice date.'); return; }
-    if (new Date(dueDate) < new Date(invoiceDate)) { setError('Due date must be on or after invoice date.'); return; }
 
     setSubmitting(true);
     setError('');
     try {
       const payload = {
-        customer_id: selectedOrder.customer_id,
-        order_id: selectedOrder.id,
+        customer_id: manualMode ? manualCustomer.id : selectedOrder.customer_id,
+        order_id: manualMode ? undefined : selectedOrder.id,
         invoice_date: format(invoiceDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         discount_amount: parseFloat(discountAmount) || 0,
@@ -178,57 +216,103 @@ const CreateInvoice = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* Step 1: Select Order */}
+      {/* Step 1: Select Order or Manual */}
       {activeStep === 0 && (
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Select an Order</Typography>
-          <Autocomplete
-            options={orderOptions}
-            getOptionLabel={(o) => `${o.order_number} — ${o.customer_name || ''} (${o.status})`}
-            onOpen={() => loadOrders('')}
-            onInputChange={(_, value) => handleOrderSearch(value)}
-            onChange={(_, value) => handleSelectOrder(value)}
-            loading={loadingOrders}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Search by order number or customer"
-                size="small"
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {loadingOrders ? <CircularProgress size={16} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
-                }}
+          {!manualMode ? (
+            <>
+              <Typography variant="h6" sx={{ mb: 2 }}>Select an Order</Typography>
+              <Autocomplete
+                options={orderOptions}
+                getOptionLabel={(o) => `${o.order_number} — ${o.customer_name || ''} (${o.status})`}
+                onOpen={() => loadOrders('')}
+                onInputChange={(_, value) => handleOrderSearch(value)}
+                onChange={(_, value) => handleSelectOrder(value)}
+                loading={loadingOrders}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Search by order number or customer"
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loadingOrders ? <CircularProgress size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                sx={{ mb: 2 }}
               />
-            )}
-            sx={{ mb: 2 }}
-          />
 
-          {selectedOrder && (
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={6} sm={3}>
-                  <Typography variant="caption" color="text.secondary">Order #</Typography>
-                  <Typography variant="body2" fontWeight={600}>{selectedOrder.order_number}</Typography>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Typography variant="caption" color="text.secondary">Customer</Typography>
-                  <Typography variant="body2">{selectedOrder.customer_name || selectedOrder.customer?.name}</Typography>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Typography variant="caption" color="text.secondary">Status</Typography>
-                  <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{selectedOrder.status}</Typography>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Typography variant="caption" color="text.secondary">Total</Typography>
-                  <Typography variant="body2">₹{parseFloat(selectedOrder.total_amount || 0).toLocaleString('en-IN')}</Typography>
-                </Grid>
-              </Grid>
-            </Paper>
+              {selectedOrder && (
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">Order #</Typography>
+                      <Typography variant="body2" fontWeight={600}>{selectedOrder.order_number}</Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">Customer</Typography>
+                      <Typography variant="body2">{selectedOrder.customer_name || selectedOrder.customer?.name}</Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">Status</Typography>
+                      <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{selectedOrder.status}</Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">Total</Typography>
+                      <Typography variant="body2">₹{parseFloat(selectedOrder.total_amount || 0).toLocaleString('en-IN')}</Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              )}
+
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 1 }}>
+                <Typography variant="body2" color="text.secondary">No order to link?</Typography>
+                <Button size="small" variant="outlined" onClick={handleEnterManualMode}>
+                  Create Manual Invoice
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <>
+              <Typography variant="h6" sx={{ mb: 1 }}>Manual Invoice</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select a customer and add line items manually — no order required.
+              </Typography>
+              <Autocomplete
+                options={customerOptions}
+                getOptionLabel={(c) => `${c.name}${c.phone ? ' — ' + c.phone : ''}`}
+                onOpen={() => loadCustomers('')}
+                onInputChange={(_, value) => loadCustomers(value)}
+                onChange={(_, value) => setManualCustomer(value)}
+                loading={loadingCustomers}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select customer *"
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loadingCustomers ? <CircularProgress size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                sx={{ mb: 2 }}
+              />
+              <Button size="small" variant="text" onClick={handleEnterOrderMode}>
+                ← Back to order-based invoice
+              </Button>
+            </>
           )}
         </Paper>
       )}
@@ -238,7 +322,9 @@ const CreateInvoice = () => {
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>Invoice Line Items</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Items are pre-filled from the order. You can adjust prices, quantities, or add/remove items.
+            {manualMode
+              ? 'Add line items manually. Fill in description, quantity, and price for each item.'
+              : 'Items are pre-filled from the order. You can adjust prices, quantities, or add/remove items.'}
           </Typography>
           <InvoiceItemsTable
             items={items}
@@ -276,7 +362,6 @@ const CreateInvoice = () => {
                   selected={dueDate}
                   onChange={setDueDate}
                   dateFormat="dd/MM/yyyy"
-                  minDate={invoiceDate}
                   customInput={<TextField size="small" fullWidth />}
                 />
               </Box>

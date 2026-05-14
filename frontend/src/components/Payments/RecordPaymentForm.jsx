@@ -105,10 +105,6 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
           : 'Transaction reference is required';
     }
 
-    if (new Date(formData.paymentDate) > new Date()) {
-      newErrors.paymentDate = 'Payment date cannot be in the future';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
