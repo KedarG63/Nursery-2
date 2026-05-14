@@ -362,7 +362,7 @@ const recordOfflinePayment = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { order_id, amount, payment_method, receipt_number, notes, bank_account_id } =
+    const { order_id, amount, payment_method, receipt_number, notes, bank_account_id, payment_date } =
       req.body;
     const userId = req.user?.id;
 
@@ -444,7 +444,7 @@ const recordOfflinePayment = async (req, res) => {
          amount, status, payment_date, receipt_number, received_by,
          notes, bank_account_id, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         order_id,
@@ -453,6 +453,7 @@ const recordOfflinePayment = async (req, res) => {
         'manual',
         effectivePayment,
         'success',
+        payment_date || new Date().toISOString().split('T')[0],
         receipt_number,
         userId,
         notes,

@@ -68,7 +68,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const fetchOutstandingOrders = async () => {
     setLoadingOrders(true);
     try {
-      const response = await getOrders({ has_balance: true });
+      const response = await getOrders({ has_balance: true, limit: 200 });
       setOrders(response.data || response.orders || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -123,6 +123,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
         order_id: formData.orderId,
         amount: parseFloat(formData.amount),
         payment_method: formData.paymentMethod,
+        payment_date: formData.paymentDate,
       };
 
       // Only include receipt_number if it has a value
@@ -216,9 +217,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
               <Autocomplete
                 options={orders}
                 getOptionLabel={(option) =>
-                  `${option.order_number} - ${option.customer_name} (${formatCurrency(
-                    option.balance_amount
-                  )})`
+                  `${option.order_number} - ${option.customer_name} | Due: ${formatCurrency(option.balance_amount)} of ${formatCurrency(option.total_amount)}`
                 }
                 loading={loadingOrders}
                 value={selectedOrder}
