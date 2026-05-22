@@ -171,6 +171,16 @@ export const getPaymentInstallments = async (orderId) => {
   return response.data;
 };
 
+export const deletePayment = async (paymentId) => {
+  const response = await api.delete(`/api/payments/${paymentId}`);
+  return response.data;
+};
+
+export const updatePayment = async (paymentId, data) => {
+  const response = await api.patch(`/api/payments/${paymentId}`, data);
+  return response.data;
+};
+
 export default {
   getPayments,
   getPaymentById,
@@ -187,4 +197,6 @@ export default {
   getPaymentSummary,
   getUpcomingPayments,
   getPaymentInstallments,
+  deletePayment,
+  updatePayment,
 };

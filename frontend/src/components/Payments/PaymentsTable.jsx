@@ -21,11 +21,12 @@ import {
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
-  Visibility as ViewIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 
-const PaymentsTable = ({ payments, totalCount, page, limit, onPageChange, onViewReceipt }) => {
+const PaymentsTable = ({ payments, totalCount, page, limit, onPageChange, onViewReceipt, onEdit, onDelete, isAdmin }) => {
   const [rowsPerPage, setRowsPerPage] = useState(limit || 20);
 
   const handleChangePage = (event, newPage) => {
@@ -152,14 +153,24 @@ const PaymentsTable = ({ payments, totalCount, page, limit, onPageChange, onView
                 <TableCell align="center">
                   <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                     <Tooltip title="View Receipt">
-                      <IconButton
-                        size="small"
-                        onClick={() => onViewReceipt(payment.id)}
-                        color="primary"
-                      >
+                      <IconButton size="small" onClick={() => onViewReceipt(payment.id)} color="primary">
                         <ReceiptIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    {isAdmin && payment.status === 'success' && (
+                      <>
+                        <Tooltip title="Edit Payment">
+                          <IconButton size="small" onClick={() => onEdit(payment)} color="warning">
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete Payment">
+                          <IconButton size="small" onClick={() => onDelete(payment)} color="error">
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
                   </Box>
                 </TableCell>
               </TableRow>

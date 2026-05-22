@@ -15,6 +15,13 @@ import {
   InputAdornment,
   CircularProgress,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  MenuItem,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -24,21 +31,42 @@ import {
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { toast } from 'react-toastify';
+import { useSelector } from 'react-redux';
 import PaymentsTable from '../../components/Payments/PaymentsTable';
 import RecordPaymentForm from '../../components/Payments/RecordPaymentForm';
-import { getPayments, generateReceipt, exportPayments } from '../../services/paymentService';
+import { getPayments, generateReceipt, exportPayments, deletePayment, updatePayment } from '../../services/paymentService';
 import { format } from 'date-fns';
+
+const PAYMENT_METHODS_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'card', label: 'Card' },
+];
 
 const PAYMENT_METHODS = ['cash', 'upi', 'card', 'bank_transfer', 'credit', 'razorpay'];
 const STATUSES = ['success', 'pending', 'failed', 'refunded'];
 
 const PaymentsList = () => {
+  const { user } = useSelector((state) => state.auth);
+  const isAdmin = user?.roles?.some((r) => ['Admin'].includes(r));
+
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Edit state
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({ amount: '', payment_method: '', payment_date: '', receipt_number: '', notes: '' });
+  const [editError, setEditError] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -144,6 +172,57 @@ const PaymentsList = () => {
       ...filters,
       status: filters.status === status ? '' : status,
     });
+  };
+
+  const handleDeleteClick = (payment) => setDeleteTarget(payment);
+
+  const handleDeleteConfirm = async () => {
+    setDeleteLoading(true);
+    try {
+      await deletePayment(deleteTarget.id);
+      toast.success('Payment deleted and balances reversed');
+      setDeleteTarget(null);
+      fetchPayments();
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete payment');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleEditClick = (payment) => {
+    setEditTarget(payment);
+    setEditError('');
+    setEditForm({
+      amount: payment.amount,
+      payment_method: payment.payment_method,
+      payment_date: payment.payment_date ? format(new Date(payment.payment_date), 'yyyy-MM-dd') : '',
+      receipt_number: payment.receipt_number || '',
+      notes: payment.notes || '',
+    });
+  };
+
+  const handleEditSave = async () => {
+    setEditError('');
+    const amt = parseFloat(editForm.amount);
+    if (isNaN(amt) || amt <= 0) { setEditError('Amount must be greater than 0'); return; }
+    setEditLoading(true);
+    try {
+      await updatePayment(editTarget.id, {
+        amount: amt,
+        payment_method: editForm.payment_method,
+        payment_date: editForm.payment_date || undefined,
+        receipt_number: editForm.receipt_number || undefined,
+        notes: editForm.notes || undefined,
+      });
+      toast.success('Payment updated successfully');
+      setEditTarget(null);
+      fetchPayments();
+    } catch (err) {
+      setEditError(err?.message || 'Failed to update payment');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   return (
@@ -277,6 +356,9 @@ const PaymentsList = () => {
           limit={limit}
           onPageChange={handlePageChange}
           onViewReceipt={handleViewReceipt}
+          isAdmin={isAdmin}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
         />
       )}
 
@@ -286,6 +368,83 @@ const PaymentsList = () => {
         onClose={() => setRecordPaymentOpen(false)}
         onSuccess={fetchPayments}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onClose={() => !deleteLoading && setDeleteTarget(null)}>
+        <DialogTitle>Delete Payment?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete the payment of <strong>₹{parseFloat(deleteTarget?.amount || 0).toLocaleString('en-IN')}</strong> recorded on{' '}
+            <strong>{deleteTarget?.payment_date ? format(new Date(deleteTarget.payment_date), 'dd MMM yyyy') : '—'}</strong>.
+            <br /><br />
+            The order and invoice balances will be automatically reversed. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteConfirm} disabled={deleteLoading}>
+            {deleteLoading ? 'Deleting…' : 'Delete Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Payment Dialog */}
+      <Dialog open={!!editTarget} onClose={() => !editLoading && setEditTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit Payment</DialogTitle>
+        <DialogContent>
+          {editError && <Alert severity="error" sx={{ mb: 2 }}>{editError}</Alert>}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Amount"
+              type="number"
+              fullWidth
+              required
+              value={editForm.amount}
+              onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <TextField
+              label="Payment Method"
+              select
+              fullWidth
+              value={editForm.payment_method}
+              onChange={(e) => setEditForm((f) => ({ ...f, payment_method: e.target.value }))}
+            >
+              {PAYMENT_METHODS_OPTIONS.map((m) => (
+                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Payment Date"
+              type="date"
+              fullWidth
+              value={editForm.payment_date}
+              onChange={(e) => setEditForm((f) => ({ ...f, payment_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              label="Receipt / Reference Number"
+              fullWidth
+              value={editForm.receipt_number}
+              onChange={(e) => setEditForm((f) => ({ ...f, receipt_number: e.target.value }))}
+            />
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              rows={2}
+              value={editForm.notes}
+              onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditTarget(null)} disabled={editLoading}>Cancel</Button>
+          <Button variant="contained" color="primary" onClick={handleEditSave} disabled={editLoading}>
+            {editLoading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -107,4 +107,18 @@ router.get('/installments/:orderId', paymentController.getOrderInstallments);
  */
 router.get('/:id/receipt', paymentController.generateReceipt);
 
+/**
+ * PATCH /api/payments/:id
+ * Edit a payment (amount, method, date, receipt, notes)
+ * Access: Admin only
+ */
+router.patch('/:id', authorize(['Admin']), paymentController.updatePayment);
+
+/**
+ * DELETE /api/payments/:id
+ * Soft-delete a payment and reverse order/invoice balances
+ * Access: Admin only
+ */
+router.delete('/:id', authorize(['Admin']), paymentController.deletePayment);
+
 module.exports = router;

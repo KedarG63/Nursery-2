@@ -1069,6 +1069,154 @@ const generateReceipt = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE PAYMENT (Admin only)
+// DELETE /api/payments/:id
+// Soft-deletes the payment and atomically reverses the order + invoice balances.
+// ─────────────────────────────────────────────────────────────────────────────
+const deletePayment = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    await client.query('BEGIN');
+
+    const payResult = await client.query(
+      `SELECT id, order_id, amount, status, deleted_at FROM payments WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
+    if (payResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+    const payment = payResult.rows[0];
+    if (payment.deleted_at) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Payment is already deleted' });
+    }
+    if (payment.status !== 'success') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Only successful payments can be deleted' });
+    }
+
+    // Remove invoice links — the trigger recalculates invoice paid_amount + status
+    await client.query(`DELETE FROM invoice_payments WHERE payment_id = $1`, [id]);
+
+    // Soft-delete the payment record
+    await client.query(
+      `UPDATE payments SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    // Reverse the order paid_amount (capped at 0)
+    if (payment.order_id) {
+      await client.query(
+        `UPDATE orders
+         SET paid_amount = GREATEST(0, paid_amount - $1),
+             updated_at  = NOW()
+         WHERE id = $2`,
+        [payment.amount, payment.order_id]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Payment deleted and balances reversed' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATE PAYMENT (Admin only)
+// PATCH /api/payments/:id
+// Edits amount/method/date/receipt/notes and adjusts order + invoice balances.
+// ─────────────────────────────────────────────────────────────────────────────
+const updatePayment = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { amount, payment_method, payment_date, receipt_number, notes } = req.body;
+
+    await client.query('BEGIN');
+
+    const payResult = await client.query(
+      `SELECT id, order_id, amount, payment_method, status, deleted_at FROM payments WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
+    if (payResult.rows.length === 0 || payResult.rows[0].deleted_at) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+    const payment = payResult.rows[0];
+    if (payment.status !== 'success') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Only successful payments can be edited' });
+    }
+
+    const oldAmount = parseFloat(payment.amount);
+    const newAmount = amount != null ? Math.round(parseFloat(amount) * 100) / 100 : oldAmount;
+
+    if (newAmount <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
+    }
+
+    const amountDiff = newAmount - oldAmount;
+
+    // Build the SET clause dynamically from whichever fields were sent
+    const setClauses = ['updated_at = NOW()'];
+    const params = [];
+
+    if (amount != null)         { params.push(newAmount);        setClauses.push(`amount = $${params.length}`); }
+    if (payment_method != null) { params.push(payment_method);   setClauses.push(`payment_method = $${params.length}`); }
+    if (payment_date != null)   { params.push(payment_date);     setClauses.push(`payment_date = $${params.length}`); }
+    if (receipt_number != null) { params.push(receipt_number);   setClauses.push(`receipt_number = $${params.length}`); }
+    if (notes != null)          { params.push(notes);            setClauses.push(`notes = $${params.length}`); }
+
+    if (params.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    params.push(id);
+    await client.query(
+      `UPDATE payments SET ${setClauses.join(', ')} WHERE id = $${params.length}`,
+      params
+    );
+
+    if (Math.abs(amountDiff) > 0.005) {
+      // Adjust order paid_amount — cap between 0 and total_amount
+      if (payment.order_id) {
+        await client.query(
+          `UPDATE orders
+           SET paid_amount = LEAST(total_amount, GREATEST(0, paid_amount + $1)),
+               updated_at  = NOW()
+           WHERE id = $2`,
+          [amountDiff, payment.order_id]
+        );
+      }
+
+      // Adjust invoice link — the trigger recalculates invoice totals on UPDATE
+      await client.query(
+        `UPDATE invoice_payments
+         SET amount_applied = amount_applied + $1
+         WHERE payment_id = $2`,
+        [amountDiff, id]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Payment updated successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getAllPayments,
   initiatePayment,
@@ -1080,5 +1228,7 @@ module.exports = {
   getPaymentSummary,
   getUpcomingPayments,
   getOrderInstallments,
-  generateReceipt
+  generateReceipt,
+  deletePayment,
+  updatePayment,
 };
