@@ -208,7 +208,9 @@ const listPurchases = async (req, res) => {
       query += ` AND (
         sp.purchase_number ILIKE $${paramCount} OR
         sp.seed_lot_number ILIKE $${paramCount} OR
-        sp.invoice_number ILIKE $${paramCount}
+        sp.invoice_number ILIKE $${paramCount} OR
+        v.vendor_name ILIKE $${paramCount} OR
+        p.name ILIKE $${paramCount}
       )`;
       params.push(`%${search}%`);
     }

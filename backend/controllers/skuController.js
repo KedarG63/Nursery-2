@@ -30,7 +30,8 @@ async function getAllSKUs(req, res) {
       limit = 50,
       offset = 0,
       product_id = '',
-        active = '',
+      active = '',
+      search = '',
     } = req.query;
 
     // Build query dynamically
@@ -55,6 +56,13 @@ async function getAllSKUs(req, res) {
       paramCount++;
       conditions.push(`s.active = $${paramCount}`);
       params.push(active === 'true');
+    }
+
+    // Search by SKU code, variety name, or parent product name
+    if (search) {
+      paramCount++;
+      conditions.push(`(s.sku_code ILIKE $${paramCount} OR s.variety ILIKE $${paramCount} OR p.name ILIKE $${paramCount})`);
+      params.push(`%${search}%`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

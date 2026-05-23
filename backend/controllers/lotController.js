@@ -297,8 +297,10 @@ const listLots = async (req, res) => {
     }
 
     if (search) {
-      conditions.push(`l.lot_number ILIKE $${paramCount++}`);
-      params.push(`%${search}%`);
+      const searchParam = `%${search}%`;
+      conditions.push(`(l.lot_number ILIKE $${paramCount} OR p.name ILIKE $${paramCount} OR s.variety ILIKE $${paramCount})`);
+      params.push(searchParam);
+      paramCount++;
     }
 
     // Handle overdue filter
