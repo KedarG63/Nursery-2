@@ -72,8 +72,8 @@ const CustomersList = () => {
       const response = await getCustomers(params);
 
       setCustomers(response.data || response.customers || []);
-      setTotal(response.total || 0);
-      setTotalPages(response.pages || 1);
+      setTotal(response.pagination?.total || response.total || 0);
+      setTotalPages(response.pagination?.pages || response.pages || 1);
     } catch (error) {
       console.error('Error fetching customers:', error);
       toast.error(error.message || 'Failed to load customers');

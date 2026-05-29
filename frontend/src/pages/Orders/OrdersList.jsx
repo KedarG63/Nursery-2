@@ -71,8 +71,8 @@ const OrdersList = () => {
       const response = await getOrders(params);
 
       setOrders(response.data || response.orders || []);
-      setTotal(response.total || 0);
-      setTotalPages(response.pages || 1);
+      setTotal(response.pagination?.total || response.total || 0);
+      setTotalPages(response.pagination?.pages || response.pages || 1);
     } catch (error) {
       console.error('Error fetching orders:', error);
       toast.error(error.message || 'Failed to load orders');

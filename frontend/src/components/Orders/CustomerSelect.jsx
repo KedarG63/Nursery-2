@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useDebounce } from 'use-debounce';
 import {
   Box,
   Autocomplete,
@@ -38,25 +39,29 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
   const [walkInPhone, setWalkInPhone] = useState('');
   const [showWalkInName, setShowWalkInName] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [debouncedInput] = useDebounce(inputValue, 300);
 
-  /**
-   * Fetch customers for autocomplete
-   */
+  // Server-side search: fetch matching customers as user types
   useEffect(() => {
+    if (!debouncedInput || debouncedInput.trim().length < 1) {
+      setCustomers([]);
+      return;
+    }
+    let active = true;
     const fetchCustomers = async () => {
       try {
         setLoading(true);
-        const response = await getCustomers({ limit: 100 });
-        setCustomers(response.data || response.customers || []);
+        const response = await getCustomers({ search: debouncedInput.trim(), limit: 30 });
+        if (active) setCustomers(response.data || response.customers || []);
       } catch (error) {
         console.error('Error fetching customers:', error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-
     fetchCustomers();
-  }, []);
+    return () => { active = false; };
+  }, [debouncedInput]);
 
   /**
    * Find or create the walk-in customer and auto-select it
@@ -173,11 +178,13 @@ const CustomerSelect = ({ selectedCustomer, onCustomerSelect, onWalkInName }) =>
               `${customer.name} - ${formatPhone(customer.phone)}`
             }
             isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterOptions={(x) => x}
+            noOptionsText={debouncedInput?.length >= 1 ? 'No customers found' : 'Type to search customers…'}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Search Customer"
-                placeholder="Type customer name or phone..."
+                placeholder="Type customer name or phone…"
                 required
               />
             )}
