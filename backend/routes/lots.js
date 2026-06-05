@@ -52,7 +52,7 @@ router.get('/:id', authorize(['Admin', 'Manager', 'Warehouse']), validateLotId, 
  * @desc    Create new lot with QR code
  * @access  Admin, Manager
  */
-router.post('/', authorize(['Admin', 'Manager']), validateCreateLot, lotController.createLot);
+router.post('/', authorize(['Admin', 'Manager', 'Warehouse']), validateCreateLot, lotController.createLot);
 
 /**
  * @route   PUT /api/lots/:id/stage
