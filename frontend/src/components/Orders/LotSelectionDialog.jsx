@@ -28,9 +28,7 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
   const [selections, setSelections] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
-  const unallocatedItems = (order?.items || []).filter(
-    (item) => !item.lot_id && !item.lot_number
-  );
+  const allItems = order?.items || [];
 
   // Use delivery_date if set; fall back to today (walk-in / no delivery date)
   const deliveryDate = order?.delivery_date
@@ -38,13 +36,21 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
     : new Date().toISOString().split('T')[0];
 
   const fetchAvailableLots = useCallback(async () => {
-    if (!open || unallocatedItems.length === 0) return;
+    if (!open || allItems.length === 0) return;
 
     setLoadingLots(true);
     setLotsBySkuId({});
-    setSelections({});
 
-    const uniqueSkuIds = [...new Set(unallocatedItems.map((i) => i.sku_id))];
+    // Pre-populate selections with currently allocated lots
+    const initialSelections = {};
+    allItems.forEach((item) => {
+      if (item.lot_id) {
+        initialSelections[item.id] = { lot_id: item.lot_id, quantity: item.quantity };
+      }
+    });
+    setSelections(initialSelections);
+
+    const uniqueSkuIds = [...new Set(allItems.map((i) => i.sku_id))];
     const results = {};
 
     await Promise.all(
@@ -52,7 +58,6 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
         try {
           const response = await lotService.getAllLots({
             sku_id: skuId,
-            ready_date_to: deliveryDate,
             available_only: 'true',
             sort_by: 'planted_date',
             sort_order: 'asc',
@@ -64,6 +69,32 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
         }
       })
     );
+
+    // Ensure currently-assigned lots appear in the list even if available_quantity = 0
+    // (fully-committed lots won't appear in available_only results)
+    for (const item of allItems) {
+      if (item.lot_id && item.lot_number) {
+        const skuLots = results[item.sku_id] || [];
+        const alreadyInList = skuLots.some((l) => l.id === item.lot_id);
+        if (!alreadyInList) {
+          results[item.sku_id] = [
+            {
+              id: item.lot_id,
+              lot_number: item.lot_number,
+              available_quantity: item.quantity,
+              growth_stage: item.growth_stage,
+              expected_ready_date: item.lot_ready_date,
+              _currentlyAssigned: true,
+            },
+            ...skuLots,
+          ];
+        } else {
+          results[item.sku_id] = skuLots.map((l) =>
+            l.id === item.lot_id ? { ...l, _currentlyAssigned: true } : l
+          );
+        }
+      }
+    }
 
     setLotsBySkuId(results);
     setLoadingLots(false);
@@ -77,7 +108,7 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
     const lots = lotsBySkuId[skuId] || [];
     const lot = lots.find((l) => l.id === lotId);
     if (!lot) return;
-    const item = unallocatedItems.find((i) => i.id === itemId);
+    const item = allItems.find((i) => i.id === itemId);
     const defaultQty = Math.min(item?.quantity || 0, lot.available_quantity);
     setSelections((prev) => ({ ...prev, [itemId]: { lot_id: lotId, quantity: defaultQty } }));
   };
@@ -87,21 +118,32 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
     setSelections((prev) => ({ ...prev, [itemId]: { ...prev[itemId], quantity: qty } }));
   };
 
-  const allItemsSelected = unallocatedItems.every(
+  const allItemsSelected = allItems.every(
     (item) => selections[item.id]?.lot_id && selections[item.id]?.quantity > 0
   );
 
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
-      const allocations = unallocatedItems
-        .filter((item) => selections[item.id]?.lot_id)
+      // Only send items where the lot changed or quantity changed (skip unchanged assignments)
+      const allocations = allItems
+        .filter((item) => {
+          const sel = selections[item.id];
+          if (!sel?.lot_id) return false;
+          // Include if lot changed, or quantity changed, or item was previously unallocated
+          return sel.lot_id !== item.lot_id || sel.quantity !== item.quantity || !item.lot_id;
+        })
         .map((item) => ({
           item_id: item.id,
           lot_id: selections[item.id].lot_id,
           quantity: selections[item.id].quantity,
         }));
 
+      if (allocations.length === 0) {
+        toast.info('No changes to save');
+        onClose();
+        return;
+      }
       await allocateLots(order.id, { allocations });
       toast.success('Lots allocated successfully');
       onAllocated();
@@ -137,18 +179,18 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
       fullWidth
       disableEscapeKeyDown={submitting}
     >
-      <DialogTitle>Select Lots for Allocation</DialogTitle>
+      <DialogTitle>Allocate / Re-allocate Lots</DialogTitle>
 
       <DialogContent dividers>
         {loadingLots ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress />
           </Box>
-        ) : unallocatedItems.length === 0 ? (
-          <Typography color="text.secondary">All items are already allocated.</Typography>
+        ) : allItems.length === 0 ? (
+          <Typography color="text.secondary">No items in this order.</Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {unallocatedItems.map((item, idx) => {
+            {allItems.map((item, idx) => {
               const lots = lotsBySkuId[item.sku_id] || [];
               const selection = selections[item.id];
               const selectedLot = lots.find((l) => l.id === selection?.lot_id);
@@ -160,18 +202,24 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
 
                   {/* Item header */}
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle1" fontWeight="medium">
-                      {item.product_name} — {item.variety || item.sku_code || item.sku_variety || '—'}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="subtitle1" fontWeight="medium">
+                        {item.product_name} — {item.variety || item.sku_code || item.sku_variety || '—'}
+                      </Typography>
+                      {item.lot_id ? (
+                        <Chip label="Allocated" size="small" color="success" variant="outlined" />
+                      ) : (
+                        <Chip label="Unallocated" size="small" color="warning" variant="outlined" />
+                      )}
+                    </Box>
                     <Typography variant="body2" color="text.secondary">
-                      Quantity needed: <strong>{item.quantity}</strong>
+                      Quantity: <strong>{item.quantity}</strong>
                     </Typography>
                   </Box>
 
                   {lots.length === 0 ? (
                     <Alert severity="warning">
-                      No lots available by {formatDate(deliveryDate)}. Use Auto Allocate or adjust the
-                      delivery date.
+                      No lots available for this SKU. Use Auto Allocate or create new lots first.
                     </Alert>
                   ) : (
                     <>
@@ -204,6 +252,9 @@ const LotSelectionDialog = ({ open, order, onClose, onAllocated }) => {
                                   >
                                     {lot.lot_number}
                                   </Typography>
+                                  {lot._currentlyAssigned && (
+                                    <Chip label="Currently assigned" size="small" color="info" />
+                                  )}
                                   <Typography
                                     variant="body2"
                                     color="text.secondary"

@@ -84,8 +84,7 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
 
   const allowedStatuses = statusTransitions[order.status] || [];
 
-  const hasUnallocatedItems = (order.items || []).some(item => !item.lot_id && !item.lot_number);
-  const canAllocate = ['pending', 'confirmed', 'preparing'].includes(order.status) && hasUnallocatedItems;
+  const canAllocate = ['pending', 'confirmed', 'preparing'].includes(order.status);
 
 
   return (
