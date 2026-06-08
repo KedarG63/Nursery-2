@@ -332,9 +332,12 @@ const listLots = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
 
-    // Count total
+    // Count total (must include same JOINs as the main query so search conditions on p.name/s.variety work)
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM lots l WHERE ${whereClause}`,
+      `SELECT COUNT(*) FROM lots l
+       JOIN skus s ON l.sku_id = s.id
+       JOIN products p ON s.product_id = p.id
+       WHERE ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].count);
