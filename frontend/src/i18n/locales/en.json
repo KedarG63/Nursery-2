@@ -28,6 +28,7 @@
     "inventory": "Inventory",
     "purchases": "Purchases",
     "orders": "Orders",
+    "serviceOrders": "Service Orders",
     "customers": "Customers",
     "deliveries": "Deliveries",
     "payments": "Payments",

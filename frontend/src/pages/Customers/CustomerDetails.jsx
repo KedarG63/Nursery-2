@@ -20,8 +20,10 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import CustomerProfile from '../../components/Customers/CustomerProfile';
 import OrderHistory from '../../components/Customers/OrderHistory';
+import PurchaseSummary from '../../components/Customers/PurchaseSummary';
 import CustomerForm from '../../components/Customers/CustomerForm';
 import { getCustomer, updateCustomer } from '../../services/customerService';
+import { getOrders } from '../../services/orderService';
 import { formatCurrency } from '../../utils/formatters';
 import { canEdit } from '../../utils/roleCheck';
 
@@ -69,17 +71,15 @@ const CustomerDetails = () => {
   };
 
   /**
-   * Fetch customer orders (mock for now - will be implemented in Issue #58)
+   * Fetch customer orders
    */
   const fetchOrders = async (page = 1) => {
     try {
       setOrdersLoading(true);
-      // TODO: Implement with real API in Issue #58
-      // const response = await getOrders({ customer_id: id, page, limit: 10 });
-      // For now, mock empty data
-      setOrders([]);
-      setOrderTotal(0);
-      setOrderPages(1);
+      const response = await getOrders({ customer_id: id, page, limit: 10 });
+      setOrders(response.data || []);
+      setOrderTotal(response.pagination?.total || 0);
+      setOrderPages(response.pagination?.pages || 1);
     } catch (error) {
       console.error('Error fetching orders:', error);
       toast.error('Failed to load order history');
@@ -267,6 +267,9 @@ const CustomerDetails = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Purchase History (monthly chart + yearly totals) */}
+      <PurchaseSummary customerId={id} />
 
       {/* Order History */}
       <OrderHistory

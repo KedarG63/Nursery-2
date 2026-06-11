@@ -128,6 +128,20 @@ export const getCustomerCredit = async (id) => {
   }
 };
 
+/**
+ * Get customer purchase history (monthly + yearly aggregates + summary)
+ * @param {string} id - Customer ID
+ * @returns {Promise} Purchase history data
+ */
+export const getCustomerPurchaseHistory = async (id) => {
+  try {
+    const response = await api.get(`/api/customers/${id}/purchase-history`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export default {
   getCustomers,
   getCustomer,
@@ -137,5 +151,6 @@ export default {
   createAddress,
   updateAddress,
   deleteAddress,
-  getCustomerCredit
+  getCustomerCredit,
+  getCustomerPurchaseHistory
 };

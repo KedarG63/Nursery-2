@@ -17,6 +17,10 @@ const StatusBadge = ({ status, variant = 'filled', size = 'small' }) => {
     if (statusLower === 'delivered') return 'success';
     if (statusLower === 'cancelled') return 'error';
 
+    // Service order statuses
+    if (statusLower === 'in_progress') return 'info';
+    if (statusLower === 'completed') return 'success';
+
     // Payment statuses
     if (statusLower === 'paid') return 'success';
     if (statusLower === 'partial') return 'warning';
@@ -35,7 +39,7 @@ const StatusBadge = ({ status, variant = 'filled', size = 'small' }) => {
 
   return (
     <Chip
-      label={status}
+      label={status.replace(/_/g, ' ')}
       color={getStatusColor(status)}
       variant={variant}
       size={size}

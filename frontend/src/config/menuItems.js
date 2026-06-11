@@ -15,6 +15,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import SavingsIcon from '@mui/icons-material/Savings';
+import GrassIcon from '@mui/icons-material/Grass';
 
 const menuItems = [
   {
@@ -63,6 +64,14 @@ const menuItems = [
     labelKey: 'nav.orders',
     icon: ShoppingCartIcon,
     path: '/orders',
+    roles: ['Admin', 'Manager', 'Sales'],
+  },
+  {
+    id: 'service-orders',
+    label: 'Service Orders',
+    labelKey: 'nav.serviceOrders',
+    icon: GrassIcon,
+    path: '/service-orders',
     roles: ['Admin', 'Manager', 'Sales'],
   },
   {

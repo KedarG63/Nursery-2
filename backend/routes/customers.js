@@ -114,4 +114,14 @@ router.get(
   customerController.getCustomerCredit
 );
 
+// Purchase history route (monthly + yearly aggregates + summary)
+router.get(
+  '/:id/purchase-history',
+  authenticate,
+  authorize(['Admin', 'Manager', 'Sales']),
+  validateCustomerId,
+  handleValidationErrors,
+  customerController.getCustomerPurchaseHistory
+);
+
 module.exports = router;

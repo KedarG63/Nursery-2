@@ -97,6 +97,7 @@ const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billi
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
 const bankLedgerRoutes   = require('./routes/bankLedger');    // Feature: Bank Ledger
 const trashRoutes        = require('./routes/trash');          // Feature: Trash / Recycle Bin
+const serviceOrderRoutes = require('./routes/serviceOrders');  // Feature: Service / Grow-Only orders
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -122,6 +123,7 @@ app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
 app.use('/api/bank-accounts', bankLedgerRoutes);   // Feature: Bank Ledger
 app.use('/api/trash', trashRoutes);                // Feature: Trash / Recycle Bin
+app.use('/api/service-orders', serviceOrderRoutes); // Feature: Service / Grow-Only orders
 
 // Serve uploaded files (delivery proofs)
 app.use('/uploads', express.static('uploads'));

@@ -761,6 +761,133 @@ const getCustomerCredit = async (req, res) => {
   }
 };
 
+/**
+ * Get customer purchase history (monthly + yearly aggregates + summary)
+ * GET /api/customers/:id/purchase-history
+ * Combines product orders and grow-only service orders so the totals reflect
+ * everything the customer has paid the nursery for.
+ */
+const getCustomerPurchaseHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify customer exists
+    const customerResult = await pool.query(
+      `SELECT id, name FROM customers WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+
+    if (customerResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    // Unified spend rows from product orders + service orders (excludes cancelled/deleted)
+    const combinedCte = `
+      WITH combined AS (
+        SELECT o.order_date::date AS d, o.total_amount AS amt
+        FROM orders o
+        WHERE o.customer_id = $1 AND o.deleted_at IS NULL AND o.status != 'cancelled'
+        UNION ALL
+        SELECT so.order_date::date AS d, so.service_fee AS amt
+        FROM service_orders so
+        WHERE so.customer_id = $1 AND so.deleted_at IS NULL AND so.status != 'cancelled'
+      )
+    `;
+
+    // Monthly totals (raw — zero-filled below for a continuous 12-month series)
+    const monthlyResult = await pool.query(
+      `${combinedCte}
+       SELECT TO_CHAR(DATE_TRUNC('month', d), 'YYYY-MM') AS period,
+              COUNT(*)::int AS order_count,
+              COALESCE(SUM(amt), 0) AS total
+       FROM combined
+       WHERE d >= (DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months')
+       GROUP BY DATE_TRUNC('month', d)
+       ORDER BY DATE_TRUNC('month', d)`,
+      [id]
+    );
+
+    // Yearly totals (current + previous year)
+    const yearlyResult = await pool.query(
+      `${combinedCte}
+       SELECT EXTRACT(YEAR FROM d)::int AS year,
+              COUNT(*)::int AS order_count,
+              COALESCE(SUM(amt), 0) AS total
+       FROM combined
+       WHERE EXTRACT(YEAR FROM d) IN (
+               EXTRACT(YEAR FROM CURRENT_DATE),
+               EXTRACT(YEAR FROM CURRENT_DATE) - 1
+             )
+       GROUP BY year
+       ORDER BY year`,
+      [id]
+    );
+
+    // Overall summary
+    const summaryResult = await pool.query(
+      `${combinedCte}
+       SELECT COUNT(*)::int AS order_count,
+              COALESCE(SUM(amt), 0) AS total_spent,
+              COALESCE(AVG(amt), 0) AS avg_order_value,
+              MIN(d) AS first_order_date,
+              MAX(d) AS last_order_date
+       FROM combined`,
+      [id]
+    );
+
+    // Zero-fill the last 12 months so the chart is continuous
+    const monthlyMap = new Map(
+      monthlyResult.rows.map((r) => [
+        r.period,
+        { order_count: r.order_count, total: parseFloat(r.total) },
+      ])
+    );
+
+    const monthly = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const existing = monthlyMap.get(period);
+      monthly.push({
+        period,
+        order_count: existing ? existing.order_count : 0,
+        total: existing ? existing.total : 0,
+      });
+    }
+
+    const yearly = yearlyResult.rows.map((r) => ({
+      year: r.year,
+      order_count: r.order_count,
+      total: parseFloat(r.total),
+    }));
+
+    const summaryRow = summaryResult.rows[0];
+    const summary = {
+      total_spent: parseFloat(summaryRow.total_spent),
+      order_count: summaryRow.order_count,
+      avg_order_value: parseFloat(summaryRow.avg_order_value),
+      first_order_date: summaryRow.first_order_date,
+      last_order_date: summaryRow.last_order_date,
+    };
+
+    res.json({
+      success: true,
+      data: { monthly, yearly, summary },
+    });
+  } catch (error) {
+    console.error('Error fetching customer purchase history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch purchase history',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   listCustomers,
   getCustomerById,
@@ -770,5 +897,6 @@ module.exports = {
   createAddress,
   updateAddress,
   deleteAddress,
-  getCustomerCredit
+  getCustomerCredit,
+  getCustomerPurchaseHistory,
 };
