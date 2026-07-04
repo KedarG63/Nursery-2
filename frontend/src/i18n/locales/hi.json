@@ -47,6 +47,15 @@
     "advances": "अग्रिम",
     "users": "उपयोगकर्ता"
   },
+  "navGroups": {
+    "catalog": "सूची",
+    "sales": "विक्रय",
+    "billing": "बिलिंग",
+    "accounting": "लेखा",
+    "payroll": "वेतन",
+    "deliveries": "डिलीवरी",
+    "administration": "प्रशासन"
+  },
   "summary": {
     "title": "360° व्यापार सारांश",
     "week": "इस सप्ताह",

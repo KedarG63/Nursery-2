@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
   Drawer,
   List,
@@ -5,20 +6,32 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Collapse,
   Box,
   Typography,
   Divider,
   Button,
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import useAuth from '../../hooks/useAuth';
-import menuItems from '../../config/menuItems';
+import menuGroups from '../../config/menuItems';
 
 const drawerWidth = 240;
+const STORAGE_KEY = 'sidebarOpenGroups';
+
+const readStoredGroups = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+};
 
 const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
   const navigate = useNavigate();
@@ -26,6 +39,8 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { user } = useAuth();
+
+  const [openGroups, setOpenGroups] = useState(readStoredGroups);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -37,11 +52,99 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
     if (mobileOpen) onDrawerToggle();
   };
 
-  const filteredMenuItems = menuItems.filter((item) => {
-    if (!user || !user.roles) return false;
-    if (item.hidden) return false;
-    return item.roles.some((role) => user.roles.includes(role));
-  });
+  const isItemActive = useCallback(
+    (item) =>
+      location.pathname === item.path ||
+      (item.path !== '/' && location.pathname.startsWith(item.path + '/')),
+    [location.pathname]
+  );
+
+  // Groups the current user can see (a group with no visible items is dropped).
+  const visibleGroups = menuGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (!user || !user.roles) return false;
+        if (item.hidden) return false;
+        return item.roles.some((role) => user.roles.includes(role));
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  // Keep the group that contains the current page open (merge, don't close others).
+  useEffect(() => {
+    const activeGroup = visibleGroups.find(
+      (g) => !g.pinned && g.items.some((item) => isItemActive(item))
+    );
+    if (activeGroup) {
+      setOpenGroups((prev) =>
+        prev[activeGroup.id] ? prev : { ...prev, [activeGroup.id]: true }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const toggleGroup = (groupId) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore quota / privacy-mode errors */
+      }
+      return next;
+    });
+  };
+
+  const renderItem = (item) => {
+    const Icon = item.icon;
+    const isActive = isItemActive(item);
+    return (
+      <ListItem key={item.id} disablePadding sx={{ display: 'block' }}>
+        <ListItemButton
+          onClick={() => handleNavigation(item.path)}
+          selected={isActive}
+          sx={{
+            borderRadius: 2,
+            mx: 1,
+            mb: 0.5,
+            py: 1,
+            px: 1.5,
+            width: 'auto',
+            transition: 'all 0.15s ease',
+            '&.Mui-selected': {
+              backgroundColor: '#2E5D44',
+              borderLeft: '4px solid #8DD4A0',
+              pl: '8px',
+              '&:hover': { backgroundColor: '#356A4F' },
+            },
+            '&:not(.Mui-selected):hover': {
+              backgroundColor: 'rgba(255,255,255,0.07)',
+            },
+          }}
+        >
+          <ListItemIcon sx={{
+            minWidth: 36,
+            color: isActive ? '#8DD4A0' : 'rgba(232,240,232,0.7)',
+            transition: 'color 0.15s ease',
+            '& svg': { fontSize: '1.15rem' },
+          }}>
+            <Icon />
+          </ListItemIcon>
+          <ListItemText
+            primary={t(item.labelKey)}
+            primaryTypographyProps={{
+              fontSize: '0.875rem',
+              fontWeight: isActive ? 700 : 500,
+              color: isActive ? '#FFFFFF' : 'rgba(232,240,232,0.82)',
+              transition: 'all 0.15s ease',
+              letterSpacing: isActive ? '0.01em' : 'normal',
+            }}
+          />
+        </ListItemButton>
+      </ListItem>
+    );
+  };
 
   const drawerContent = (
     <Box sx={{
@@ -88,56 +191,47 @@ const Sidebar = ({ mobileOpen, desktopOpen, onDrawerToggle }) => {
       <Divider sx={{ borderColor: 'rgba(139,184,154,0.15)', mx: 2 }} />
 
       {/* Navigation */}
-      <List sx={{ flexGrow: 1, pt: 1.5, pb: 1 }}>
-        {filteredMenuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path + '/'));
+      <List sx={{ flexGrow: 1, pt: 1.5, pb: 1, overflowY: 'auto' }}>
+        {visibleGroups.map((group) => {
+          // Pinned group (e.g. Dashboard) — no header, always visible.
+          if (group.pinned) {
+            return group.items.map((item) => renderItem(item));
+          }
 
+          const open = !!openGroups[group.id];
           return (
-            <ListItem key={item.id} disablePadding sx={{ display: 'block' }}>
+            <Box key={group.id} sx={{ mt: 0.5 }}>
               <ListItemButton
-                onClick={() => handleNavigation(item.path)}
-                selected={isActive}
+                onClick={() => toggleGroup(group.id)}
                 sx={{
                   borderRadius: 2,
                   mx: 1,
-                  mb: 0.5,
-                  py: 1,
+                  py: 0.5,
                   px: 1.5,
                   width: 'auto',
-                  transition: 'all 0.15s ease',
-                  '&.Mui-selected': {
-                    backgroundColor: '#2E5D44',
-                    borderLeft: '4px solid #8DD4A0',
-                    pl: '8px',
-                    '&:hover': { backgroundColor: '#356A4F' },
-                  },
-                  '&:not(.Mui-selected):hover': {
-                    backgroundColor: 'rgba(255,255,255,0.07)',
-                  },
+                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.05)' },
                 }}
               >
-                <ListItemIcon sx={{
-                  minWidth: 36,
-                  color: isActive ? '#8DD4A0' : 'rgba(232,240,232,0.7)',
-                  transition: 'color 0.15s ease',
-                  '& svg': { fontSize: '1.15rem' },
-                }}>
-                  <Icon />
-                </ListItemIcon>
                 <ListItemText
-                  primary={t(item.labelKey)}
+                  primary={t(group.titleKey)}
                   primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: isActive ? 700 : 500,
-                    color: isActive ? '#FFFFFF' : 'rgba(232,240,232,0.82)',
-                    transition: 'all 0.15s ease',
-                    letterSpacing: isActive ? '0.01em' : 'normal',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'rgba(200,225,208,0.55)',
                   }}
                 />
+                {open
+                  ? <ExpandLess sx={{ fontSize: '1.1rem', color: 'rgba(200,225,208,0.5)' }} />
+                  : <ExpandMore sx={{ fontSize: '1.1rem', color: 'rgba(200,225,208,0.5)' }} />}
               </ListItemButton>
-            </ListItem>
+              <Collapse in={open} timeout="auto" unmountOnExit>
+                <List disablePadding sx={{ pt: 0.5 }}>
+                  {group.items.map((item) => renderItem(item))}
+                </List>
+              </Collapse>
+            </Box>
           );
         })}
       </List>

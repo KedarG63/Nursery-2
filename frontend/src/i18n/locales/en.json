@@ -47,6 +47,15 @@
     "advances": "Advances",
     "users": "Users"
   },
+  "navGroups": {
+    "catalog": "Catalog",
+    "sales": "Sales",
+    "billing": "Billing",
+    "accounting": "Accounting",
+    "payroll": "Payroll",
+    "deliveries": "Deliveries",
+    "administration": "Administration"
+  },
   "summary": {
     "title": "360° Business Summary",
     "week": "This Week",
