@@ -43,6 +43,15 @@ import VendorAgingReport from '../pages/Billing/VendorAgingReport';
 import BankAccountsPage from '../pages/Banking/BankAccountsPage';
 import BankLedgerPage from '../pages/Banking/BankLedgerPage';
 import BankMonthlySummaryPage from '../pages/Banking/BankMonthlySummaryPage';
+import ExpensesPage from '../pages/Accounting/ExpensesPage';
+import CashBookPage from '../pages/Accounting/CashBookPage';
+import DepositsPage from '../pages/Accounting/DepositsPage';
+import EmployeesPage from '../pages/Payroll/EmployeesPage';
+import EmployeeDetails from '../pages/Payroll/EmployeeDetails';
+import AttendancePage from '../pages/Payroll/AttendancePage';
+import PayrollRunPage from '../pages/Payroll/PayrollRunPage';
+import AdvancesPage from '../pages/Payroll/AdvancesPage';
+import VendorDetails from '../pages/Purchases/VendorDetails';
 import TrashPage from '../pages/Trash/TrashPage';
 
 const AppRoutes = () => {
@@ -82,6 +91,7 @@ const AppRoutes = () => {
         <Route path="purchases" element={<Navigate to="/purchases/list" replace />} />
         <Route path="purchases/list" element={<PurchasesList />} />
         <Route path="purchases/vendors" element={<VendorsList />} />
+        <Route path="purchases/vendors/:id" element={<VendorDetails />} />
 
         {/* Customers */}
         <Route path="customers" element={<CustomersList />} />
@@ -127,6 +137,20 @@ const AppRoutes = () => {
         <Route path="billing/vendor-bills/:id" element={<VendorBillDetails />} />
         <Route path="billing/reports/ar-aging" element={<CustomerAgingReport />} />
         <Route path="billing/reports/ap-aging" element={<VendorAgingReport />} />
+
+        {/* Accounting — Expenses, Cash Book, Deposits */}
+        <Route path="accounting" element={<Navigate to="/accounting/expenses" replace />} />
+        <Route path="accounting/expenses" element={<ExpensesPage />} />
+        <Route path="accounting/cash-book" element={<CashBookPage />} />
+        <Route path="accounting/deposits" element={<DepositsPage />} />
+
+        {/* Payroll */}
+        <Route path="payroll" element={<Navigate to="/payroll/runs" replace />} />
+        <Route path="payroll/employees" element={<EmployeesPage />} />
+        <Route path="payroll/employees/:id" element={<EmployeeDetails />} />
+        <Route path="payroll/attendance" element={<AttendancePage />} />
+        <Route path="payroll/runs" element={<PayrollRunPage />} />
+        <Route path="payroll/advances" element={<AdvancesPage />} />
 
         {/* Banking / Bank Ledger */}
         <Route path="banking" element={<BankAccountsPage />} />

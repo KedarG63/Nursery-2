@@ -90,4 +90,13 @@ router.get(
   vendorController.getVendorPurchases
 );
 
+// 360° summary by year / month / week (Accounting Suite — Phase 3)
+const partySummaryController = require('../controllers/partySummaryController');
+router.get(
+  '/:id/summary',
+  authorize(['Admin', 'Manager', 'Accountant']),
+  validateVendorId,
+  partySummaryController.vendorSummary
+);
+
 module.exports = router;

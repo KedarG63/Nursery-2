@@ -98,6 +98,13 @@ const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed r
 const bankLedgerRoutes   = require('./routes/bankLedger');    // Feature: Bank Ledger
 const trashRoutes        = require('./routes/trash');          // Feature: Trash / Recycle Bin
 const serviceOrderRoutes = require('./routes/serviceOrders');  // Feature: Service / Grow-Only orders
+const expenseRoutes      = require('./routes/expenses');       // Accounting: Daily expenses
+const cashLedgerRoutes   = require('./routes/cashLedger');     // Accounting: Cash-in-Hand book
+const fundTransferRoutes = require('./routes/fundTransfers');  // Accounting: Cash -> Bank deposits
+const employeeRoutes     = require('./routes/employees');      // Payroll: Employees
+const attendanceRoutes   = require('./routes/attendance');     // Payroll: Attendance
+const payrollRoutes      = require('./routes/payroll');        // Payroll: Salary/wage runs
+const advanceRoutes      = require('./routes/advances');       // Payroll: Advances
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -124,6 +131,13 @@ app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
 app.use('/api/bank-accounts', bankLedgerRoutes);   // Feature: Bank Ledger
 app.use('/api/trash', trashRoutes);                // Feature: Trash / Recycle Bin
 app.use('/api/service-orders', serviceOrderRoutes); // Feature: Service / Grow-Only orders
+app.use('/api/expenses', expenseRoutes);            // Accounting: Daily expenses
+app.use('/api/cash-accounts', cashLedgerRoutes);    // Accounting: Cash-in-Hand book
+app.use('/api/fund-transfers', fundTransferRoutes); // Accounting: Cash -> Bank deposits
+app.use('/api/employees', employeeRoutes);          // Payroll: Employees
+app.use('/api/attendance', attendanceRoutes);       // Payroll: Attendance
+app.use('/api/payroll', payrollRoutes);             // Payroll: Salary/wage runs
+app.use('/api/advances', advanceRoutes);            // Payroll: Advances
 
 // Serve uploaded files (delivery proofs)
 app.use('/uploads', express.static('uploads'));

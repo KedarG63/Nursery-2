@@ -124,4 +124,15 @@ router.get(
   customerController.getCustomerPurchaseHistory
 );
 
+// 360° summary by year / month / week (Accounting Suite — Phase 3)
+const partySummaryController = require('../controllers/partySummaryController');
+router.get(
+  '/:id/summary',
+  authenticate,
+  authorize(['Admin', 'Manager', 'Sales', 'Accountant']),
+  validateCustomerId,
+  handleValidationErrors,
+  partySummaryController.customerSummary
+);
+
 module.exports = router;

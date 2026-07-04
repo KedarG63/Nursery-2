@@ -8,6 +8,7 @@ export const ROLES = {
   WAREHOUSE: 'Warehouse',
   SALES: 'Sales',
   DELIVERY: 'Delivery',
+  ACCOUNTANT: 'Accountant',
 };
 
 /**
@@ -60,4 +61,27 @@ export const canViewInventory = (userRole) => {
  */
 export const canManageWarehouse = (userRole) => {
   return hasPermission(userRole, [ROLES.ADMIN, ROLES.MANAGER, ROLES.WAREHOUSE]);
+};
+
+/**
+ * Finance roles — can record/manage accounting entries
+ * (expenses, cash, deposits, payroll). Admin, Manager, Accountant.
+ * @param {string|string[]} userRole - Current user's role(s)
+ * @returns {boolean}
+ */
+export const FINANCE_ROLES = [ROLES.ADMIN, ROLES.MANAGER, ROLES.ACCOUNTANT];
+
+export const canManageFinance = (userRole) => {
+  return hasPermission(userRole, FINANCE_ROLES);
+};
+
+/**
+ * Who can view finance dashboards/reports. Same as manage for now,
+ * kept separate so view-only access can be widened later without
+ * granting write access.
+ * @param {string|string[]} userRole - Current user's role(s)
+ * @returns {boolean}
+ */
+export const canViewFinance = (userRole) => {
+  return hasPermission(userRole, FINANCE_ROLES);
 };

@@ -16,6 +16,13 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import SavingsIcon from '@mui/icons-material/Savings';
 import GrassIcon from '@mui/icons-material/Grass';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import MoveDownIcon from '@mui/icons-material/MoveDown';
+import GroupsIcon from '@mui/icons-material/Groups';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import PaymentsIcon2 from '@mui/icons-material/Payments';
+import PaidIcon from '@mui/icons-material/Paid';
 
 const menuItems = [
   {
@@ -132,12 +139,68 @@ const menuItems = [
     hidden: true, // Set to false to show in sidebar
   },
   {
+    id: 'accounting-expenses',
+    label: 'Expenses',
+    labelKey: 'nav.expenses',
+    icon: ReceiptLongIcon,
+    path: '/accounting/expenses',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'accounting-cash-book',
+    label: 'Cash Book',
+    labelKey: 'nav.cashBook',
+    icon: AccountBalanceWalletIcon,
+    path: '/accounting/cash-book',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'accounting-deposits',
+    label: 'Cash Deposits',
+    labelKey: 'nav.deposits',
+    icon: MoveDownIcon,
+    path: '/accounting/deposits',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
     id: 'banking',
     label: 'Bank Ledger',
     labelKey: 'nav.banking',
     icon: SavingsIcon,
     path: '/banking',
-    roles: ['Admin', 'Manager'],
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'payroll-employees',
+    label: 'Employees',
+    labelKey: 'nav.employees',
+    icon: GroupsIcon,
+    path: '/payroll/employees',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'payroll-attendance',
+    label: 'Attendance',
+    labelKey: 'nav.attendance',
+    icon: EventAvailableIcon,
+    path: '/payroll/attendance',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'payroll-runs',
+    label: 'Payroll',
+    labelKey: 'nav.payroll',
+    icon: PaymentsIcon2,
+    path: '/payroll/runs',
+    roles: ['Admin', 'Manager', 'Accountant'],
+  },
+  {
+    id: 'payroll-advances',
+    label: 'Advances',
+    labelKey: 'nav.advances',
+    icon: PaidIcon,
+    path: '/payroll/advances',
+    roles: ['Admin', 'Manager', 'Accountant'],
   },
   {
     id: 'trash',

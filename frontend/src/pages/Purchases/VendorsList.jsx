@@ -26,6 +26,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useDebounce } from 'use-debounce';
 import vendorService from '../../services/vendorService';
@@ -35,6 +36,7 @@ import { canEdit } from '../../utils/roleCheck';
 const VendorsList = () => {
   const { user } = useSelector((state) => state.auth);
   const userRole = user?.roles;
+  const navigate = useNavigate();
 
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -219,7 +221,14 @@ const VendorsList = () => {
                   {vendors.map((vendor) => (
                     <tr key={vendor.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
                       <td style={{ padding: '12px' }}>{vendor.vendor_code}</td>
-                      <td style={{ padding: '12px' }}>{vendor.vendor_name}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span
+                          onClick={() => navigate(`/purchases/vendors/${vendor.id}`)}
+                          style={{ color: '#1976d2', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          {vendor.vendor_name}
+                        </span>
+                      </td>
                       <td style={{ padding: '12px' }}>{vendor.contact_person || '-'}</td>
                       <td style={{ padding: '12px' }}>{vendor.phone || '-'}</td>
                       <td style={{ padding: '12px' }}>{vendor.email || '-'}</td>

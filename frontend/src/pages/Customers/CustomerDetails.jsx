@@ -24,6 +24,8 @@ import PurchaseSummary from '../../components/Customers/PurchaseSummary';
 import CustomerForm from '../../components/Customers/CustomerForm';
 import { getCustomer, updateCustomer } from '../../services/customerService';
 import { getOrders } from '../../services/orderService';
+import { getCustomerSummary } from '../../services/partySummaryService';
+import PartySummary360 from '../../components/Accounting/PartySummary360';
 import { formatCurrency } from '../../utils/formatters';
 import { canEdit } from '../../utils/roleCheck';
 
@@ -267,6 +269,25 @@ const CustomerDetails = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 360° Business Summary (year / month / week) */}
+      <Box sx={{ mb: 3 }}>
+        <PartySummary360
+          fetchSummary={(params) => getCustomerSummary(id, params)}
+          kpis={[
+            { key: 'order_count', label: 'Orders', color: '#1A3329', raw: true },
+            { key: 'ordered', label: 'Ordered', color: '#1976d2' },
+            { key: 'paid', label: 'Received', color: '#2e7d32' },
+            { key: 'balance', label: 'Balance', color: '#ed6c02' },
+            { key: 'total_outstanding', label: 'Total Outstanding', color: '#c62828' },
+          ]}
+          seriesBars={[
+            { key: 'ordered', label: 'Ordered', color: '#1976d2' },
+            { key: 'paid', label: 'Received', color: '#2e7d32' },
+          ]}
+          txTypeColors={{ order: 'primary', payment: 'success' }}
+        />
+      </Box>
 
       {/* Purchase History (monthly chart + yearly totals) */}
       <PurchaseSummary customerId={id} />
