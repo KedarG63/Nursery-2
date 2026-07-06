@@ -15,5 +15,6 @@ router.use(authenticate);
 router.get('/', authorize(FINANCE), ctrl.listAttendance);
 router.post('/', authorize(FINANCE), ctrl.markAttendance);
 router.post('/bulk', authorize(FINANCE), ctrl.bulkMarkAttendance);
+router.delete('/:id', authorize(FINANCE), ctrl.deleteAttendance);
 
 module.exports = router;

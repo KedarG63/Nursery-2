@@ -4,6 +4,7 @@ import {
   Box, Stack, Typography, Button, Alert, CircularProgress, Chip, IconButton, Tooltip,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, Pagination,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, InputAdornment,
+  Tabs, Tab,
 } from '@mui/material';
 import GroupsIcon from '@mui/icons-material/Groups';
 import AddIcon from '@mui/icons-material/Add';
@@ -120,7 +121,7 @@ const EmployeesPage = () => {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 500);
-  const [typeFilter, setTypeFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('salaried');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [dialog, setDialog] = useState({ open: false, editing: null });
@@ -167,14 +168,18 @@ const EmployeesPage = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+      <Tabs
+        value={typeFilter}
+        onChange={(e, v) => setTypeFilter(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab value="salaried" label={t('payroll.tabSalaried', 'Salaried Employees')} />
+        <Tab value="daily_wage" label={t('payroll.tabLabourers', 'Daily-Wage Labourers')} />
+      </Tabs>
+
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={2}>
           <TextField label={t('common.search', 'Search')} size="small" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 240 }} />
-          <TextField select label={t('payroll.type', 'Type')} size="small" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} sx={{ minWidth: 180 }}>
-            <MenuItem value="">{t('common.all', 'All')}</MenuItem>
-            <MenuItem value="salaried">{t('payroll.salaried', 'Salaried (monthly)')}</MenuItem>
-            <MenuItem value="daily_wage">{t('payroll.dailyWage', 'Daily wage')}</MenuItem>
-          </TextField>
         </Stack>
       </Paper>
 

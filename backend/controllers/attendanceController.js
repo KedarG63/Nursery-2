@@ -1,14 +1,20 @@
 /**
- * Attendance Controller — per-day attendance for daily-wage workers.
- * Drives wage calculation: wages = SUM(units) * daily_rate for the period.
+ * Attendance Controller
+ *
+ * Two uses:
+ *  - Daily-wage labourers: mark days worked (present / half day / absent). Drives
+ *    wages = SUM(units) * daily_rate for the period.
+ *  - Salaried staff: exception-based leave log. Present days are assumed; only
+ *    leave is recorded — paid_leave (no deduction) or unpaid_leave (deducted).
+ *    Half-day leave = units 0.5.
  */
 
 const pool = require('../config/database');
 const db = require('../utils/db');
 
-const DEFAULT_UNITS = { present: 1, half_day: 0.5, paid_leave: 1, absent: 0 };
+const DEFAULT_UNITS = { present: 1, half_day: 0.5, paid_leave: 1, unpaid_leave: 1, absent: 0 };
 
-// Upsert a single attendance record.
+// Upsert a single attendance / leave record.
 const markAttendance = async (req, res, next) => {
   try {
     const { employee_id, work_date, status = 'present', units, notes } = req.body;
@@ -32,7 +38,7 @@ const markAttendance = async (req, res, next) => {
   }
 };
 
-// Bulk upsert for a single date across multiple employees.
+// Bulk upsert for a single date across multiple employees (labourer roster).
 const bulkMarkAttendance = async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -67,13 +73,15 @@ const bulkMarkAttendance = async (req, res, next) => {
   }
 };
 
-// List attendance. By single date (with all active daily-wage workers) or by employee+range.
+// List attendance.
+//   ?work_date=X                      -> labourer roster for that date (active daily_wage)
+//   ?employee_type=salaried&from&to   -> salaried leave records in a range
+//   ?employee_id=..&from&to           -> one employee's records
 const listAttendance = async (req, res, next) => {
   try {
-    const { employee_id, work_date, from_date, to_date } = req.query;
+    const { employee_id, work_date, from_date, to_date, employee_type } = req.query;
 
     if (work_date && !employee_id) {
-      // Roster view: all active daily-wage workers + their mark (if any) for the date.
       const rows = await db.query(
         `SELECT e.id AS employee_id, e.employee_code, e.full_name, e.daily_rate,
                 a.id AS attendance_id, a.status, a.units, a.notes
@@ -87,14 +95,16 @@ const listAttendance = async (req, res, next) => {
     }
 
     const params = [];
-    const conditions = [];
+    const conditions = ['e.deleted_at IS NULL'];
     if (employee_id) { params.push(employee_id); conditions.push(`a.employee_id = $${params.length}`); }
+    if (employee_type) { params.push(employee_type); conditions.push(`e.employee_type = $${params.length}`); }
     if (from_date) { params.push(from_date); conditions.push(`a.work_date >= $${params.length}`); }
     if (to_date) { params.push(to_date); conditions.push(`a.work_date <= $${params.length}`); }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     const rows = await db.query(
-      `SELECT a.*, e.full_name, e.employee_code
+      `SELECT a.id, a.employee_id, a.work_date, a.status, a.units, a.notes,
+              e.full_name, e.employee_code, e.employee_type
        FROM employee_attendance a
        JOIN employees e ON e.id = a.employee_id
        ${whereClause}
@@ -108,4 +118,18 @@ const listAttendance = async (req, res, next) => {
   }
 };
 
-module.exports = { markAttendance, bulkMarkAttendance, listAttendance };
+// Remove an attendance / leave record (used to undo a salaried leave entry).
+const deleteAttendance = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(`DELETE FROM employee_attendance WHERE id = $1 RETURNING id`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Attendance record not found' });
+    }
+    res.json({ success: true, message: 'Attendance record removed' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { markAttendance, bulkMarkAttendance, listAttendance, deleteAttendance };

@@ -1,9 +1,16 @@
 /**
- * Payroll Controller — monthly salary runs and daily-wage runs.
+ * Payroll Controller
+ *
+ * Two run types:
+ *   - salary : monthly. Gross = monthly salary. Unpaid-leave days are deducted
+ *              at (monthly salary / days in that month) per day. Paid leave is
+ *              not deducted. Net = gross - unpaid-leave deduction - advance.
+ *   - wages  : any date range (e.g. a week). Gross = SUM(attendance units) x
+ *              daily rate over the range. Net = gross - advance.
  *
  * Flow: preview (compute, no writes) -> create draft run+items -> pay.
- * Paying posts a cash/bank DEBIT per item (net amount, source_type='payroll')
- * and recovers outstanding advances (FIFO) by the per-item advance_deducted.
+ * Paying posts a cash/bank DEBIT per item (net amount) and recovers outstanding
+ * advances (FIFO) by the per-item advance_deducted.
  */
 
 const pool = require('../config/database');
@@ -12,12 +19,50 @@ const logger = require('../config/logger');
 const { financialYear, generateDocNumber } = require('../utils/financialYear');
 const { postSourceDebit } = require('./expenseController');
 
+const pad = (n) => String(n).padStart(2, '0');
 const monthLabel = (m, y) =>
-  new Date(`${y}-${String(m).padStart(2, '0')}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  new Date(`${y}-${pad(m)}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+const shortDate = (d) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-// Compute per-employee amounts for a period; no DB writes.
-async function computePreview(runner, { period_month, period_year, run_type }) {
-  const empType = run_type === 'salary' ? 'salaried' : 'daily_wage';
+// Normalise a run request into a concrete window.
+function buildRunWindow(body) {
+  const run_type = body.run_type;
+  if (run_type === 'salary') {
+    const m = Number(body.period_month);
+    const y = Number(body.period_year);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    return {
+      run_type, month: m, year: y,
+      start: `${y}-${pad(m)}-01`,
+      end: `${y}-${pad(m)}-${pad(daysInMonth)}`,
+      days_in_month: daysInMonth,
+      label: monthLabel(m, y),
+    };
+  }
+  // wages — arbitrary date range
+  const start = body.from_date;
+  const end = body.to_date;
+  const s = new Date(`${start}T00:00:00`);
+  return {
+    run_type,
+    month: s.getMonth() + 1,
+    year: s.getFullYear(),
+    start, end,
+    days_in_month: new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate(),
+    label: `${shortDate(start)} – ${shortDate(end)}`,
+  };
+}
+
+// Label for a stored run row.
+const runLabel = (run) =>
+  run.run_type === 'wages' && run.period_start && run.period_end
+    ? `${shortDate(run.period_start)} – ${shortDate(run.period_end)}`
+    : monthLabel(run.period_month, run.period_year);
+
+// Compute per-employee amounts for a window; no DB writes.
+async function computePreview(runner, win) {
+  const empType = win.run_type === 'salary' ? 'salaried' : 'daily_wage';
   const employees = await runner.query(
     `SELECT id, employee_code, full_name, monthly_salary, daily_rate
      FROM employees
@@ -30,21 +75,33 @@ async function computePreview(runner, { period_month, period_year, run_type }) {
   for (const e of employees.rows) {
     let gross = 0;
     let days_worked = null;
-    if (run_type === 'salary') {
-      gross = parseFloat(e.monthly_salary || 0);
+    let unpaid_leave_days = null;
+    let leave_deducted = 0;
+
+    if (win.run_type === 'salary') {
+      const fullSalary = parseFloat(e.monthly_salary || 0);
+      const lv = await runner.query(
+        `SELECT COALESCE(SUM(units), 0) AS d
+         FROM employee_attendance
+         WHERE employee_id = $1 AND status = 'unpaid_leave' AND work_date BETWEEN $2 AND $3`,
+        [e.id, win.start, win.end]
+      );
+      unpaid_leave_days = parseFloat(lv.rows[0].d);
+      const perDay = win.days_in_month > 0 ? fullSalary / win.days_in_month : 0;
+      leave_deducted = parseFloat((unpaid_leave_days * perDay).toFixed(2));
+      gross = fullSalary; // gross = full salary; leave shown as a separate deduction
     } else {
       const att = await runner.query(
         `SELECT COALESCE(SUM(units), 0) AS units
          FROM employee_attendance
-         WHERE employee_id = $1
-           AND EXTRACT(MONTH FROM work_date) = $2
-           AND EXTRACT(YEAR FROM work_date) = $3`,
-        [e.id, period_month, period_year]
+         WHERE employee_id = $1 AND work_date BETWEEN $2 AND $3`,
+        [e.id, win.start, win.end]
       );
       days_worked = parseFloat(att.rows[0].units);
       gross = parseFloat((days_worked * parseFloat(e.daily_rate || 0)).toFixed(2));
     }
 
+    const payable = parseFloat((gross - leave_deducted).toFixed(2));
     const adv = await runner.query(
       `SELECT COALESCE(SUM(amount - amount_recovered), 0) AS outstanding
        FROM employee_advances
@@ -52,7 +109,7 @@ async function computePreview(runner, { period_month, period_year, run_type }) {
       [e.id]
     );
     const outstanding_advance = parseFloat(adv.rows[0].outstanding);
-    const suggested_deduction = Math.min(outstanding_advance, gross);
+    const advance_deducted = parseFloat(Math.min(outstanding_advance, Math.max(payable, 0)).toFixed(2));
 
     items.push({
       employee_id: e.id,
@@ -60,9 +117,11 @@ async function computePreview(runner, { period_month, period_year, run_type }) {
       full_name: e.full_name,
       gross_amount: gross,
       days_worked,
+      unpaid_leave_days,
+      leave_deducted,
       outstanding_advance,
-      advance_deducted: parseFloat(suggested_deduction.toFixed(2)),
-      net_amount: parseFloat((gross - suggested_deduction).toFixed(2)),
+      advance_deducted,
+      net_amount: parseFloat((payable - advance_deducted).toFixed(2)),
     });
   }
   return items;
@@ -70,14 +129,31 @@ async function computePreview(runner, { period_month, period_year, run_type }) {
 
 const previewRun = async (req, res, next) => {
   try {
-    const { period_month, period_year, run_type } = req.body;
-    if (!period_month || !period_year || !['salary', 'wages'].includes(run_type)) {
-      return res.status(400).json({ success: false, message: 'period_month, period_year and a valid run_type are required' });
+    const { run_type } = req.body;
+    if (!['salary', 'wages'].includes(run_type)) {
+      return res.status(400).json({ success: false, message: 'run_type must be salary or wages' });
     }
-    const items = await computePreview(db, { period_month, period_year, run_type });
+    if (run_type === 'salary' && (!req.body.period_month || !req.body.period_year)) {
+      return res.status(400).json({ success: false, message: 'period_month and period_year are required for a salary run' });
+    }
+    if (run_type === 'wages' && (!req.body.from_date || !req.body.to_date)) {
+      return res.status(400).json({ success: false, message: 'from_date and to_date are required for a wage run' });
+    }
+    if (run_type === 'wages' && req.body.to_date < req.body.from_date) {
+      return res.status(400).json({ success: false, message: 'to_date cannot be before from_date' });
+    }
+
+    const win = buildRunWindow(req.body);
+    const items = await computePreview(db, win);
     res.json({
       success: true,
-      data: { period_month, period_year, run_type, period_label: monthLabel(period_month, period_year), items },
+      data: {
+        run_type,
+        period_month: win.month, period_year: win.year,
+        period_start: win.start, period_end: win.end,
+        period_label: win.label,
+        items,
+      },
     });
   } catch (err) {
     next(err);
@@ -87,38 +163,49 @@ const previewRun = async (req, res, next) => {
 const createRun = async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { period_month, period_year, run_type, items, notes } = req.body;
-    if (!period_month || !period_year || !['salary', 'wages'].includes(run_type) || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'period_month, period_year, run_type and a non-empty items array are required' });
+    const { run_type, items, notes } = req.body;
+    if (!['salary', 'wages'].includes(run_type) || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'run_type and a non-empty items array are required' });
     }
+    if (run_type === 'salary' && (!req.body.period_month || !req.body.period_year)) {
+      return res.status(400).json({ success: false, message: 'period_month and period_year are required for a salary run' });
+    }
+    if (run_type === 'wages' && (!req.body.from_date || !req.body.to_date)) {
+      return res.status(400).json({ success: false, message: 'from_date and to_date are required for a wage run' });
+    }
+
+    const win = buildRunWindow(req.body);
 
     await client.query('BEGIN');
 
-    const fy = financialYear(`${period_year}-${String(period_month).padStart(2, '0')}-01`);
-    const run_number = await generateDocNumber(
-      client, 'payroll_runs', 'run_number', 'PR',
-      `${period_year}-${String(period_month).padStart(2, '0')}-01`
-    );
+    const fy = financialYear(win.start);
+    const run_number = await generateDocNumber(client, 'payroll_runs', 'run_number', 'PR', win.start);
 
     let totalGross = 0, totalAdv = 0, totalNet = 0;
     const runRes = await client.query(
-      `INSERT INTO payroll_runs (run_number, period_month, period_year, run_type, status, financial_year, notes, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,'draft',$5,$6,$7,$7) RETURNING *`,
-      [run_number, period_month, period_year, run_type, fy, notes || null, req.user.id]
+      `INSERT INTO payroll_runs
+         (run_number, period_month, period_year, period_start, period_end, run_type, status, financial_year, notes, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9,$9) RETURNING *`,
+      [run_number, win.month, win.year, win.start, win.end, run_type, fy, notes || null, req.user.id]
     );
     const run = runRes.rows[0];
 
     for (const it of items) {
       const gross = parseFloat(it.gross_amount || 0);
+      const leave = parseFloat(it.leave_deducted || 0);
       const adv = parseFloat(it.advance_deducted || 0);
-      const net = parseFloat((gross - adv).toFixed(2));
-      if (net < 0) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'Advance deduction cannot exceed gross for an employee' }); }
+      const net = parseFloat((gross - leave - adv).toFixed(2));
+      if (net < 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Deductions cannot exceed gross for an employee' });
+      }
       totalGross += gross; totalAdv += adv; totalNet += net;
 
       await client.query(
-        `INSERT INTO payroll_items (payroll_run_id, employee_id, gross_amount, days_worked, advance_deducted, net_amount, status)
-         VALUES ($1,$2,$3,$4,$5,$6,'pending')`,
-        [run.id, it.employee_id, gross, it.days_worked ?? null, adv, net]
+        `INSERT INTO payroll_items
+           (payroll_run_id, employee_id, gross_amount, days_worked, unpaid_leave_days, leave_deducted, advance_deducted, net_amount, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')`,
+        [run.id, it.employee_id, gross, it.days_worked ?? null, it.unpaid_leave_days ?? null, leave, adv, net]
       );
     }
 
@@ -128,7 +215,7 @@ const createRun = async (req, res, next) => {
     );
 
     await client.query('COMMIT');
-    logger.info('Payroll run created', { runId: run.id, items: items.length });
+    logger.info('Payroll run created', { runId: run.id, items: items.length, run_type });
     res.status(201).json({ success: true, data: { ...run, total_gross: totalGross, total_advance_deducted: totalAdv, total_net: totalNet } });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -154,14 +241,14 @@ const listRuns = async (req, res, next) => {
     const rows = await db.query(
       `SELECT *, (SELECT COUNT(*) FROM payroll_items pi WHERE pi.payroll_run_id = payroll_runs.id) AS item_count
        FROM payroll_runs WHERE ${whereClause}
-       ORDER BY period_year DESC, period_month DESC, created_at DESC
+       ORDER BY COALESCE(period_start, make_date(period_year, period_month, 1)) DESC, created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
     const total = parseInt(countRes.rows[0].count);
     res.json({
       success: true,
-      data: rows.rows.map((r) => ({ ...r, period_label: monthLabel(r.period_month, r.period_year) })),
+      data: rows.rows.map((r) => ({ ...r, period_label: runLabel(r) })),
       pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / parseInt(limit)) },
     });
   } catch (err) {
@@ -187,7 +274,7 @@ const getRun = async (req, res, next) => {
       [id]
     );
     const run = runRes.rows[0];
-    res.json({ success: true, data: { ...run, period_label: monthLabel(run.period_month, run.period_year), items: items.rows } });
+    res.json({ success: true, data: { ...run, period_label: runLabel(run), items: items.rows } });
   } catch (err) {
     next(err);
   }
@@ -211,7 +298,7 @@ const payRun = async (req, res, next) => {
     if (run.status === 'paid') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'Run already paid' }); }
 
     const entryDate = paid_date || new Date().toISOString().split('T')[0];
-    const periodLabel = monthLabel(run.period_month, run.period_year);
+    const periodLabel = runLabel(run);
 
     const items = await client.query(
       `SELECT pi.*, e.full_name FROM payroll_items pi
@@ -222,7 +309,6 @@ const payRun = async (req, res, next) => {
 
     let paidCount = 0;
     for (const item of items.rows) {
-      // 1. Ledger debit for the net payout
       if (parseFloat(item.net_amount) > 0) {
         await postSourceDebit(client, {
           paymentSource: payment_source,
@@ -239,7 +325,6 @@ const payRun = async (req, res, next) => {
         });
       }
 
-      // 2. Recover advances (FIFO) by advance_deducted
       let toRecover = parseFloat(item.advance_deducted || 0);
       if (toRecover > 0) {
         const advances = await client.query(
@@ -262,7 +347,6 @@ const payRun = async (req, res, next) => {
         }
       }
 
-      // 3. Mark item paid
       await client.query(
         `UPDATE payroll_items SET status = 'paid', payment_source = $1, bank_account_id = $2, cash_account_id = $3, paid_at = NOW(), updated_at = NOW()
          WHERE id = $4`,

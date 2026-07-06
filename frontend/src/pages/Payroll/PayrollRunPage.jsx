@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Stack, Typography, Button, Alert, CircularProgress, Chip, IconButton, Tooltip,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, Grid,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, InputAdornment, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Divider,
 } from '@mui/material';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import AddIcon from '@mui/icons-material/Add';
@@ -22,6 +22,8 @@ import ConfirmDialog from '../../components/Common/ConfirmDialog';
 const now = new Date();
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: new Date(2020, i, 1).toLocaleDateString('en-IN', { month: 'long' }) }));
 const YEARS = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 3 + i);
+const fmtD = (d) => d.toISOString().split('T')[0];
+const weekAgo = () => { const d = new Date(); d.setDate(d.getDate() - 6); return fmtD(d); };
 
 const statusColor = (s) => (s === 'paid' ? 'success' : s === 'finalized' ? 'info' : 'default');
 
@@ -34,19 +36,25 @@ const PayrollRunPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // New run dialog
   const [newOpen, setNewOpen] = useState(false);
-  const [meta, setMeta] = useState({ period_month: now.getMonth() + 1, period_year: now.getFullYear(), run_type: 'salary' });
+  const [meta, setMeta] = useState({
+    run_type: 'salary',
+    period_month: now.getMonth() + 1,
+    period_year: now.getFullYear(),
+    from_date: weekAgo(),
+    to_date: fmtD(now),
+  });
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  // Pay + view + delete
   const [pay, setPay] = useState({ open: false, run: null, payment_source: 'cash', bank_account_id: '', cash_account_id: '', loading: false });
   const [view, setView] = useState({ open: false, run: null, loading: false });
   const [confirm, setConfirm] = useState({ open: false, run: null, loading: false });
   const [cashAccounts, setCashAccounts] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
+
+  const isWages = meta.run_type === 'wages';
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -66,7 +74,10 @@ const PayrollRunPage = () => {
   const runPreview = async () => {
     setPreviewing(true); setPreview(null);
     try {
-      const res = await previewRun(meta);
+      const body = meta.run_type === 'salary'
+        ? { run_type: 'salary', period_month: meta.period_month, period_year: meta.period_year }
+        : { run_type: 'wages', from_date: meta.from_date, to_date: meta.to_date };
+      const res = await previewRun(body);
       setPreview(res.data);
     } catch (err) { toast.error(err.message || 'Failed to preview'); }
     finally { setPreviewing(false); }
@@ -77,19 +88,31 @@ const PayrollRunPage = () => {
       ...p,
       items: p.items.map((it) => {
         if (it.employee_id !== employee_id) return it;
-        const adv = Math.max(0, Math.min(Number(val) || 0, it.gross_amount));
-        return { ...it, advance_deducted: adv, net_amount: Number((it.gross_amount - adv).toFixed(2)) };
+        const payable = it.gross_amount - (it.leave_deducted || 0);
+        const adv = Math.max(0, Math.min(Number(val) || 0, payable));
+        return { ...it, advance_deducted: adv, net_amount: Number((payable - adv).toFixed(2)) };
       }),
     }));
   };
 
   const create = async () => {
-    const items = preview.items.filter((it) => it.gross_amount > 0)
-      .map((it) => ({ employee_id: it.employee_id, gross_amount: it.gross_amount, days_worked: it.days_worked, advance_deducted: it.advance_deducted }));
+    const items = preview.items
+      .filter((it) => it.gross_amount > 0)
+      .map((it) => ({
+        employee_id: it.employee_id,
+        gross_amount: it.gross_amount,
+        days_worked: it.days_worked,
+        unpaid_leave_days: it.unpaid_leave_days,
+        leave_deducted: it.leave_deducted || 0,
+        advance_deducted: it.advance_deducted,
+      }));
     if (items.length === 0) return toast.error(t('payroll.errNoItems', 'No payable employees in this period'));
     setCreating(true);
     try {
-      await createRun({ ...meta, items });
+      const body = meta.run_type === 'salary'
+        ? { run_type: 'salary', period_month: meta.period_month, period_year: meta.period_year, items }
+        : { run_type: 'wages', from_date: meta.from_date, to_date: meta.to_date, items };
+      await createRun(body);
       toast.success(t('payroll.runCreated', 'Draft payroll run created'));
       setNewOpen(false); setPreview(null); load();
     } catch (err) { toast.error(err.message || 'Failed to create run'); }
@@ -133,7 +156,7 @@ const PayrollRunPage = () => {
           <PaymentsIcon sx={{ fontSize: 28, color: 'primary.main' }} />
           <Box>
             <Typography variant="h5" fontWeight={700}>{t('payroll.payrollRuns', 'Payroll Runs')}</Typography>
-            <Typography variant="body2" color="text.secondary">{t('payroll.payrollRunsSub', 'Run salary & daily-wage payouts; pay from cash or bank')}</Typography>
+            <Typography variant="body2" color="text.secondary">{t('payroll.payrollRunsSub2', 'Monthly salaries and daily wages (any period); pay from cash or bank')}</Typography>
           </Box>
         </Stack>
         {canWrite && <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setNewOpen(true); setPreview(null); }}>{t('payroll.newRun', 'New Payroll Run')}</Button>}
@@ -151,14 +174,13 @@ const PayrollRunPage = () => {
                 <TableCell>{t('payroll.type', 'Type')}</TableCell>
                 <TableCell align="right">{t('payroll.employees', 'Employees')}</TableCell>
                 <TableCell align="right">{t('payroll.gross', 'Gross')}</TableCell>
-                <TableCell align="right">{t('payroll.advance', 'Advance')}</TableCell>
                 <TableCell align="right">{t('payroll.net', 'Net')}</TableCell>
                 <TableCell>{t('payroll.status', 'Status')}</TableCell>
                 <TableCell align="right">{t('common.actions', 'Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {runs.length === 0 && <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}><Typography color="text.secondary">{t('payroll.noRuns', 'No payroll runs yet')}</Typography></TableCell></TableRow>}
+              {runs.length === 0 && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}><Typography color="text.secondary">{t('payroll.noRuns', 'No payroll runs yet')}</Typography></TableCell></TableRow>}
               {runs.map((r) => (
                 <TableRow key={r.id} hover>
                   <TableCell>{r.run_number}</TableCell>
@@ -166,7 +188,6 @@ const PayrollRunPage = () => {
                   <TableCell><Chip size="small" variant="outlined" label={r.run_type === 'salary' ? t('payroll.salary', 'Salary') : t('payroll.wages', 'Wages')} /></TableCell>
                   <TableCell align="right">{r.item_count}</TableCell>
                   <TableCell align="right">{formatCurrency(r.total_gross)}</TableCell>
-                  <TableCell align="right">{formatCurrency(r.total_advance_deducted)}</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(r.total_net)}</TableCell>
                   <TableCell><Chip size="small" label={r.status} color={statusColor(r.status)} /></TableCell>
                   <TableCell align="right">
@@ -192,20 +213,35 @@ const PayrollRunPage = () => {
           <Grid container spacing={2} alignItems="center" mb={2}>
             <Grid item xs={12} sm={3}>
               <TextField select label={t('payroll.type', 'Type')} fullWidth size="small" value={meta.run_type} onChange={(e) => { setMeta((m) => ({ ...m, run_type: e.target.value })); setPreview(null); }}>
-                <MenuItem value="salary">{t('payroll.salary', 'Salary (monthly)')}</MenuItem>
-                <MenuItem value="wages">{t('payroll.wages', 'Daily wages')}</MenuItem>
+                <MenuItem value="salary">{t('payroll.salaryMonthly', 'Salary (monthly)')}</MenuItem>
+                <MenuItem value="wages">{t('payroll.wagesRange', 'Daily wages (date range)')}</MenuItem>
               </TextField>
             </Grid>
-            <Grid item xs={6} sm={3}>
-              <TextField select label={t('payroll.month', 'Month')} fullWidth size="small" value={meta.period_month} onChange={(e) => { setMeta((m) => ({ ...m, period_month: e.target.value })); setPreview(null); }}>
-                {MONTHS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
-              </TextField>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <TextField select label={t('payroll.year', 'Year')} fullWidth size="small" value={meta.period_year} onChange={(e) => { setMeta((m) => ({ ...m, period_year: e.target.value })); setPreview(null); }}>
-                {YEARS.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
-              </TextField>
-            </Grid>
+
+            {!isWages ? (
+              <>
+                <Grid item xs={6} sm={3}>
+                  <TextField select label={t('payroll.month', 'Month')} fullWidth size="small" value={meta.period_month} onChange={(e) => { setMeta((m) => ({ ...m, period_month: e.target.value })); setPreview(null); }}>
+                    {MONTHS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField select label={t('payroll.year', 'Year')} fullWidth size="small" value={meta.period_year} onChange={(e) => { setMeta((m) => ({ ...m, period_year: e.target.value })); setPreview(null); }}>
+                    {YEARS.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+                  </TextField>
+                </Grid>
+              </>
+            ) : (
+              <>
+                <Grid item xs={6} sm={3}>
+                  <TextField label={t('payroll.from', 'From')} type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} value={meta.from_date} onChange={(e) => { setMeta((m) => ({ ...m, from_date: e.target.value })); setPreview(null); }} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField label={t('payroll.to', 'To')} type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} value={meta.to_date} onChange={(e) => { setMeta((m) => ({ ...m, to_date: e.target.value })); setPreview(null); }} />
+                </Grid>
+              </>
+            )}
+
             <Grid item xs={12} sm={3}>
               <Button fullWidth variant="outlined" onClick={runPreview} disabled={previewing}>{previewing ? <CircularProgress size={20} /> : t('payroll.preview', 'Preview')}</Button>
             </Grid>
@@ -217,23 +253,34 @@ const PayrollRunPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>{t('payroll.name', 'Name')}</TableCell>
-                    {meta.run_type === 'wages' && <TableCell align="right">{t('payroll.days', 'Days')}</TableCell>}
-                    <TableCell align="right">{t('payroll.gross', 'Gross')}</TableCell>
-                    <TableCell align="right">{t('payroll.outstandingAdvance', 'Outstanding Adv.')}</TableCell>
+                    {isWages
+                      ? <TableCell align="right">{t('payroll.days', 'Days')}</TableCell>
+                      : <TableCell align="right">{t('payroll.unpaidLeaveCol', 'Unpaid Leave')}</TableCell>}
+                    <TableCell align="right">{isWages ? t('payroll.gross', 'Gross') : t('payroll.salaryCol', 'Salary')}</TableCell>
                     <TableCell align="right">{t('payroll.deduct', 'Deduct Advance')}</TableCell>
                     <TableCell align="right">{t('payroll.net', 'Net')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {preview.items.length === 0 && <TableRow><TableCell colSpan={6} align="center" sx={{ py: 3 }}><Typography color="text.secondary">{t('payroll.noEligible', 'No eligible employees for this period')}</Typography></TableCell></TableRow>}
+                  {preview.items.length === 0 && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 3 }}><Typography color="text.secondary">{t('payroll.noEligible', 'No eligible employees for this period')}</Typography></TableCell></TableRow>}
                   {preview.items.map((it) => (
                     <TableRow key={it.employee_id}>
                       <TableCell>{it.full_name}</TableCell>
-                      {meta.run_type === 'wages' && <TableCell align="right">{it.days_worked ?? '-'}</TableCell>}
+                      {isWages ? (
+                        <TableCell align="right">{it.days_worked ?? '-'}</TableCell>
+                      ) : (
+                        <TableCell align="right">
+                          {Number(it.unpaid_leave_days) > 0
+                            ? <Typography variant="body2" color="error.main">{it.unpaid_leave_days} {t('payroll.daysShort', 'd')} (−{formatCurrency(it.leave_deducted)})</Typography>
+                            : <Typography variant="body2" color="text.secondary">—</Typography>}
+                        </TableCell>
+                      )}
                       <TableCell align="right">{formatCurrency(it.gross_amount)}</TableCell>
-                      <TableCell align="right">{formatCurrency(it.outstanding_advance)}</TableCell>
                       <TableCell align="right">
-                        <TextField type="number" size="small" value={it.advance_deducted} onChange={(e) => setItemAdvance(it.employee_id, e.target.value)} sx={{ width: 110 }} inputProps={{ min: 0, max: it.gross_amount }} />
+                        <TextField type="number" size="small" value={it.advance_deducted}
+                          onChange={(e) => setItemAdvance(it.employee_id, e.target.value)}
+                          sx={{ width: 120 }} inputProps={{ min: 0 }}
+                          helperText={Number(it.outstanding_advance) > 0 ? `${t('payroll.outstandingShort', 'due')} ${formatCurrency(it.outstanding_advance)}` : ' '} />
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(it.net_amount)}</TableCell>
                     </TableRow>
@@ -292,9 +339,9 @@ const PayrollRunPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>{t('payroll.name', 'Name')}</TableCell>
-                    <TableCell align="right">{t('payroll.days', 'Days')}</TableCell>
                     <TableCell align="right">{t('payroll.gross', 'Gross')}</TableCell>
-                    <TableCell align="right">{t('payroll.advance', 'Advance')}</TableCell>
+                    <TableCell align="right">{t('payroll.leaveCol', 'Leave −')}</TableCell>
+                    <TableCell align="right">{t('payroll.advance', 'Advance −')}</TableCell>
                     <TableCell align="right">{t('payroll.net', 'Net')}</TableCell>
                     <TableCell>{t('payroll.status', 'Status')}</TableCell>
                     <TableCell>{t('accounting.paidFrom', 'Paid From')}</TableCell>
@@ -304,9 +351,9 @@ const PayrollRunPage = () => {
                   {view.run.items.map((it) => (
                     <TableRow key={it.id}>
                       <TableCell>{it.full_name}</TableCell>
-                      <TableCell align="right">{it.days_worked ?? '-'}</TableCell>
                       <TableCell align="right">{formatCurrency(it.gross_amount)}</TableCell>
-                      <TableCell align="right">{formatCurrency(it.advance_deducted)}</TableCell>
+                      <TableCell align="right">{Number(it.leave_deducted) > 0 ? formatCurrency(it.leave_deducted) : '-'}</TableCell>
+                      <TableCell align="right">{Number(it.advance_deducted) > 0 ? formatCurrency(it.advance_deducted) : '-'}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(it.net_amount)}</TableCell>
                       <TableCell><Chip size="small" label={it.status} color={it.status === 'paid' ? 'success' : 'default'} /></TableCell>
                       <TableCell>{it.status === 'paid' ? (it.payment_source === 'cash' ? (it.cash_account_name || 'Cash') : (it.bank_account_name || 'Bank')) : '-'}</TableCell>

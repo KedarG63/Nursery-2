@@ -19,4 +19,9 @@ export const bulkMarkAttendance = async (data) => {
   catch (error) { throw error.response?.data || error; }
 };
 
-export default { getAttendance, markAttendance, bulkMarkAttendance };
+export const deleteAttendance = async (id) => {
+  try { return (await api.delete(`/api/attendance/${id}`)).data; }
+  catch (error) { throw error.response?.data || error; }
+};
+
+export default { getAttendance, markAttendance, bulkMarkAttendance, deleteAttendance };
