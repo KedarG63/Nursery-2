@@ -12,6 +12,14 @@ router.get('/', productController.getAllProducts);
 // GET /api/products/:id - Get single product
 router.get('/:id', productController.getProductById);
 
+// GET /api/products/:id/buyers - Customers who buy this variety, ranked by spend
+router.get(
+  '/:id/buyers',
+  authenticate,
+  authorize(['Admin', 'Manager', 'Sales']),
+  productController.getProductBuyers
+);
+
 // POST /api/products - Create new product (Admin and Manager only)
 router.post(
   '/',

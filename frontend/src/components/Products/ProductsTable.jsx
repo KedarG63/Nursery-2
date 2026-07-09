@@ -18,12 +18,13 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as ViewIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { canEdit, canDelete } from '../../utils/roleCheck';
 import productService from '../../services/productService';
 
-const ProductsTable = ({ products, loading, onEdit, onDelete, onView }) => {
+const ProductsTable = ({ products, loading, onEdit, onDelete, onView, onBuyers }) => {
   const { user } = useSelector((state) => state.auth);
   const userRole = user?.roles;
 
@@ -120,6 +121,15 @@ const ProductsTable = ({ products, loading, onEdit, onDelete, onView }) => {
                 />
               </TableCell>
               <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                <Tooltip title="Who buys this?">
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={() => onBuyers && onBuyers(product)}
+                  >
+                    <PeopleIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title="View Details">
                   <IconButton
                     size="small"

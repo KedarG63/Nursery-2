@@ -142,6 +142,20 @@ export const getCustomerPurchaseHistory = async (id) => {
   }
 };
 
+/**
+ * Get the plants/varieties a customer buys, ranked by spend
+ * @param {string} id - Customer ID
+ * @returns {Promise} Product breakdown data
+ */
+export const getCustomerProductSummary = async (id) => {
+  try {
+    const response = await api.get(`/api/customers/${id}/product-summary`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export default {
   getCustomers,
   getCustomer,
@@ -152,5 +166,6 @@ export default {
   updateAddress,
   deleteAddress,
   getCustomerCredit,
-  getCustomerPurchaseHistory
+  getCustomerPurchaseHistory,
+  getCustomerProductSummary
 };

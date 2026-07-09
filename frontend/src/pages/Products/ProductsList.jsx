@@ -26,6 +26,7 @@ import { toast } from 'react-toastify';
 import { useDebounce } from 'use-debounce';
 import ProductsTable from '../../components/Products/ProductsTable';
 import ProductForm from '../../components/Products/ProductForm';
+import BuyersDialog from '../../components/Products/BuyersDialog';
 import productService from '../../services/productService';
 import { canEdit } from '../../utils/roleCheck';
 
@@ -45,6 +46,7 @@ const ProductsList = () => {
   const [productToDelete, setProductToDelete] = useState(null);
   const [productFormOpen, setProductFormOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [buyersProduct, setBuyersProduct] = useState(null);
 
   const categories = productService.getCategories();
 
@@ -236,6 +238,7 @@ const ProductsList = () => {
         onEdit={handleEditProduct}
         onDelete={handleDeleteClick}
         onView={handleViewProduct}
+        onBuyers={setBuyersProduct}
       />
 
       {/* Pagination */}
@@ -270,6 +273,13 @@ const ProductsList = () => {
         onClose={handleProductFormClose}
         product={selectedProduct}
         onSuccess={handleProductSaved}
+      />
+
+      {/* Who-buys-this Dialog */}
+      <BuyersDialog
+        open={Boolean(buyersProduct)}
+        product={buyersProduct}
+        onClose={() => setBuyersProduct(null)}
       />
     </Box>
   );

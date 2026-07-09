@@ -31,6 +31,12 @@ const productService = {
     return response.data;
   },
 
+  // Customers who buy this variety, ranked by spend
+  getProductBuyers: async (id) => {
+    const response = await api.get(`/api/products/${id}/buyers`);
+    return response.data;
+  },
+
   // Get product categories (enum) - must match backend database enum
   getCategories: () => {
     return ['leafy_greens', 'fruiting', 'root', 'herbs'];

@@ -888,6 +888,63 @@ const getCustomerPurchaseHistory = async (req, res) => {
   }
 };
 
+/**
+ * Get the plants/varieties a customer buys, ranked by spend.
+ * GET /api/customers/:id/product-summary
+ * Per product: quantity, spend, order count, last purchase date — so staff can
+ * see at a glance what this customer buys and when they last bought it.
+ */
+const getCustomerProductSummary = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const customerResult = await pool.query(
+      `SELECT id, name FROM customers WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (customerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Customer not found' });
+    }
+
+    const result = await pool.query(
+      `SELECT
+         p.id AS product_id,
+         p.name AS product_name,
+         COUNT(DISTINCT o.id)::int AS order_count,
+         COALESCE(SUM(oi.quantity), 0) AS total_quantity,
+         COALESCE(SUM(oi.line_total), 0) AS total_spent,
+         MAX(o.order_date) AS last_purchase_date
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       JOIN skus s ON s.id = oi.sku_id
+       JOIN products p ON p.id = s.product_id
+       WHERE o.customer_id = $1 AND o.deleted_at IS NULL AND o.status != 'cancelled'
+       GROUP BY p.id, p.name
+       ORDER BY total_spent DESC`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows.map((r) => ({
+        product_id: r.product_id,
+        product_name: r.product_name,
+        order_count: r.order_count,
+        total_quantity: parseFloat(r.total_quantity),
+        total_spent: parseFloat(r.total_spent),
+        last_purchase_date: r.last_purchase_date,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching customer product summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch product summary',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   listCustomers,
   getCustomerById,
@@ -899,4 +956,5 @@ module.exports = {
   deleteAddress,
   getCustomerCredit,
   getCustomerPurchaseHistory,
+  getCustomerProductSummary,
 };

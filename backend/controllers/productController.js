@@ -378,10 +378,77 @@ async function deleteProduct(req, res) {
   }
 }
 
+/**
+ * Get the customers who buy a product/variety, ranked by spend.
+ * GET /api/products/:id/buyers
+ * Per customer: quantity, spend, order count, last purchase date — the exact
+ * list to contact (e.g. on WhatsApp) when a new lot of this variety is ready.
+ */
+async function getProductBuyers(req, res) {
+  const { id } = req.params;
+
+  try {
+    const productResult = await db.query(
+      'SELECT id, name FROM products WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const result = await db.query(
+      `SELECT
+         c.id AS customer_id,
+         c.name AS customer_name,
+         c.phone,
+         c.whatsapp_number,
+         COUNT(DISTINCT o.id)::int AS order_count,
+         COALESCE(SUM(oi.quantity), 0) AS total_quantity,
+         COALESCE(SUM(oi.line_total), 0) AS total_spent,
+         MAX(o.order_date) AS last_purchase_date
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       JOIN customers c ON c.id = o.customer_id
+       JOIN skus s ON s.id = oi.sku_id
+       WHERE s.product_id = $1
+         AND o.deleted_at IS NULL AND o.status != 'cancelled'
+         AND c.deleted_at IS NULL
+       GROUP BY c.id, c.name, c.phone, c.whatsapp_number
+       ORDER BY total_spent DESC`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        product: productResult.rows[0],
+        buyers: result.rows.map((r) => ({
+          customer_id: r.customer_id,
+          customer_name: r.customer_name,
+          phone: r.phone,
+          whatsapp_number: r.whatsapp_number,
+          order_count: r.order_count,
+          total_quantity: parseFloat(r.total_quantity),
+          total_spent: parseFloat(r.total_spent),
+          last_purchase_date: r.last_purchase_date,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching product buyers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch product buyers',
+      error: error.message,
+    });
+  }
+}
+
 module.exports = {
   getAllProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
+  getProductBuyers,
 };

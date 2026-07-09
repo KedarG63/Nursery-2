@@ -124,6 +124,16 @@ router.get(
   customerController.getCustomerPurchaseHistory
 );
 
+// Plants/varieties this customer buys, ranked by spend
+router.get(
+  '/:id/product-summary',
+  authenticate,
+  authorize(['Admin', 'Manager', 'Sales']),
+  validateCustomerId,
+  handleValidationErrors,
+  customerController.getCustomerProductSummary
+);
+
 // 360° summary by year / month / week (Accounting Suite — Phase 3)
 const partySummaryController = require('../controllers/partySummaryController');
 router.get(

@@ -21,6 +21,7 @@ import { toast } from 'react-toastify';
 import CustomerProfile from '../../components/Customers/CustomerProfile';
 import OrderHistory from '../../components/Customers/OrderHistory';
 import PurchaseSummary from '../../components/Customers/PurchaseSummary';
+import ProductBreakdown from '../../components/Customers/ProductBreakdown';
 import CustomerForm from '../../components/Customers/CustomerForm';
 import { getCustomer, updateCustomer } from '../../services/customerService';
 import { getOrders } from '../../services/orderService';
@@ -291,6 +292,9 @@ const CustomerDetails = () => {
 
       {/* Purchase History (monthly chart + yearly totals) */}
       <PurchaseSummary customerId={id} />
+
+      {/* What this customer buys (varieties ranked by spend) */}
+      <ProductBreakdown customerId={id} />
 
       {/* Order History */}
       <OrderHistory
