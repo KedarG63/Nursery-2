@@ -22,6 +22,11 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import PaymentsIcon2 from '@mui/icons-material/Payments';
 import PaidIcon from '@mui/icons-material/Paid';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import InsightsIcon from '@mui/icons-material/Insights';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 /**
  * Sidebar navigation.
@@ -168,6 +173,22 @@ const menuGroups = [
     titleKey: 'navGroups.accounting',
     items: [
       {
+        id: 'accounting-overview',
+        label: 'Finance Overview',
+        labelKey: 'nav.financeOverview',
+        icon: InsightsIcon,
+        path: '/accounting/overview',
+        roles: ['Admin', 'Manager', 'Accountant'],
+      },
+      {
+        id: 'accounting-profit-loss',
+        label: 'Profit & Loss',
+        labelKey: 'nav.profitLoss',
+        icon: TrendingUpIcon,
+        path: '/accounting/profit-loss',
+        roles: ['Admin', 'Manager', 'Accountant'],
+      },
+      {
         id: 'accounting-expenses',
         label: 'Expenses',
         labelKey: 'nav.expenses',
@@ -229,6 +250,37 @@ const menuGroups = [
         icon: PaidIcon,
         path: '/payroll/advances',
         roles: ['Admin', 'Manager', 'Accountant'],
+      },
+    ],
+  },
+  {
+    // NEW — collapsible. Routes existed but were never linked in the sidebar.
+    id: 'reports',
+    titleKey: 'navGroups.reports',
+    items: [
+      {
+        id: 'reports-sales',
+        label: 'Sales Dashboard',
+        labelKey: 'nav.salesReports',
+        icon: AssessmentIcon,
+        path: '/reports/sales',
+        roles: ['Admin', 'Manager', 'Sales'],
+      },
+      {
+        id: 'reports-inventory',
+        label: 'Inventory Reports',
+        labelKey: 'nav.inventoryReports',
+        icon: Inventory2Icon,
+        path: '/reports/inventory',
+        roles: ['Admin', 'Manager', 'Sales'],
+      },
+      {
+        id: 'reports-delivery',
+        label: 'Delivery Reports',
+        labelKey: 'nav.deliveryReports',
+        icon: BarChartIcon,
+        path: '/reports/delivery',
+        roles: ['Admin', 'Manager', 'Sales'],
       },
     ],
   },

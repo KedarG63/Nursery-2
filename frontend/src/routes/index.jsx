@@ -44,6 +44,8 @@ import BankAccountsPage from '../pages/Banking/BankAccountsPage';
 import BankLedgerPage from '../pages/Banking/BankLedgerPage';
 import BankMonthlySummaryPage from '../pages/Banking/BankMonthlySummaryPage';
 import ExpensesPage from '../pages/Accounting/ExpensesPage';
+import FinanceOverviewPage from '../pages/Accounting/FinanceOverviewPage';
+import ProfitLossPage from '../pages/Accounting/ProfitLossPage';
 import CashBookPage from '../pages/Accounting/CashBookPage';
 import DepositsPage from '../pages/Accounting/DepositsPage';
 import EmployeesPage from '../pages/Payroll/EmployeesPage';
@@ -138,8 +140,10 @@ const AppRoutes = () => {
         <Route path="billing/reports/ar-aging" element={<CustomerAgingReport />} />
         <Route path="billing/reports/ap-aging" element={<VendorAgingReport />} />
 
-        {/* Accounting — Expenses, Cash Book, Deposits */}
-        <Route path="accounting" element={<Navigate to="/accounting/expenses" replace />} />
+        {/* Accounting — Overview, P&L, Expenses, Cash Book, Deposits */}
+        <Route path="accounting" element={<Navigate to="/accounting/overview" replace />} />
+        <Route path="accounting/overview" element={<FinanceOverviewPage />} />
+        <Route path="accounting/profit-loss" element={<ProfitLossPage />} />
         <Route path="accounting/expenses" element={<ExpensesPage />} />
         <Route path="accounting/cash-book" element={<CashBookPage />} />
         <Route path="accounting/deposits" element={<DepositsPage />} />

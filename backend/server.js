@@ -105,6 +105,7 @@ const employeeRoutes     = require('./routes/employees');      // Payroll: Emplo
 const attendanceRoutes   = require('./routes/attendance');     // Payroll: Attendance
 const payrollRoutes      = require('./routes/payroll');        // Payroll: Salary/wage runs
 const advanceRoutes      = require('./routes/advances');       // Payroll: Advances
+const financeRoutes      = require('./routes/finance');        // Accounting: Finance Overview + P&L
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -138,6 +139,7 @@ app.use('/api/employees', employeeRoutes);          // Payroll: Employees
 app.use('/api/attendance', attendanceRoutes);       // Payroll: Attendance
 app.use('/api/payroll', payrollRoutes);             // Payroll: Salary/wage runs
 app.use('/api/advances', advanceRoutes);            // Payroll: Advances
+app.use('/api/finance', financeRoutes);             // Accounting: Finance Overview + P&L
 
 // Serve uploaded files (delivery proofs)
 app.use('/uploads', express.static('uploads'));
