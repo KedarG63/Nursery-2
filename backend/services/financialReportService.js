@@ -168,8 +168,8 @@ class FinancialReportService {
     const query = `
       SELECT
         COALESCE(SUM(oi.line_total), 0) as revenue,
-        COALESCE(SUM(oi.quantity * COALESCE(s.cost_price, 0)), 0) as cogs,
-        COALESCE(SUM(oi.line_total) - SUM(oi.quantity * COALESCE(s.cost_price, 0)), 0) as gross_profit
+        COALESCE(SUM(oi.quantity * COALESCE(s.cost, 0)), 0) as cogs,
+        COALESCE(SUM(oi.line_total) - SUM(oi.quantity * COALESCE(s.cost, 0)), 0) as gross_profit
       FROM order_items oi
       JOIN skus s ON oi.sku_id = s.id
       JOIN orders o ON oi.order_id = o.id

@@ -93,7 +93,7 @@ class CustomerReportService {
     const query = `
       SELECT
         customer_type,
-        COUNT(DISTINCT c.id) as customer_count,
+        COUNT(*) as customer_count,
         COALESCE(SUM(total_revenue), 0) as segment_revenue
       FROM (
         SELECT

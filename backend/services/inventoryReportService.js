@@ -6,8 +6,8 @@
 const db = require('../utils/db');
 const NodeCache = require('node-cache');
 
-// Cache with 1-hour TTL
-const reportCache = new NodeCache({ stdTTL: 3600 });
+// Cache with 5-minute TTL
+const reportCache = new NodeCache({ stdTTL: 300 });
 
 class InventoryReportService {
   /**
@@ -52,7 +52,7 @@ class InventoryReportService {
     const query = `
       SELECT
         s.id as sku_id,
-        s.name as sku_name,
+        COALESCE(NULLIF(s.variety, ''), s.sku_code) as sku_name,
         p.name as product_name,
         COALESCE(s.min_stock_level, 0) as min_level,
         COALESCE(SUM(l.available_quantity), 0) as current_stock,
@@ -63,7 +63,8 @@ class InventoryReportService {
       FROM skus s
       JOIN products p ON s.product_id = p.id
       LEFT JOIN lots l ON s.id = l.sku_id AND l.deleted_at IS NULL
-      GROUP BY s.id, s.name, p.name, s.min_stock_level
+      WHERE s.deleted_at IS NULL AND p.deleted_at IS NULL
+      GROUP BY s.id, s.variety, s.sku_code, p.name, s.min_stock_level
       ORDER BY current_stock ASC
     `;
 
@@ -88,7 +89,7 @@ class InventoryReportService {
       SELECT
         growth_stage,
         COUNT(*) as lot_count,
-        COALESCE(SUM(total_quantity), 0) as total_quantity,
+        COALESCE(SUM(quantity), 0) as total_quantity,
         COALESCE(SUM(available_quantity), 0) as available_quantity
       FROM lots
       WHERE deleted_at IS NULL
@@ -118,13 +119,14 @@ class InventoryReportService {
         l.lot_number,
         l.expected_ready_date,
         p.name as product_name,
-        s.name as sku_name,
+        COALESCE(NULLIF(s.variety, ''), s.sku_code) as sku_name,
         l.available_quantity
       FROM lots l
       JOIN skus s ON l.sku_id = s.id
       JOIN products p ON s.product_id = p.id
       WHERE l.expected_ready_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '1 day' * $1
-        AND l.status = 'active'
+        AND l.deleted_at IS NULL
+        AND l.available_quantity > 0
       ORDER BY l.expected_ready_date
     `;
 
@@ -147,12 +149,12 @@ class InventoryReportService {
   async getStockByLocation() {
     const query = `
       SELECT
-        current_location,
+        COALESCE(current_location::text, 'Unspecified') as current_location,
         COUNT(*) as lot_count,
         COALESCE(SUM(available_quantity), 0) as total_quantity
       FROM lots
       WHERE deleted_at IS NULL
-      GROUP BY current_location
+      GROUP BY 1
       ORDER BY total_quantity DESC
     `;
 
