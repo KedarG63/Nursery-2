@@ -22,8 +22,11 @@ const { postSourceDebit } = require('./expenseController');
 const pad = (n) => String(n).padStart(2, '0');
 const monthLabel = (m, y) =>
   new Date(`${y}-${pad(m)}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-const shortDate = (d) =>
-  new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+// Accepts a 'YYYY-MM-DD' string or a JS Date (pg returns DATE columns as Date objects).
+const shortDate = (d) => {
+  const dt = d instanceof Date ? d : new Date(`${d}T00:00:00`);
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 // Normalise a run request into a concrete window.
 function buildRunWindow(body) {
@@ -177,6 +180,41 @@ const createRun = async (req, res, next) => {
     const win = buildRunWindow(req.body);
 
     await client.query('BEGIN');
+
+    // Guard against double-paying a period: block a second salary run for the
+    // same month, and block wage runs whose date window overlaps an existing one.
+    if (run_type === 'salary') {
+      const dup = await client.query(
+        `SELECT run_number, status FROM payroll_runs
+         WHERE run_type = 'salary' AND period_month = $1 AND period_year = $2 AND deleted_at IS NULL
+         LIMIT 1`,
+        [win.month, win.year]
+      );
+      if (dup.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: `A salary run for ${monthLabel(win.month, win.year)} already exists (${dup.rows[0].run_number}, ${dup.rows[0].status}). Delete it first if you need to redo this month.`,
+        });
+      }
+    } else {
+      const overlap = await client.query(
+        `SELECT run_number, period_start, period_end, status FROM payroll_runs
+         WHERE run_type = 'wages' AND deleted_at IS NULL
+           AND period_start IS NOT NULL AND period_end IS NOT NULL
+           AND period_start <= $2 AND period_end >= $1
+         LIMIT 1`,
+        [win.start, win.end]
+      );
+      if (overlap.rows.length > 0) {
+        const o = overlap.rows[0];
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: `A wage run already covers ${shortDate(o.period_start)} – ${shortDate(o.period_end)} (${o.run_number}, ${o.status}). Overlapping runs would pay the same attendance twice.`,
+        });
+      }
+    }
 
     const fy = financialYear(win.start);
     const run_number = await generateDocNumber(client, 'payroll_runs', 'run_number', 'PR', win.start);

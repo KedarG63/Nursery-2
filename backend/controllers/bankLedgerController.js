@@ -284,6 +284,16 @@ const getLedger = async (req, res, next) => {
       params
     );
 
+    // Running balance must account for rows on earlier pages, so walk the
+    // whole filtered set (types + amounts only) and slice out this page.
+    const allRows = await db.query(
+      `SELECT ble.entry_type, ble.amount
+       FROM bank_ledger_entries ble
+       WHERE ${whereClause}
+       ORDER BY ble.entry_date ASC, ble.created_at ASC, ble.id ASC`,
+      params
+    );
+
     params.push(parseInt(limit));
     params.push(offset);
 
@@ -297,7 +307,7 @@ const getLedger = async (req, res, next) => {
        FROM bank_ledger_entries ble
        LEFT JOIN users u ON u.id = ble.created_by
        WHERE ${whereClause}
-       ORDER BY ble.entry_date ASC, ble.created_at ASC
+       ORDER BY ble.entry_date ASC, ble.created_at ASC, ble.id ASC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -308,19 +318,24 @@ const getLedger = async (req, res, next) => {
       ? await computeBalance(id, new Date(new Date(from_date) - 86400000).toISOString().split('T')[0])
       : 0;
 
-    // Attach running balance to each row
+    // Attach running balance to each row (opening_balance rows RESET the
+    // balance rather than adding to it)
     let runningBalance = openingBalance;
-    const rowsWithBalance = entries.rows.map((row) => {
+    const balances = allRows.rows.map((row) => {
       if (row.entry_type === 'opening_balance') {
-        // Opening balance RESETS the running balance rather than adding
         runningBalance = parseFloat(row.amount);
       } else if (row.entry_type === 'credit') {
         runningBalance += parseFloat(row.amount);
       } else {
         runningBalance -= parseFloat(row.amount);
       }
-      return { ...row, running_balance: parseFloat(runningBalance.toFixed(2)) };
+      return parseFloat(runningBalance.toFixed(2));
     });
+
+    const rowsWithBalance = entries.rows.map((row, i) => ({
+      ...row,
+      running_balance: balances[offset + i],
+    }));
 
     const total = parseInt(countResult.rows[0].count);
     res.json({
@@ -736,6 +751,7 @@ const syncFromPayments = async (req, res, next) => {
 };
 
 module.exports = {
+  computeBalance,
   listAccounts,
   upsertAccount,
   setOpeningBalance,

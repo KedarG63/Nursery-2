@@ -59,11 +59,13 @@ class CustomerReportService {
         c.customer_type,
         COUNT(o.id) as order_count,
         COALESCE(SUM(o.total_amount), 0) as total_revenue,
-        MAX(o.created_at) as last_order_date
+        MAX(o.order_date) as last_order_date
       FROM customers c
       JOIN orders o ON c.id = o.customer_id
-      WHERE o.created_at >= $1 AND o.created_at <= $2
+      WHERE o.order_date >= $1 AND o.order_date <= $2
         AND o.status NOT IN ('cancelled')
+        AND o.deleted_at IS NULL
+        AND c.deleted_at IS NULL
       GROUP BY c.id, c.name, c.customer_type
       ORDER BY total_revenue DESC
       LIMIT $3
@@ -100,8 +102,10 @@ class CustomerReportService {
           COALESCE(SUM(o.total_amount), 0) as total_revenue
         FROM customers c
         LEFT JOIN orders o ON c.id = o.customer_id
-          AND o.created_at >= $1 AND o.created_at <= $2
+          AND o.order_date >= $1 AND o.order_date <= $2
           AND o.status NOT IN ('cancelled')
+          AND o.deleted_at IS NULL
+        WHERE c.deleted_at IS NULL
         GROUP BY c.id, c.customer_type
       ) AS customer_revenues
       GROUP BY customer_type
@@ -138,6 +142,7 @@ class CustomerReportService {
       FROM customers c
       JOIN customer_credit cc ON c.id = cc.customer_id
       WHERE cc.credit_limit > 0
+        AND c.deleted_at IS NULL
       ORDER BY utilization_rate DESC
       LIMIT 50
     `;
@@ -175,8 +180,9 @@ class CustomerReportService {
           customer_id,
           COUNT(*) as order_count
         FROM orders
-        WHERE created_at >= $1 AND created_at <= $2
+        WHERE order_date >= $1 AND order_date <= $2
           AND status NOT IN ('cancelled')
+          AND deleted_at IS NULL
         GROUP BY customer_id
       ) AS customer_orders
     `;
@@ -198,6 +204,7 @@ class CustomerReportService {
         COUNT(*) as new_customers
       FROM customers
       WHERE created_at >= $1 AND created_at <= $2
+        AND deleted_at IS NULL
       GROUP BY month
       ORDER BY month
     `;

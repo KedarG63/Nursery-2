@@ -56,8 +56,9 @@ class FinancialReportService {
         COALESCE(SUM(o.paid_amount), 0) as total_collected,
         COALESCE(SUM(o.total_amount - o.paid_amount), 0) as outstanding
       FROM orders o
-      WHERE o.created_at >= $1 AND o.created_at <= $2
+      WHERE o.order_date >= $1 AND o.order_date <= $2
         AND o.status NOT IN ('cancelled')
+        AND o.deleted_at IS NULL
     `;
 
     const result = await db.query(query, [startDate, endDate]);
@@ -90,6 +91,7 @@ class FinancialReportService {
         COALESCE(SUM(total_amount - paid_amount), 0) as outstanding
       FROM orders
       WHERE status NOT IN ('cancelled')
+        AND deleted_at IS NULL
         AND paid_amount < total_amount
     `;
 
@@ -112,6 +114,7 @@ class FinancialReportService {
       FROM payments
       WHERE payment_date >= $1 AND payment_date <= $2
         AND status = 'success'
+        AND deleted_at IS NULL
       GROUP BY payment_method
       ORDER BY total_amount DESC
     `;
@@ -141,6 +144,7 @@ class FinancialReportService {
       FROM payments
       WHERE payment_date >= $1 AND payment_date <= $2
         AND status = 'success'
+        AND deleted_at IS NULL
       GROUP BY period
       ORDER BY period
     `;
@@ -169,8 +173,9 @@ class FinancialReportService {
       FROM order_items oi
       JOIN skus s ON oi.sku_id = s.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.created_at >= $1 AND o.created_at <= $2
+      WHERE o.order_date >= $1 AND o.order_date <= $2
         AND o.status NOT IN ('cancelled')
+        AND o.deleted_at IS NULL
     `;
 
     const result = await db.query(query, [startDate, endDate]);

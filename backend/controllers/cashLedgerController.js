@@ -195,6 +195,16 @@ const getLedger = async (req, res, next) => {
       `SELECT COUNT(*) FROM cash_ledger_entries cle WHERE ${whereClause}`, params
     );
 
+    // Running balance must account for rows on earlier pages, so walk the
+    // whole filtered set (types + amounts only) and slice out this page.
+    const allRows = await db.query(
+      `SELECT cle.entry_type, cle.amount
+       FROM cash_ledger_entries cle
+       WHERE ${whereClause}
+       ORDER BY cle.entry_date ASC, cle.created_at ASC, cle.id ASC`,
+      params
+    );
+
     params.push(parseInt(limit));
     params.push(offset);
 
@@ -207,7 +217,7 @@ const getLedger = async (req, res, next) => {
        FROM cash_ledger_entries cle
        LEFT JOIN users u ON u.id = cle.created_by
        WHERE ${whereClause}
-       ORDER BY cle.entry_date ASC, cle.created_at ASC
+       ORDER BY cle.entry_date ASC, cle.created_at ASC, cle.id ASC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -217,7 +227,7 @@ const getLedger = async (req, res, next) => {
       : 0;
 
     let runningBalance = openingBalance;
-    const rowsWithBalance = entries.rows.map((row) => {
+    const balances = allRows.rows.map((row) => {
       if (row.entry_type === 'opening_balance') {
         runningBalance = parseFloat(row.amount);
       } else if (row.entry_type === 'credit') {
@@ -225,8 +235,13 @@ const getLedger = async (req, res, next) => {
       } else {
         runningBalance -= parseFloat(row.amount);
       }
-      return { ...row, running_balance: parseFloat(runningBalance.toFixed(2)) };
+      return parseFloat(runningBalance.toFixed(2));
     });
+
+    const rowsWithBalance = entries.rows.map((row, i) => ({
+      ...row,
+      running_balance: balances[offset + i],
+    }));
 
     const total = parseInt(countResult.rows[0].count);
     res.json({

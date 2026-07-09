@@ -150,8 +150,9 @@ class SalesReportService {
       JOIN skus s ON oi.sku_id = s.id
       JOIN products p ON s.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.created_at >= $1 AND o.created_at <= $2
+      WHERE o.order_date >= $1 AND o.order_date <= $2
         AND o.status NOT IN ('cancelled')
+        AND o.deleted_at IS NULL
       GROUP BY p.id, p.name, s.id, s.sku_code
       ORDER BY total_revenue DESC
       LIMIT $3
@@ -180,7 +181,8 @@ class SalesReportService {
         COUNT(*) as count,
         COALESCE(SUM(total_amount), 0) as total_value
       FROM orders
-      WHERE created_at >= $1 AND created_at <= $2
+      WHERE order_date >= $1 AND order_date <= $2
+        AND deleted_at IS NULL
       GROUP BY status
       ORDER BY count DESC
     `;
