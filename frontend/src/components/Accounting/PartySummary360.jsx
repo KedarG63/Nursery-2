@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { GRID_STROKE, TICK_STYLE, TOOLTIP_STYLE, compactINR } from '../../utils/chartTheme';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
@@ -79,12 +80,15 @@ const PartySummary360 = ({ fetchSummary, kpis, seriesBars, txTypeColors = {} }) 
             </Typography>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={data.series} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
-                <RTooltip formatter={(v) => inr(v)} />
-                <Legend />
-                {seriesBars.map((s) => <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} />)}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={GRID_STROKE} />
+                <XAxis dataKey="period" tick={{ ...TICK_STYLE, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ ...TICK_STYLE, fontSize: 11 }} tickFormatter={compactINR}
+                  axisLine={false} tickLine={false} width={64} />
+                <RTooltip {...TOOLTIP_STYLE} formatter={(v) => inr(v)} />
+                <Legend iconType="circle" iconSize={9} />
+                {seriesBars.map((s) => (
+                  <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </Paper>

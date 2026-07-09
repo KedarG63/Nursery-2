@@ -11,9 +11,9 @@ import {
 import { getProfitLoss } from '../../services/financeService';
 import PeriodPicker, { periodRange } from '../../components/Accounting/PeriodPicker';
 import { formatCurrency } from '../../utils/formatters';
-
-const GREEN = '#2e7d32';
-const RED = '#c62828';
+import {
+  LEAF as GREEN, CLAY as RED, GRID_STROKE, TICK_STYLE, TOOLTIP_STYLE, compactINR,
+} from '../../utils/chartTheme';
 
 // Statement row: label + amount, with variants for section headers and totals.
 const Row = ({ label, amount, variant, color, indent }) => {
@@ -160,11 +160,11 @@ const ProfitLossPage = () => {
                   </Typography>
                   <ResponsiveContainer width="100%" height={320}>
                     <BarChart data={chartData} barGap={2}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e0e0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
-                      <Tooltip formatter={(v, name) => [formatCurrency(v), name]} />
-                      <Legend />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={GRID_STROKE} />
+                      <XAxis dataKey="label" tick={TICK_STYLE} axisLine={false} tickLine={false} />
+                      <YAxis tick={TICK_STYLE} tickFormatter={compactINR} axisLine={false} tickLine={false} width={70} />
+                      <Tooltip {...TOOLTIP_STYLE} formatter={(v, name) => [formatCurrency(v), name]} />
+                      <Legend iconType="circle" iconSize={9} />
                       <Bar dataKey="income" name={t('finance.income', 'Income')} fill={GREEN} radius={[4, 4, 0, 0]} maxBarSize={28} />
                       <Bar dataKey="costs" name={t('finance.costs', 'Costs')} fill={RED} radius={[4, 4, 0, 0]} maxBarSize={28} />
                     </BarChart>

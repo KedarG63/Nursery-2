@@ -19,6 +19,7 @@ import {
 import PropTypes from 'prop-types';
 import { getCustomerPurchaseHistory } from '../../services/customerService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { LEAF, GRID_STROKE, TICK_STYLE, TOOLTIP_STYLE, compactINR } from '../../utils/chartTheme';
 
 /**
  * Purchase Summary Component
@@ -48,14 +49,6 @@ const PurchaseSummary = ({ customerId }) => {
       active = false;
     };
   }, [customerId]);
-
-  const compactCurrency = (value) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-      notation: 'compact',
-    }).format(value || 0);
 
   // "YYYY-MM" -> "Mon" (e.g. "Jan")
   const formatMonthLabel = (period) => {
@@ -143,10 +136,13 @@ const PurchaseSummary = ({ customerId }) => {
               </Typography>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={monthly} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="period" tickFormatter={formatMonthLabel} fontSize={12} />
-                  <YAxis tickFormatter={compactCurrency} fontSize={12} width={60} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={GRID_STROKE} />
+                  <XAxis dataKey="period" tickFormatter={formatMonthLabel} tick={TICK_STYLE}
+                    axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={compactINR} tick={TICK_STYLE} width={70}
+                    axisLine={false} tickLine={false} />
                   <Tooltip
+                    {...TOOLTIP_STYLE}
                     formatter={(value) => [formatCurrency(value), 'Spend']}
                     labelFormatter={(label) => {
                       const [year, month] = label.split('-');
@@ -154,7 +150,7 @@ const PurchaseSummary = ({ customerId }) => {
                       return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
                     }}
                   />
-                  <Bar dataKey="total" fill="#2e7d32" name="Spend" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="total" fill={LEAF} name="Spend" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </Grid>

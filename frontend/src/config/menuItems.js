@@ -23,7 +23,6 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import PaymentsIcon2 from '@mui/icons-material/Payments';
 import PaidIcon from '@mui/icons-material/Paid';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import BarChartIcon from '@mui/icons-material/BarChart';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import InsightsIcon from '@mui/icons-material/Insights';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -272,14 +271,6 @@ const menuGroups = [
         labelKey: 'nav.inventoryReports',
         icon: Inventory2Icon,
         path: '/reports/inventory',
-        roles: ['Admin', 'Manager', 'Sales'],
-      },
-      {
-        id: 'reports-delivery',
-        label: 'Delivery Reports',
-        labelKey: 'nav.deliveryReports',
-        icon: BarChartIcon,
-        path: '/reports/delivery',
         roles: ['Admin', 'Manager', 'Sales'],
       },
     ],

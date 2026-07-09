@@ -50,6 +50,7 @@
     "attendance": "Attendance",
     "payroll": "Payroll",
     "advances": "Advances",
+    "trash": "Trash",
     "users": "Users"
   },
   "navGroups": {

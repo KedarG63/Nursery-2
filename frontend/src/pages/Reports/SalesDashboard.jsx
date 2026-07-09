@@ -27,13 +27,9 @@ import { toast } from 'react-toastify';
 import RevenueChart from '../../components/Reports/RevenueChart';
 import TopProducts from '../../components/Reports/TopProducts';
 import { getSalesReport, exportSalesReport } from '../../services/reportService';
-
-const STATUS_COLORS = {
-  completed: '#4caf50',
-  pending: '#ff9800',
-  cancelled: '#f44336',
-  processing: '#2196f3',
-};
+import {
+  LEAF, INK, CATEGORICAL, STATUS_COLORS, TOOLTIP_STYLE, fullINR,
+} from '../../utils/chartTheme';
 
 const DATE_RANGES = [
   { label: 'Today', value: 'today', days: 0 },
@@ -234,48 +230,30 @@ const SalesDashboard = () => {
 
       {/* KPI Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Total Revenue
-              </Typography>
-              <Typography variant="h4">{formatCurrency(kpis.totalRevenue)}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Total Orders
-              </Typography>
-              <Typography variant="h4">{kpis.orderCount || 0}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Avg Order Value
-              </Typography>
-              <Typography variant="h4">{formatCurrency(kpis.avgOrderValue)}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Growth
-              </Typography>
-              <Typography variant="h4" color={kpis.growthRate >= 0 ? 'success.main' : 'error.main'}>
-                {kpis.growthRate >= 0 ? '+' : ''}{kpis.growthRate || 0}%
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        {[
+          { label: 'Total Revenue', value: formatCurrency(kpis.totalRevenue), accent: LEAF, color: LEAF },
+          { label: 'Total Orders', value: kpis.orderCount || 0, accent: INK },
+          { label: 'Avg Order Value', value: formatCurrency(kpis.avgOrderValue), accent: INK },
+          {
+            label: 'Growth vs Previous Period',
+            value: `${kpis.growthRate >= 0 ? '+' : ''}${kpis.growthRate || 0}%`,
+            accent: kpis.growthRate >= 0 ? LEAF : '#c62828',
+            color: kpis.growthRate >= 0 ? LEAF : '#c62828',
+          },
+        ].map((kpi) => (
+          <Grid item xs={12} sm={6} md={3} key={kpi.label}>
+            <Card elevation={2} sx={{ height: '100%', borderTop: `4px solid ${kpi.accent}` }}>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {kpi.label}
+                </Typography>
+                <Typography variant="h4" fontWeight={800} sx={kpi.color ? { color: kpi.color } : {}}>
+                  {kpi.value}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       {/* Charts */}
@@ -289,11 +267,12 @@ const SalesDashboard = () => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Order Status Breakdown
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" fontWeight={700}>Order Status</Typography>
+            <Typography variant="body2" color="text.secondary" mb={1}>
+              Orders by stage in the pipeline
             </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={orderStatusBreakdown}
@@ -301,26 +280,33 @@ const SalesDashboard = () => {
                   nameKey="status"
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
-                  label
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={2}
+                  stroke="#fff"
+                  strokeWidth={2}
                 >
                   {orderStatusBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status] || '#999'} />
+                    <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status] || '#90a4ae'} />
                   ))}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip
+                  {...TOOLTIP_STYLE}
+                  formatter={(value, name) => [`${value} orders`, name]}
+                />
+                <Legend iconType="circle" iconSize={9} />
               </PieChart>
             </ResponsiveContainer>
           </Paper>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Payment Collection Metrics
+            <Typography variant="h6" fontWeight={700}>Payment Methods</Typography>
+            <Typography variant="body2" color="text.secondary" mb={1}>
+              How customers paid in this period
             </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={paymentBreakdown}
@@ -328,15 +314,18 @@ const SalesDashboard = () => {
                   nameKey="method"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={(entry) => `${entry.method}: ${formatCurrency(entry.amount)}`}
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={2}
+                  stroke="#fff"
+                  strokeWidth={2}
                 >
                   {paymentBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={CATEGORICAL[index % CATEGORICAL.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Legend />
+                <Tooltip {...TOOLTIP_STYLE} formatter={(value, name) => [fullINR(value), name]} />
+                <Legend iconType="circle" iconSize={9} />
               </PieChart>
             </ResponsiveContainer>
           </Paper>
@@ -345,7 +334,5 @@ const SalesDashboard = () => {
     </Box>
   );
 };
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 export default SalesDashboard;

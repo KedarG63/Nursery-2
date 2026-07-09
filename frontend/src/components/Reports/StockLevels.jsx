@@ -1,6 +1,7 @@
 /**
  * Stock Levels Component
- * Table showing current stock levels with status indicators
+ * Table of current stock per variety. Data rows come from the inventory
+ * report as { skuName, productName, currentStock, minLevel, isLowStock }.
  */
 
 import {
@@ -18,28 +19,6 @@ import {
 import { Warning as WarningIcon, CheckCircle as CheckIcon } from '@mui/icons-material';
 
 const StockLevels = ({ data }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'low':
-        return 'error';
-      case 'adequate':
-        return 'success';
-      case 'high':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusIcon = (currentStock, minThreshold, maxThreshold) => {
-    if (currentStock < minThreshold) {
-      return <WarningIcon color="error" fontSize="small" />;
-    } else if (currentStock >= minThreshold && currentStock <= maxThreshold) {
-      return <CheckIcon color="success" fontSize="small" />;
-    }
-    return <CheckIcon color="info" fontSize="small" />;
-  };
-
   if (!data || data.length === 0) {
     return (
       <Paper sx={{ p: 3, textAlign: 'center' }}>
@@ -50,46 +29,49 @@ const StockLevels = ({ data }) => {
 
   return (
     <TableContainer component={Paper}>
-      <Table>
+      <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>SKU Name</TableCell>
+            <TableCell>Variety</TableCell>
             <TableCell align="right">Current Stock</TableCell>
-            <TableCell align="right">Min Threshold</TableCell>
-            <TableCell align="right">Max Threshold</TableCell>
+            <TableCell align="right">Min Level</TableCell>
             <TableCell align="center">Status</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map((item, index) => (
+          {data.map((item) => (
             <TableRow
-              key={index}
-              sx={{
-                bgcolor: item.status === 'low' ? '#ffebee' : 'inherit',
-              }}
+              key={item.skuId}
+              hover
+              sx={{ bgcolor: item.isLowStock ? '#fdecea' : 'inherit' }}
             >
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {getStatusIcon(item.current_stock, item.min_threshold, item.max_threshold)}
-                  <Typography variant="body2">{item.sku_name}</Typography>
+                  {item.isLowStock
+                    ? <WarningIcon color="error" fontSize="small" />
+                    : <CheckIcon color="success" fontSize="small" />}
+                  <Box>
+                    <Typography variant="body2" fontWeight={500}>{item.productName}</Typography>
+                    <Typography variant="caption" color="text.secondary">{item.skuName}</Typography>
+                  </Box>
                 </Box>
               </TableCell>
               <TableCell align="right">
                 <Typography
                   variant="body2"
-                  fontWeight={item.status === 'low' ? 'bold' : 'normal'}
-                  color={item.status === 'low' ? 'error' : 'inherit'}
+                  fontWeight={item.isLowStock ? 700 : 400}
+                  color={item.isLowStock ? 'error' : 'inherit'}
                 >
-                  {item.current_stock}
+                  {Number(item.currentStock).toLocaleString('en-IN')}
                 </Typography>
               </TableCell>
-              <TableCell align="right">{item.min_threshold}</TableCell>
-              <TableCell align="right">{item.max_threshold}</TableCell>
+              <TableCell align="right">{Number(item.minLevel).toLocaleString('en-IN')}</TableCell>
               <TableCell align="center">
                 <Chip
-                  label={item.status?.toUpperCase()}
+                  label={item.isLowStock ? 'LOW' : 'OK'}
                   size="small"
-                  color={getStatusColor(item.status)}
+                  color={item.isLowStock ? 'error' : 'success'}
+                  variant={item.isLowStock ? 'filled' : 'outlined'}
                 />
               </TableCell>
             </TableRow>
