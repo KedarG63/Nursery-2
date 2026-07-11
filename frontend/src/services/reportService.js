@@ -84,6 +84,24 @@ export const getFinancialReport = async (params = {}) => {
   return response.data;
 };
 
+/**
+ * Variety 360 — one row per SKU: bought/produced/stock/sold/prices
+ * @param {Object} params - from_date, to_date (optional)
+ */
+export const getVarietyReport = async (params = {}) => {
+  const response = await api.get('/api/reports/varieties', { params });
+  return response.data;
+};
+
+/**
+ * Variety 360 detail — everything about one SKU
+ * @param {string} skuId
+ */
+export const getVarietyDetail = async (skuId) => {
+  const response = await api.get(`/api/reports/varieties/${skuId}`);
+  return response.data;
+};
+
 export default {
   getSalesReport,
   getInventoryReport,
@@ -92,4 +110,6 @@ export default {
   exportInventoryReport,
   exportDeliveryReport,
   getFinancialReport,
+  getVarietyReport,
+  getVarietyDetail,
 };

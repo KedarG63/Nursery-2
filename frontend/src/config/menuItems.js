@@ -266,6 +266,14 @@ const menuGroups = [
         roles: ['Admin', 'Manager', 'Sales'],
       },
       {
+        id: 'reports-varieties',
+        label: 'Variety Report',
+        labelKey: 'nav.varietyReports',
+        icon: GrassIcon,
+        path: '/reports/varieties',
+        roles: ['Admin', 'Manager', 'Sales'],
+      },
+      {
         id: 'reports-inventory',
         label: 'Inventory Reports',
         labelKey: 'nav.inventoryReports',

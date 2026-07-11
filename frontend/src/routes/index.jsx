@@ -25,6 +25,8 @@ import PaymentsList from '../pages/Payments/PaymentsList';
 import CustomerPayments from '../pages/Payments/CustomerPayments';
 import SalesDashboard from '../pages/Reports/SalesDashboard';
 import InventoryReports from '../pages/Reports/InventoryReports';
+import VarietyReports from '../pages/Reports/VarietyReports';
+import VarietyDetail from '../pages/Reports/VarietyDetail';
 import DeliveryManagement from '../pages/Deliveries/DeliveryManagement';
 import VehicleManagement from '../pages/Deliveries/VehicleManagement';
 import RouteManagement from '../pages/Deliveries/RouteManagement';
@@ -116,6 +118,8 @@ const AppRoutes = () => {
         <Route path="reports" element={<Navigate to="/reports/sales" replace />} />
         <Route path="reports/sales" element={<SalesDashboard />} />
         <Route path="reports/inventory" element={<InventoryReports />} />
+        <Route path="reports/varieties" element={<VarietyReports />} />
+        <Route path="reports/varieties/:skuId" element={<VarietyDetail />} />
 
         {/* Deliveries */}
         <Route path="deliveries" element={<DeliveryManagement />} />

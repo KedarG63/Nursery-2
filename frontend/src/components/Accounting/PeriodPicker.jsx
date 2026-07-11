@@ -11,6 +11,8 @@ export const periodRange = (preset) => {
   const y = now.getFullYear();
   const m = now.getMonth();
   switch (preset) {
+    case 'all_time':
+      return { from_date: null, to_date: null };
     case 'last_month':
       return { from_date: fmt(new Date(y, m - 1, 1)), to_date: fmt(new Date(y, m, 0)) };
     case 'this_fy': {
@@ -28,19 +30,20 @@ export const periodRange = (preset) => {
 };
 
 /**
- * Period selector shared by the Finance Overview and P&L pages.
+ * Period selector shared by the Finance Overview, P&L and report pages.
  * Calls onChange({ from_date, to_date }) whenever the window changes.
+ * With allowAllTime, adds an "All Time" preset that emits null dates.
  */
-const PeriodPicker = ({ value, onChange }) => {
+const PeriodPicker = ({ value, onChange, allowAllTime = false, defaultPreset = 'this_month' }) => {
   const { t } = useTranslation();
-  const [preset, setPreset] = useState('this_month');
-  const [custom, setCustom] = useState(value || periodRange('this_month'));
+  const [preset, setPreset] = useState(defaultPreset);
+  const [custom, setCustom] = useState(value || periodRange(defaultPreset));
 
   const handlePreset = (p) => {
     setPreset(p);
     if (p !== 'custom') {
       const range = periodRange(p);
-      setCustom(range);
+      setCustom(p === 'all_time' ? periodRange('this_month') : range);
       onChange(range);
     }
   };
@@ -54,6 +57,7 @@ const PeriodPicker = ({ value, onChange }) => {
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
       <TextField select size="small" value={preset} onChange={(e) => handlePreset(e.target.value)} sx={{ minWidth: 170 }}>
+        {allowAllTime && <MenuItem value="all_time">{t('finance.allTime', 'All Time')}</MenuItem>}
         <MenuItem value="this_month">{t('finance.thisMonth', 'This Month')}</MenuItem>
         <MenuItem value="last_month">{t('finance.lastMonth', 'Last Month')}</MenuItem>
         <MenuItem value="this_fy">{t('finance.thisFY', 'This Financial Year')}</MenuItem>

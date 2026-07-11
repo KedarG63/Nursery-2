@@ -47,4 +47,12 @@ router.get('/customers', reportAuth, reportController.getCustomerReport);
  */
 router.get('/financial', reportAuth, reportController.getFinancialReport);
 
+/**
+ * Variety 360 Report API — per-SKU bought/produced/stock/sold/prices
+ * GET /api/reports/varieties          (query: from_date, to_date — optional)
+ * GET /api/reports/varieties/:skuId   (full detail for one variety)
+ */
+router.get('/varieties', reportAuth, reportController.getVarietyReport);
+router.get('/varieties/:skuId', reportAuth, reportController.getVarietyDetail);
+
 module.exports = router;

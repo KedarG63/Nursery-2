@@ -9,6 +9,7 @@ const inventoryReportService = require('../services/inventoryReportService');
 const deliveryReportService = require('../services/deliveryReportService');
 const customerReportService = require('../services/customerReportService');
 const financialReportService = require('../services/financialReportService');
+const varietyReportService = require('../services/varietyReportService');
 
 /**
  * Validate date format (YYYY-MM-DD)
@@ -295,10 +296,47 @@ async function getFinancialReport(req, res) {
   }
 }
 
+/**
+ * Variety 360 — one row per SKU: bought → produced → stock → sold → prices
+ * GET /api/reports/varieties?from_date=&to_date=
+ */
+async function getVarietyReport(req, res) {
+  try {
+    const { from_date, to_date } = req.query;
+    if ((from_date && !isValidDate(from_date)) || (to_date && !isValidDate(to_date))) {
+      return res.status(400).json({ success: false, message: 'Dates must be YYYY-MM-DD' });
+    }
+    const rows = await varietyReportService.getVarietyOverview(from_date || null, to_date || null);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error generating variety report:', error);
+    res.status(500).json({ success: false, error: 'Report generation failed', message: error.message });
+  }
+}
+
+/**
+ * Variety 360 detail — everything about one SKU
+ * GET /api/reports/varieties/:skuId
+ */
+async function getVarietyDetail(req, res) {
+  try {
+    const detail = await varietyReportService.getVarietyDetail(req.params.skuId);
+    if (!detail) {
+      return res.status(404).json({ success: false, message: 'Variety not found' });
+    }
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    console.error('Error generating variety detail:', error);
+    res.status(500).json({ success: false, error: 'Report generation failed', message: error.message });
+  }
+}
+
 module.exports = {
   getSalesReport,
   getInventoryReport,
   getDeliveryReport,
   getCustomerReport,
-  getFinancialReport
+  getFinancialReport,
+  getVarietyReport,
+  getVarietyDetail
 };

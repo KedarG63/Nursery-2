@@ -6,7 +6,8 @@
  */
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Paper, Typography } from '@mui/material';
+import { Paper, Typography, Link, Stack, Box } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   LEAF, GRID_STROKE, TICK_STYLE, TOOLTIP_STYLE, compactINR, fullINR,
 } from '../../utils/chartTheme';
@@ -19,10 +20,17 @@ const TopProducts = ({ data }) => {
 
   return (
     <Paper sx={{ p: 3 }}>
-      <Typography variant="h6" fontWeight={700}>Top Products by Revenue</Typography>
-      <Typography variant="body2" color="text.secondary" mb={1.5}>
-        Best-selling varieties in the selected period
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Top Products by Revenue</Typography>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>
+            Best-selling varieties in the selected period
+          </Typography>
+        </Box>
+        <Link component={RouterLink} to="/reports/varieties" underline="hover" variant="body2" sx={{ whiteSpace: 'nowrap', mt: 0.5 }}>
+          Full variety report →
+        </Link>
+      </Stack>
       <ResponsiveContainer width="100%" height={Math.max(rows.length * 40 + 40, 160)}>
         <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }} barCategoryGap={8}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={GRID_STROKE} />
