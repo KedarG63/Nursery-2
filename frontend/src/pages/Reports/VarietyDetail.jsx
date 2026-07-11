@@ -11,7 +11,6 @@ import {
   Button, Link,
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
-import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
@@ -85,7 +84,6 @@ const VarietyDetail = () => {
     band: m.min_price === null ? null : [m.min_price, m.max_price],
   }));
   const hasSales = sales.sold_qty > 0;
-  const waLink = (number) => `https://wa.me/${String(number).replace(/[^0-9]/g, '')}`;
 
   return (
     <Box>
@@ -203,12 +201,11 @@ const VarietyDetail = () => {
                 <TableCell align="right">Price Paid (avg)</TableCell>
                 <TableCell align="right">Price Range</TableCell>
                 <TableCell align="right">Last Purchase</TableCell>
-                <TableCell align="center">Contact</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {buyers.length === 0 && (
-                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                   <Typography color="text.secondary">No buyers yet</Typography>
                 </TableCell></TableRow>
               )}
@@ -234,14 +231,6 @@ const VarietyDetail = () => {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">{formatDate(b.last_purchase_date)}</TableCell>
-                  <TableCell align="center">
-                    {(b.whatsapp_number || b.phone) && (
-                      <Link href={waLink(b.whatsapp_number || b.phone)} target="_blank" rel="noopener noreferrer"
-                        sx={{ display: 'inline-flex' }}>
-                        <WhatsAppIcon fontSize="small" sx={{ color: '#25D366' }} />
-                      </Link>
-                    )}
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
