@@ -9,7 +9,7 @@
  * Tables:
  *   - cash_accounts          : cash drawer(s); mirrors bank_accounts
  *   - cash_ledger_entries    : Tally-style cash book; mirrors bank_ledger_entries
- *   - expense_categories     : seeded category master (Transport, Cocopit, ...)
+ *   - expense_categories     : seeded category master (Transport, Cocopeat, ...)
  *   - expenses               : daily expenses; each posts a DEBIT to cash/bank ledger
  *   - fund_transfers         : Cash -> Bank deposits (paired cash debit + bank credit)
  *
@@ -184,7 +184,7 @@ exports.up = (pgm) => {
   pgm.sql(`
     INSERT INTO expense_categories (name, code, sort_order) VALUES
       ('Transport',     'TRANSPORT',  1),
-      ('Cocopit',       'COCOPIT',    2),
+      ('Cocopeat',      'COCOPEAT',   2),
       ('Tray',          'TRAY',       3),
       ('Pesticide',     'PESTICIDE',  4),
       ('Fertilizer',    'FERTILIZER', 5),

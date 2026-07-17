@@ -92,6 +92,7 @@ const notificationRoutes = require('./routes/notifications');
 const dashboardRoutes = require('./routes/dashboard');
 const vendorRoutes = require('./routes/vendors'); // Phase 22
 const purchaseRoutes = require('./routes/purchases'); // Phase 22
+const materialPurchaseRoutes = require('./routes/materialPurchases'); // Supplies & Materials purchases
 const invoiceRoutes = require('./routes/invoices'); // Phase 23: Billing
 const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billing
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
@@ -126,6 +127,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/vendors', vendorRoutes); // Phase 22
 app.use('/api/purchases', purchaseRoutes); // Phase 22
+app.use('/api/material-purchases', materialPurchaseRoutes); // Supplies & Materials purchases
 app.use('/api/invoices', invoiceRoutes); // Phase 23: Billing
 app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns

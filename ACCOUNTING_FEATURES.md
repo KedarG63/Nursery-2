@@ -45,7 +45,7 @@ implicit access to everything via `backend/middleware/authorize.js`).
 |---|---|---|
 | `cash_accounts` | Cash drawer(s); mirrors `bank_accounts`. Seeds "Main Cash Drawer". | `account_name`, `is_active`, `sort_order` |
 | `cash_ledger_entries` | Tally-style cash book; mirrors `bank_ledger_entries`. FY auto-computed by trigger. | `cash_account_id`, `entry_date`, `financial_year`, `entry_type` (opening_balance/credit/debit), `amount`, `party_name`, `narration`, `source_type`, `source_id`, audit + `deleted_at/by` |
-| `expense_categories` | Category master. Seeds Transport, Cocopit, Tray, Pesticide, Fertilizer, Stationery, Labour, Utilities, Miscellaneous. | `name` (unique), `code`, `is_active`, `sort_order` |
+| `expense_categories` | Category master. Seeds Transport, Cocopeat, Tray, Pesticide, Fertilizer, Stationery, Labour, Utilities, Miscellaneous. | `name` (unique), `code`, `is_active`, `sort_order` |
 | `expenses` | Daily expenses; each posts a DEBIT to cash/bank ledger. | `expense_number` (EXP-YYYYMMDD-XXXX), `expense_date`, `financial_year`, `category_id`, `vendor_id` (nullable), `amount`, `tax_amount`, `payment_source` (cash/bank), `bank_account_id`/`cash_account_id`, `description`, `attachment_url`, audit |
 | `fund_transfers` | Cash → Bank deposits. Owns a paired cash DEBIT + bank CREDIT. | `transfer_number` (DEP-YYYYMMDD-XXXX), `transfer_date`, `from_cash_account_id`, `to_bank_account_id`, `amount`, `reference_number`, `notes`, audit |
 
@@ -224,6 +224,49 @@ Aggregations:
 - Frontend `npm run build`: success.
 - Read-only endpoints; the only test writes (an employee + advance + attendance) were purged.
   **Production not migrated** (Phase 3 needs no migration anyway).
+
+---
+
+## Phase 5 — Supplies & Materials purchases (vendor payables + tranche payments)  ⏳ built, prod not migrated
+
+For non-seed supplies (cocopeat, fertilizer, trays, …) bought from their own vendors,
+often **paid in installments**. Unlike Expenses (money leaves immediately), a material
+purchase is a **payable**: creating it records what you owe; money moves only when
+payment tranches are recorded, each posting a DEBIT to the chosen cash/bank ledger
+(same self-reconciling contract via the shared `postSourceDebit`/`reverseSourceEntries`).
+
+### Database (migrations)
+
+`backend/migrations/1769000000007_extend-ledger-source-type-material.js`
+- Adds `material_purchase` to **both** `bank_ledger_source_type_enum` and
+  `cash_ledger_source_type_enum` (`addTypeValue … ifNotExists`; `down` no-op).
+
+`backend/migrations/1769000000008_create-material-purchases.js` creates:
+
+| Table | Purpose | Key columns |
+|---|---|---|
+| `material_purchases` | Supplies payable register. `grand_total` = amount+tax+other (trigger); `amount_paid`/`payment_status` kept in sync by the payments trigger. | `purchase_number` (SUP-YYYYMMDD-XXXX), `purchase_date`, `financial_year`, `vendor_id`, `category_id`→`expense_categories` (reused, nullable), `item_description`, `quantity`/`unit`/`rate` (optional), `amount`, `tax_amount`, `other_charges`, `grand_total`, `amount_paid`, `payment_status` (reuses `purchase_payment_status_enum`), invoice/due dates, audit + soft-delete |
+| `material_purchase_payments` | Payment tranches. Controller posts the matching ledger DEBIT with `source_type='material_purchase'`. | `material_purchase_id`, `payment_date`, `amount`, `payment_source` (reuses `expense_payment_source_enum`), `bank_account_id`/`cash_account_id`, `reference_number`, `notes`, `created_by` |
+
+Reuses existing enums (`purchase_payment_status_enum`, `expense_payment_source_enum`) —
+no new enum types. Constraints mirror Expenses: `amount > 0`, source-consistency check,
+and `update_material_purchase_payment_status()` recomputes pending/partial/paid.
+
+### Backend
+`materialPurchaseController.js` (imports `postSourceDebit`/`reverseSourceEntries` from
+`expenseController`) + `routes/materialPurchases.js` mounted at `/api/material-purchases`
+(FINANCE roles). CRUD + `POST /:id/payments`, `DELETE /:id/payments/:paymentId`
+(reverses the tranche's ledger debit). Delete of a purchase is blocked while it has
+payments.
+
+### Frontend
+`services/materialPurchaseService.js`; a **"Supplies & Materials"** tab on the Purchases
+page (`pages/Purchases/PurchasesList.jsx`) with summary tiles (purchased/paid/outstanding);
+`components/Purchases/MaterialPurchaseForm.jsx` (create/edit, auto-fills amount = qty×rate)
+and `MaterialPurchaseDetails.jsx` (tranche history + "Record Payment" picking cash/bank).
+
+**Verification:** backend `node --check` clean; frontend `npm run build` success.
+**Production not migrated** — run `migrate:up` (007 + 008, plus the 006 Cocopeat rename).
 
 ---
 

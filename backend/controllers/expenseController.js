@@ -1,7 +1,7 @@
 /**
  * Expense Controller
  *
- * Records daily business expenses (transport, cocopit, tray, pesticide, etc.).
+ * Records daily business expenses (transport, cocopeat, tray, pesticide, etc.).
  * Error-free design: every expense selects exactly ONE payment source
  * (Cash-in-Hand or a specific Bank account) and, in the SAME transaction,
  * posts a matching DEBIT to that source's ledger so balances self-reconcile.

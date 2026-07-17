@@ -37,9 +37,12 @@ import { toast } from 'react-toastify';
 import { useDebounce } from 'use-debounce';
 import { useNavigate } from 'react-router-dom';
 import purchaseService from '../../services/purchaseService';
+import materialPurchaseService from '../../services/materialPurchaseService';
 import PurchaseForm from '../../components/Purchases/PurchaseForm';
 import PurchaseDetails from '../../components/Purchases/PurchaseDetails';
-import { canEdit } from '../../utils/roleCheck';
+import MaterialPurchaseForm from '../../components/Purchases/MaterialPurchaseForm';
+import MaterialPurchaseDetails from '../../components/Purchases/MaterialPurchaseDetails';
+import { canEdit, canManageFinance } from '../../utils/roleCheck';
 
 // ── Group purchases that were created together ────────────────────────────────
 // Grouping key: invoice_number+vendor_id if invoice exists, else vendor_id+purchase_date
@@ -95,8 +98,68 @@ const PurchasesList = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
+  // ── Supplies & Materials tab state ──────────────────────────────────────────
+  const canWriteFinance = canManageFinance(userRole);
+  const [supplies, setSupplies] = useState([]);
+  const [suppliesLoading, setSuppliesLoading] = useState(false);
+  const [supplySummary, setSupplySummary] = useState(null);
+  const [supplySearch, setSupplySearch] = useState('');
+  const [debouncedSupplySearch] = useDebounce(supplySearch, 500);
+  const [supplyStatusFilter, setSupplyStatusFilter] = useState('');
+  const [supplyPage, setSupplyPage] = useState(1);
+  const [supplyTotalPages, setSupplyTotalPages] = useState(1);
+  const [materialFormOpen, setMaterialFormOpen] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState(null);
+  const [materialDetailsId, setMaterialDetailsId] = useState(null);
+  const [materialDeleteId, setMaterialDeleteId] = useState(null);
+
   const inventoryStatuses = purchaseService.getInventoryStatuses();
   const paymentStatuses = purchaseService.getPaymentStatuses();
+
+  const fetchSupplies = async () => {
+    setSuppliesLoading(true);
+    try {
+      const params = { page: supplyPage, limit: 20 };
+      if (debouncedSupplySearch) params.search = debouncedSupplySearch;
+      if (supplyStatusFilter) params.payment_status = supplyStatusFilter;
+      const [list, sum] = await Promise.all([
+        materialPurchaseService.getAll(params),
+        materialPurchaseService.getSummary({}),
+      ]);
+      setSupplies(list.data || []);
+      setSupplyTotalPages(list.pagination?.totalPages || 1);
+      setSupplySummary(sum.data || null);
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || 'Failed to load supplies purchases';
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        toast.error('Database tables not found. Please run migrations: npm run migrate:up');
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setSuppliesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 1 && canWriteFinance) fetchSupplies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, debouncedSupplySearch, supplyStatusFilter, supplyPage]);
+
+  const handleAddMaterial = () => { setSelectedMaterial(null); setMaterialFormOpen(true); };
+  const handleEditMaterial = (m) => { setSelectedMaterial(m); setMaterialFormOpen(true); };
+  const handleMaterialSaved = () => { setMaterialFormOpen(false); setSelectedMaterial(null); fetchSupplies(); };
+
+  const handleDeleteMaterialConfirm = async () => {
+    try {
+      await materialPurchaseService.remove(materialDeleteId);
+      toast.success('Purchase deleted');
+      setMaterialDeleteId(null);
+      fetchSupplies();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete purchase');
+    }
+  };
 
   useEffect(() => {
     fetchPurchases();
@@ -199,16 +262,22 @@ const PurchasesList = () => {
       <Paper sx={{ p: 3 }}>
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-          <Typography variant="h5" component="h1">Seed Purchases</Typography>
-          {canEdit(userRole) && (
+          <Typography variant="h5" component="h1">Purchases</Typography>
+          {activeTab === 0 && canEdit(userRole) && (
             <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddPurchase}>
-              Add Purchase
+              Add Seed Purchase
+            </Button>
+          )}
+          {activeTab === 1 && canWriteFinance && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddMaterial}>
+              Add Supplies Purchase
             </Button>
           )}
         </Box>
 
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 3 }}>
-          <Tab label="Purchases" />
+          <Tab label="Seed Purchases" />
+          <Tab label="Supplies & Materials" />
           <Tab label="Vendors" />
         </Tabs>
 
@@ -405,7 +474,132 @@ const PurchasesList = () => {
           </>
         )}
 
+        {/* ── Supplies & Materials tab ─────────────────────────────────────── */}
         {activeTab === 1 && (
+          !canWriteFinance ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography color="text.secondary">
+                A finance role (Admin, Manager, or Accountant) is required to view supplies purchases.
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              {/* Summary */}
+              {supplySummary && (
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  <Grid item xs={12} sm={4}>
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="caption" color="text.secondary">Total Purchased</Typography>
+                      <Typography variant="h6" fontWeight={700}>{formatCurrency(supplySummary.total_purchased)}</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="caption" color="text.secondary">Total Paid</Typography>
+                      <Typography variant="h6" fontWeight={700} sx={{ color: '#2e7d32' }}>{formatCurrency(supplySummary.total_paid)}</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="caption" color="text.secondary">Outstanding</Typography>
+                      <Typography variant="h6" fontWeight={700} sx={{ color: '#c62828' }}>{formatCurrency(supplySummary.total_outstanding)}</Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Filters */}
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth placeholder="Search vendor, item, invoice…"
+                    value={supplySearch} onChange={(e) => { setSupplySearch(e.target.value); setSupplyPage(1); }}
+                    InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Payment Status</InputLabel>
+                    <Select value={supplyStatusFilter} label="Payment Status"
+                      onChange={(e) => { setSupplyStatusFilter(e.target.value); setSupplyPage(1); }}>
+                      <MenuItem value="">All Payment Status</MenuItem>
+                      {materialPurchaseService.getPaymentStatuses().map((s) => (
+                        <MenuItem key={s} value={s}>{materialPurchaseService.getPaymentStatusDisplay(s)}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+
+              {/* Table */}
+              {suppliesLoading ? (
+                <Typography>Loading...</Typography>
+              ) : supplies.length === 0 ? (
+                <Typography>No supplies purchases found</Typography>
+              ) : (
+                <Box sx={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={th}>Vendor</th>
+                        <th style={th}>Material</th>
+                        <th style={th}>Item</th>
+                        <th style={th}>Date</th>
+                        <th style={{ ...th, textAlign: 'right' }}>Total</th>
+                        <th style={{ ...th, textAlign: 'right' }}>Paid</th>
+                        <th style={{ ...th, textAlign: 'right' }}>Balance</th>
+                        <th style={th}>Status</th>
+                        <th style={{ ...th, textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supplies.map((m, idx) => (
+                        <tr key={m.id} style={{ backgroundColor: idx % 2 === 0 ? '#fafafa' : '#fff', borderBottom: '1px solid #eee' }}>
+                          <td style={td}>
+                            <Typography variant="body2" fontWeight={600}>{m.vendor_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{m.purchase_number}</Typography>
+                          </td>
+                          <td style={td}>{m.category_name || '—'}</td>
+                          <td style={{ ...td, maxWidth: 220 }}>{m.item_description || '—'}</td>
+                          <td style={td}>{formatDate(m.purchase_date)}</td>
+                          <td style={tdR}>{formatCurrency(m.grand_total)}</td>
+                          <td style={{ ...tdR, color: '#2e7d32' }}>{formatCurrency(m.amount_paid)}</td>
+                          <td style={{ ...tdR, fontWeight: 700, color: Number(m.balance_due) > 0 ? '#c62828' : 'inherit' }}>
+                            {formatCurrency(m.balance_due)}
+                          </td>
+                          <td style={td}>
+                            <Chip size="small"
+                              label={materialPurchaseService.getPaymentStatusDisplay(m.payment_status)}
+                              color={materialPurchaseService.getPaymentStatusColor(m.payment_status)} />
+                          </td>
+                          <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                            <IconButton size="small" color="info" title="View & pay" onClick={() => setMaterialDetailsId(m.id)}>
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="primary" title="Edit" onClick={() => handleEditMaterial(m)}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="error" title="Delete" onClick={() => setMaterialDeleteId(m.id)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              )}
+
+              {supplyTotalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                  <Pagination count={supplyTotalPages} page={supplyPage} onChange={(_, v) => setSupplyPage(v)} color="primary" />
+                </Box>
+              )}
+            </>
+          )
+        )}
+
+        {activeTab === 2 && (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="h6" gutterBottom>Vendor Management</Typography>
             <Typography variant="body1" color="text.secondary" paragraph>
@@ -440,6 +634,31 @@ const PurchasesList = () => {
         <DialogActions>
           <Button onClick={() => { setDeleteDialogOpen(false); setPurchaseToDelete(null); }}>Cancel</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Supplies & Materials dialogs ─────────────────────────────────── */}
+      <MaterialPurchaseForm
+        open={materialFormOpen}
+        purchase={selectedMaterial}
+        onClose={() => { setMaterialFormOpen(false); setSelectedMaterial(null); }}
+        onSuccess={handleMaterialSaved}
+      />
+
+      <MaterialPurchaseDetails
+        open={Boolean(materialDetailsId)}
+        purchaseId={materialDetailsId}
+        canWrite={canWriteFinance}
+        onClose={() => setMaterialDetailsId(null)}
+        onChanged={fetchSupplies}
+      />
+
+      <Dialog open={Boolean(materialDeleteId)} onClose={() => setMaterialDeleteId(null)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>Delete this supplies purchase? This cannot be undone.</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMaterialDeleteId(null)}>Cancel</Button>
+          <Button onClick={handleDeleteMaterialConfirm} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>
