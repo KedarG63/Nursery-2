@@ -16,12 +16,14 @@ import {
 } from '../../utils/chartTheme';
 
 // Statement row: label + amount, with variants for section headers and totals.
+// `indent` is a nesting level (1 = line item, 2 = breakdown under a subtotal).
 const Row = ({ label, amount, variant, color, indent }) => {
   const isHeader = variant === 'header';
   const isTotal = variant === 'total';
+  const pad = indent ? 2 + indent * 3 : 2;
   return (
     <TableRow sx={isHeader ? { bgcolor: 'action.hover' } : {}}>
-      <TableCell sx={{ pl: indent ? 5 : 2, border: 0, py: isHeader ? 1 : 0.75 }}>
+      <TableCell sx={{ pl: pad, border: 0, py: isHeader ? 1 : 0.75 }}>
         <Typography variant="body2" fontWeight={isHeader || isTotal ? 700 : 400}
           color={isHeader ? 'text.secondary' : 'text.primary'}
           sx={isHeader ? { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 } : {}}>
@@ -132,14 +134,27 @@ const ProfitLossPage = () => {
                   <Row variant="total" label={t('finance.totalIncome', 'Total Income')} amount={data.income.total} color={GREEN} />
 
                   <Row variant="header" label={t('finance.costs', 'Costs')} />
-                  <Row label={t('finance.purchases', 'Material / Seed Purchases')} amount={data.costs.purchases} indent />
+                  <Row label={t('finance.purchases', 'Seed Purchases')} amount={data.costs.purchases} indent={1} />
                   {data.costs.vendor_returns > 0 && (
-                    <Row label={t('finance.lessReturns', 'Less: Vendor Returns')} amount={-data.costs.vendor_returns} indent />
+                    <Row label={t('finance.lessReturns', 'Less: Vendor Returns')} amount={-data.costs.vendor_returns} indent={1} />
                   )}
-                  {data.costs.expenses_by_category.map((c) => (
-                    <Row key={c.category} label={c.category} amount={c.total} indent />
-                  ))}
-                  <Row label={t('finance.payrollCost', 'Salaries & Wages (paid)')} amount={data.costs.payroll} indent />
+                  {(data.costs.supplies_by_category || []).length > 0 && (
+                    <>
+                      <Row label={t('finance.supplies', 'Supplies & Materials')} amount={data.costs.supplies_total} indent={1} />
+                      {data.costs.supplies_by_category.map((c) => (
+                        <Row key={`sup-${c.category}`} label={c.category} amount={c.total} indent={2} />
+                      ))}
+                    </>
+                  )}
+                  {data.costs.expenses_by_category.length > 0 && (
+                    <>
+                      <Row label={t('finance.expenses', 'Expenses')} amount={data.costs.expenses_total} indent={1} />
+                      {data.costs.expenses_by_category.map((c) => (
+                        <Row key={`exp-${c.category}`} label={c.category} amount={c.total} indent={2} />
+                      ))}
+                    </>
+                  )}
+                  <Row label={t('finance.payrollCost', 'Salaries & Wages (paid)')} amount={data.costs.payroll} indent={1} />
                   <Row variant="total" label={t('finance.totalCosts', 'Total Costs')} amount={data.costs.total} color={RED} />
 
                   <Row variant="total"

@@ -31,6 +31,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Receipt as ReceiptIcon,
+  PriceCheck as PriceCheckIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
@@ -573,9 +574,22 @@ const PurchasesList = () => {
                               color={materialPurchaseService.getPaymentStatusColor(m.payment_status)} />
                           </td>
                           <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            <IconButton size="small" color="info" title="View & pay" onClick={() => setMaterialDetailsId(m.id)}>
-                              <ViewIcon fontSize="small" />
-                            </IconButton>
+                            {Number(m.balance_due) > 0 ? (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<PriceCheckIcon fontSize="small" />}
+                                sx={{ mr: 0.5, py: 0.25 }}
+                                onClick={() => setMaterialDetailsId(m.id)}
+                              >
+                                Pay
+                              </Button>
+                            ) : (
+                              <IconButton size="small" color="info" title="View payments" onClick={() => setMaterialDetailsId(m.id)}>
+                                <ViewIcon fontSize="small" />
+                              </IconButton>
+                            )}
                             <IconButton size="small" color="primary" title="Edit" onClick={() => handleEditMaterial(m)}>
                               <EditIcon fontSize="small" />
                             </IconButton>

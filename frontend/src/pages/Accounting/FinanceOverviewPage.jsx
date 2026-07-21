@@ -23,6 +23,8 @@ const SOURCE_LABELS = {
   expense: ['finance.srcExpenses', 'Expenses'],
   payroll: ['finance.srcPayroll', 'Salaries & Wages'],
   advance: ['finance.srcAdvances', 'Staff Advances'],
+  material_purchase: ['finance.srcSupplies', 'Supplies & Materials'],
+  seed_purchase: ['finance.srcSeeds', 'Seed Purchases'],
   manual: ['finance.srcManual', 'Manual Entries'],
 };
 
@@ -136,7 +138,7 @@ const FinanceOverviewPage = () => {
             </Grid>
             <Grid item xs={12} sm={4}>
               <StatCard label={t('finance.payables', 'To Pay (Vendors)')} value={data.payables.total} color={RED}
-                sub={`${data.payables.count} ${t('finance.payablesSub', 'purchase bills unpaid')}`} />
+                sub={`${t('finance.payablesSeeds', 'Seeds')} ${formatCurrency(data.payables.seed_purchases ?? 0)} · ${t('finance.payablesSupplies', 'Supplies')} ${formatCurrency(data.payables.supplies ?? 0)}`} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <StatCard label={t('finance.staffAdvances', 'Staff Advances Outstanding')} value={data.staff_advances.total}

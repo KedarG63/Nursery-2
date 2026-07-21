@@ -77,7 +77,7 @@ const getOverview = async (req, res, next) => {
 
     const [
       cashFlows, bankFlows, cashOutBySource, bankOutBySource,
-      receivablesOrders, receivablesService, payables, advances,
+      receivablesOrders, receivablesService, payablesSeed, payablesSupplies, advances,
     ] = await Promise.all([
       db.query(flowSql('cash_ledger_entries', 'cash_account_id'), [win.start, win.end]),
       db.query(flowSql('bank_ledger_entries', 'bank_account_id'), [win.start, win.end]),
@@ -95,6 +95,11 @@ const getOverview = async (req, res, next) => {
         `SELECT COALESCE(SUM(grand_total - amount_paid), 0) AS total,
                 COUNT(*) FILTER (WHERE grand_total > amount_paid)::int AS count
          FROM seed_purchases WHERE deleted_at IS NULL`
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(grand_total - amount_paid), 0) AS total,
+                COUNT(*) FILTER (WHERE grand_total > amount_paid)::int AS count
+         FROM material_purchases WHERE deleted_at IS NULL`
       ),
       db.query(
         `SELECT COALESCE(SUM(amount - amount_recovered), 0) AS total,
@@ -135,8 +140,13 @@ const getOverview = async (req, res, next) => {
           total: round2(num(receivablesOrders.rows[0].total) + num(receivablesService.rows[0].total)),
         },
         payables: {
-          total: round2(payables.rows[0].total),
-          count: payables.rows[0].count,
+          // Seeds and non-seed supplies are separate registers; show both.
+          seed_purchases: round2(payablesSeed.rows[0].total),
+          seed_purchases_count: payablesSeed.rows[0].count,
+          supplies: round2(payablesSupplies.rows[0].total),
+          supplies_count: payablesSupplies.rows[0].count,
+          total: round2(num(payablesSeed.rows[0].total) + num(payablesSupplies.rows[0].total)),
+          count: payablesSeed.rows[0].count + payablesSupplies.rows[0].count,
         },
         staff_advances: {
           total: round2(advances.rows[0].total),
@@ -153,14 +163,19 @@ const getOverview = async (req, res, next) => {
 // GET /api/finance/profit-loss?from_date=&to_date=   (defaults to this month)
 //
 // Income  : product orders (order_date) + service orders (order_date)
-// Costs   : seed/material purchases (purchase_date, less vendor returns),
+// Costs   : seed purchases (purchase_date, less vendor returns),
+//           supplies & materials purchases (purchase_date — cocopeat, fertiliser…),
 //           operating expenses by category (expense_date),
 //           payroll cost = gross - leave deduction of PAID items (paid_at)
+//
+// Purchases are counted when INCURRED (accrual), not when paid, so a bill you
+// have not settled still shows as a cost. Supplies payments post to the cash /
+// bank ledger but never to `expenses`, so there is no double count here.
 const getProfitLoss = async (req, res, next) => {
   try {
     const win = resolveWindow(req.query.from_date, req.query.to_date);
 
-    const [sales, service, purchases, returns, expensesByCat, payrollAgg] = await Promise.all([
+    const [sales, service, purchases, returns, expensesByCat, payrollAgg, suppliesByCat] = await Promise.all([
       db.query(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*)::int AS count
          FROM orders
@@ -201,6 +216,17 @@ const getProfitLoss = async (req, res, next) => {
          WHERE pi.status = 'paid' AND pi.paid_at::date BETWEEN $1 AND $2`,
         [win.start, win.end]
       ),
+      db.query(
+        `SELECT COALESCE(ec.name, 'Uncategorised Supplies') AS category,
+                COALESCE(SUM(mp.grand_total), 0) AS total,
+                COUNT(mp.id)::int AS count
+         FROM material_purchases mp
+         LEFT JOIN expense_categories ec ON ec.id = mp.category_id
+         WHERE mp.deleted_at IS NULL AND mp.purchase_date BETWEEN $1 AND $2
+         GROUP BY 1
+         ORDER BY total DESC`,
+        [win.start, win.end]
+      ),
     ]);
 
     // Monthly series across the window (income vs costs vs net)
@@ -223,6 +249,11 @@ const getProfitLoss = async (req, res, next) => {
         FROM seed_purchases WHERE deleted_at IS NULL AND purchase_date BETWEEN $1 AND $2
         GROUP BY 1
       ),
+      sup AS (
+        SELECT date_trunc('month', purchase_date) AS m, SUM(grand_total) AS v
+        FROM material_purchases WHERE deleted_at IS NULL AND purchase_date BETWEEN $1 AND $2
+        GROUP BY 1
+      ),
       exp AS (
         SELECT date_trunc('month', expense_date) AS m, SUM(amount + tax_amount) AS v
         FROM expenses WHERE deleted_at IS NULL AND expense_date BETWEEN $1 AND $2
@@ -236,11 +267,12 @@ const getProfitLoss = async (req, res, next) => {
       SELECT
         TO_CHAR(months.m, 'YYYY-MM') AS month_key,
         COALESCE(inc.v, 0) + COALESCE(svc.v, 0) AS income,
-        COALESCE(pur.v, 0) + COALESCE(exp.v, 0) + COALESCE(pay.v, 0) AS costs
+        COALESCE(pur.v, 0) + COALESCE(sup.v, 0) + COALESCE(exp.v, 0) + COALESCE(pay.v, 0) AS costs
       FROM months
       LEFT JOIN inc ON inc.m = months.m
       LEFT JOIN svc ON svc.m = months.m
       LEFT JOIN pur ON pur.m = months.m
+      LEFT JOIN sup ON sup.m = months.m
       LEFT JOIN exp ON exp.m = months.m
       LEFT JOIN pay ON pay.m = months.m
       ORDER BY months.m`;
@@ -256,10 +288,18 @@ const getProfitLoss = async (req, res, next) => {
     income.total = round2(income.product_sales + income.service_income);
 
     const totalExpenses = round2(expensesByCat.rows.reduce((s, r) => s + num(r.total), 0));
+    const totalSupplies = round2(suppliesByCat.rows.reduce((s, r) => s + num(r.total), 0));
     const costs = {
       purchases: round2(purchases.rows[0].total),
       purchases_count: purchases.rows[0].count,
       vendor_returns: round2(returns.rows[0].total), // reduces purchase cost
+      supplies_total: totalSupplies,
+      supplies_count: suppliesByCat.rows.reduce((s, r) => s + r.count, 0),
+      supplies_by_category: suppliesByCat.rows.map((r) => ({
+        category: r.category,
+        total: round2(r.total),
+        count: r.count,
+      })),
       expenses_total: totalExpenses,
       expenses_by_category: expensesByCat.rows.map((r) => ({
         category: r.category,
@@ -269,7 +309,9 @@ const getProfitLoss = async (req, res, next) => {
       payroll: round2(payrollAgg.rows[0].total),
       payroll_count: payrollAgg.rows[0].count,
     };
-    costs.total = round2(costs.purchases - costs.vendor_returns + costs.expenses_total + costs.payroll);
+    costs.total = round2(
+      costs.purchases - costs.vendor_returns + costs.supplies_total + costs.expenses_total + costs.payroll
+    );
 
     const netProfit = round2(income.total - costs.total);
 
