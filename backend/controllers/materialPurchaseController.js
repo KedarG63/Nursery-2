@@ -293,12 +293,14 @@ const updatePurchase = async (req, res, next) => {
     );
 
     // Recompute payment_status against the (possibly changed) grand_total.
+    // The cast is required: an all-literal CASE resolves to text, and there is
+    // no implicit text -> purchase_payment_status_enum cast.
     await client.query(
       `UPDATE material_purchases
-       SET payment_status = CASE
+       SET payment_status = (CASE
              WHEN amount_paid <= 0 THEN 'pending'
              WHEN amount_paid >= grand_total THEN 'paid'
-             ELSE 'partial' END
+             ELSE 'partial' END)::purchase_payment_status_enum
        WHERE id = $1`,
       [id]
     );
