@@ -17,6 +17,7 @@ import CustomersList from '../pages/Customers/CustomersList';
 import CustomerDetails from '../pages/Customers/CustomerDetails';
 import OrdersList from '../pages/Orders/OrdersList';
 import CreateOrder from '../pages/Orders/CreateOrder';
+import QuickCounterSale from '../pages/Orders/QuickCounterSale';
 import OrderDetails from '../pages/Orders/OrderDetails';
 import ServiceOrdersList from '../pages/ServiceOrders/ServiceOrdersList';
 import CreateServiceOrder from '../pages/ServiceOrders/CreateServiceOrder';
@@ -103,6 +104,7 @@ const AppRoutes = () => {
         {/* Orders */}
         <Route path="orders" element={<OrdersList />} />
         <Route path="orders/create" element={<CreateOrder />} />
+        <Route path="orders/counter" element={<QuickCounterSale />} />
         <Route path="orders/:id" element={<OrderDetails />} />
 
         {/* Service Orders (grow-only) */}

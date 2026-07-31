@@ -9,14 +9,30 @@ import {
   TextField,
   Grid,
   Paper,
+  MenuItem,
+  InputAdornment,
+  Divider,
+  Button,
 } from '@mui/material';
 
 /**
  * Payment Method Component
- * Select payment method and terms
+ * Select payment terms and, optionally, record money collected right now
+ * (e.g. a walk-in / counter sale) so the order is created already paid.
  * Issue #57: Order creation wizard - Step 4
  */
-const PaymentMethod = ({ paymentMethod, notes, onPaymentChange }) => {
+const PaymentMethod = ({
+  paymentMethod,
+  notes,
+  onPaymentChange,
+  orderTotal = 0,
+  amountPaidNow = '',
+  payNowVia = 'cash',
+  payNowCashAccount = '',
+  payNowBankAccount = '',
+  cashAccounts = [],
+  bankAccounts = [],
+}) => {
   const handleMethodChange = (event) => {
     onPaymentChange('paymentMethod', event.target.value);
   };
@@ -24,6 +40,9 @@ const PaymentMethod = ({ paymentMethod, notes, onPaymentChange }) => {
   const handleNotesChange = (event) => {
     onPaymentChange('notes', event.target.value);
   };
+
+  const fmt = (n) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 
   return (
     <Box>
@@ -48,6 +67,94 @@ const PaymentMethod = ({ paymentMethod, notes, onPaymentChange }) => {
             </FormControl>
           </Paper>
         </Grid>
+
+        {/* Optional: money collected now (walk-in / counter sale) */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle1" fontWeight={600}>
+              Payment received now <Typography component="span" variant="body2" color="text.secondary">(optional)</Typography>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              For a walk-in / counter sale, enter what the customer paid now. It records the payment with the order and posts it to your Cash Book / Bank. Leave blank if unpaid.
+            </Typography>
+
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Amount received"
+                  type="number"
+                  value={amountPaidNow}
+                  onChange={(e) => onPaymentChange('amountPaidNow', e.target.value)}
+                  InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                />
+                {orderTotal > 0 && (
+                  <Button size="small" sx={{ mt: 0.5 }} onClick={() => onPaymentChange('amountPaidNow', String(orderTotal))}>
+                    Paid in full ({fmt(orderTotal)})
+                  </Button>
+                )}
+              </Grid>
+
+              {parseFloat(amountPaidNow) > 0 && (
+                <>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      select
+                      size="small"
+                      label="Paid via"
+                      value={payNowVia}
+                      onChange={(e) => onPaymentChange('payNowVia', e.target.value)}
+                    >
+                      <MenuItem value="cash">Cash</MenuItem>
+                      <MenuItem value="upi">UPI</MenuItem>
+                      <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                      <MenuItem value="card">Card</MenuItem>
+                    </TextField>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    {payNowVia === 'cash' ? (
+                      <TextField
+                        fullWidth
+                        select
+                        size="small"
+                        label="Cash Drawer"
+                        value={payNowCashAccount}
+                        onChange={(e) => onPaymentChange('payNowCashAccount', e.target.value)}
+                      >
+                        {cashAccounts.map((a) => (
+                          <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>
+                        ))}
+                      </TextField>
+                    ) : (
+                      <TextField
+                        fullWidth
+                        select
+                        size="small"
+                        label="Bank Account (optional)"
+                        value={payNowBankAccount}
+                        onChange={(e) => onPaymentChange('payNowBankAccount', e.target.value)}
+                        helperText="Leave blank if not tracking a specific bank"
+                      >
+                        <MenuItem value=""><em>— Not specified —</em></MenuItem>
+                        {bankAccounts.map((a) => (
+                          <MenuItem key={a.id} value={a.id}>
+                            {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    )}
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          </Paper>
+        </Grid>
+
+        <Divider sx={{ width: '100%' }} />
 
         {/* Notes */}
         <Grid item xs={12}>

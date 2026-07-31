@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -27,6 +27,8 @@ import DeliveryDetails from '../../components/Orders/DeliveryDetails';
 import PaymentMethod from '../../components/Orders/PaymentMethod';
 import OrderReview from '../../components/Orders/OrderReview';
 import { createOrder, checkAvailability } from '../../services/orderService';
+import { getCashAccounts } from '../../services/cashLedgerService';
+import { getBankAccounts } from '../../services/bankLedgerService';
 import { formatDate } from '../../utils/formatters';
 
 /**
@@ -51,7 +53,28 @@ const CreateOrder = () => {
     notes: '',
     walkInName: '',
     walkInPhone: '',
+    // Optional payment collected at order time (walk-in / counter sale)
+    amountPaidNow: '',
+    payNowVia: 'cash',
+    payNowCashAccount: '',
+    payNowBankAccount: '',
   });
+
+  const [cashAccounts, setCashAccounts] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+
+  useEffect(() => {
+    getCashAccounts()
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setCashAccounts(list);
+        setOrderData((prev) => ({ ...prev, payNowCashAccount: prev.payNowCashAccount || list[0]?.id || '' }));
+      })
+      .catch(() => {});
+    getBankAccounts()
+      .then((r) => setBankAccounts(r.data || r.accounts || []))
+      .catch(() => {});
+  }, []);
 
   const [availabilityChecked, setAvailabilityChecked] = useState(false);
   const [availabilityErrors, setAvailabilityErrors] = useState([]);
@@ -246,6 +269,18 @@ const CreateOrder = () => {
         skip_availability_check: availabilityOverridden || false,
       };
 
+      // Optional: money collected right now (e.g. a walk-in counter sale).
+      const paidNow = parseFloat(orderData.amountPaidNow);
+      if (paidNow > 0) {
+        payload.amount_paid_now = paidNow;
+        payload.payment_method = orderData.payNowVia;
+        if (orderData.payNowVia === 'cash') {
+          payload.cash_account_id = orderData.payNowCashAccount || null;
+        } else {
+          payload.bank_account_id = orderData.payNowBankAccount || null;
+        }
+      }
+
       console.log('Creating order with payload:', JSON.stringify(payload, null, 2));
       const response = await createOrder(payload);
 
@@ -264,6 +299,12 @@ const CreateOrder = () => {
   /**
    * Render step content
    */
+  // Approximate order value for prefilling "amount received" (server is authoritative).
+  const orderTotal = orderData.items.reduce(
+    (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
+    0
+  );
+
   const renderStepContent = (step) => {
     switch (step) {
       case 0:
@@ -298,6 +339,13 @@ const CreateOrder = () => {
             paymentMethod={orderData.paymentMethod}
             notes={orderData.notes}
             onPaymentChange={handlePaymentChange}
+            orderTotal={orderTotal}
+            amountPaidNow={orderData.amountPaidNow}
+            payNowVia={orderData.payNowVia}
+            payNowCashAccount={orderData.payNowCashAccount}
+            payNowBankAccount={orderData.payNowBankAccount}
+            cashAccounts={cashAccounts}
+            bankAccounts={bankAccounts}
           />
         );
       case 4:

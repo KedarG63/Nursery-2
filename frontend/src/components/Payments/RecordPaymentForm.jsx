@@ -24,6 +24,7 @@ import { toast } from 'react-toastify';
 import { recordPayment } from '../../services/paymentService';
 import { getOrders } from '../../services/orderService';
 import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -37,6 +38,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [bankAccounts, setBankAccounts] = useState([]);
+  const [cashAccounts, setCashAccounts] = useState([]);
   const [formData, setFormData] = useState({
     orderId: '',
     amount: '',
@@ -45,6 +47,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
     paymentDate: format(new Date(), 'yyyy-MM-dd'),
     notes: '',
     bankAccountId: '',
+    cashAccountId: '',
   });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [errors, setErrors] = useState({});
@@ -53,6 +56,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
     if (open) {
       fetchOutstandingOrders();
       fetchBankAccounts();
+      fetchCashAccounts();
     }
   }, [open]);
 
@@ -62,6 +66,18 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
       setBankAccounts(response.data || response.accounts || []);
     } catch (error) {
       console.error('Error fetching bank accounts:', error);
+    }
+  };
+
+  const fetchCashAccounts = async () => {
+    try {
+      const response = await getCashAccounts();
+      const list = response.data || response.accounts || [];
+      setCashAccounts(list);
+      // Default the cash drawer to the first (primary) one.
+      setFormData((prev) => ({ ...prev, cashAccountId: prev.cashAccountId || list[0]?.id || '' }));
+    } catch (error) {
+      console.error('Error fetching cash accounts:', error);
     }
   };
 
@@ -137,8 +153,12 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
       }
 
       // Include bank account if selected (for non-cash methods)
-      if (formData.bankAccountId) {
+      if (formData.paymentMethod !== 'cash' && formData.bankAccountId) {
         paymentData.bank_account_id = formData.bankAccountId;
+      }
+      // Include cash drawer for cash payments (so it posts to the right Cash Book)
+      if (formData.paymentMethod === 'cash' && formData.cashAccountId) {
+        paymentData.cash_account_id = formData.cashAccountId;
       }
 
       console.log('Recording payment with data:', paymentData);
@@ -184,6 +204,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
       paymentDate: format(new Date(), 'yyyy-MM-dd'),
       notes: '',
       bankAccountId: '',
+      cashAccountId: cashAccounts[0]?.id || '',
     });
     setSelectedOrder(null);
     setErrors({});
@@ -296,7 +317,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
                   label="Bank Account (Optional)"
                   value={formData.bankAccountId}
                   onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                  helperText="Select the bank account where this payment will be received"
+                  helperText="Where this payment lands — posts a credit to that bank ledger"
                 >
                   <MenuItem value=""><em>— Not specified —</em></MenuItem>
                   {bankAccounts.map((acc) => (
@@ -305,6 +326,23 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
                       {acc.bank_name ? ` — ${acc.bank_name}` : ''}
                       {acc.account_number ? ` (****${acc.account_number.slice(-4)})` : ''}
                     </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )}
+
+            {cashAccounts.length > 0 && formData.paymentMethod === 'cash' && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Cash Drawer"
+                  value={formData.cashAccountId}
+                  onChange={(e) => setFormData({ ...formData, cashAccountId: e.target.value })}
+                  helperText="Which cash drawer received this — posts a credit to that Cash Book"
+                >
+                  {cashAccounts.map((acc) => (
+                    <MenuItem key={acc.id} value={acc.id}>{acc.account_name}</MenuItem>
                   ))}
                 </TextField>
               </Grid>

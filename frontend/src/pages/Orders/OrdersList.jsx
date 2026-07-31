@@ -18,7 +18,8 @@ import {
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  FileDownload as ExportIcon
+  FileDownload as ExportIcon,
+  PointOfSale as PointOfSaleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -167,14 +168,25 @@ const OrdersList = () => {
           </Button>
 
           {canEdit(user?.roles) && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreateOrder}
-              sx={{ height: 'fit-content' }}
-            >
-              Create Order
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                color="success"
+                startIcon={<PointOfSaleIcon />}
+                onClick={() => navigate('/orders/counter')}
+                sx={{ height: 'fit-content' }}
+              >
+                Quick Counter Sale
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleCreateOrder}
+                sx={{ height: 'fit-content' }}
+              >
+                Create Order
+              </Button>
+            </>
           )}
         </Box>
       </Box>
