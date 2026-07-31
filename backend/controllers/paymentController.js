@@ -300,18 +300,10 @@ const verifyPayment = async (req, res) => {
       ]
     );
 
-    // Update order paid_amount and balance_amount (only if payment successful)
-    if (verification.status === 'success') {
-      await client.query(
-        `UPDATE orders
-         SET paid_amount = paid_amount + $1,
-             balance_amount = balance_amount - $1,
-             updated_at = NOW(),
-             updated_by = $2
-         WHERE id = $3`,
-        [payment.amount, userId, payment.order_id]
-      );
-    }
+    // NOTE: orders.paid_amount is maintained by the update_order_paid_amount()
+    // trigger, which fires on the pending->success UPDATE above. Updating it
+    // here would double-count the payment. balance_amount is derived by the
+    // set_balance_amount trigger.
 
     // If installment order, mark first pending installment as paid
     await client.query(
@@ -414,7 +406,6 @@ const recordOfflinePayment = async (req, res) => {
     const currentPaid = parseFloat(order.paid_amount);
     const orderBalance = Math.round((totalAmount - currentPaid) * 100) / 100;
     const paymentAmount = Math.round(parseFloat(amount) * 100) / 100;
-    const finalBalance = Math.max(0, Math.round((orderBalance - paymentAmount) * 100) / 100);
 
     // Validate amount is positive
     if (paymentAmount <= 0) {
@@ -462,16 +453,11 @@ const recordOfflinePayment = async (req, res) => {
       ]
     );
 
-    // Update order — use LEAST(total_amount, ...) so paid_amount can never
-    // exceed total_amount regardless of floating-point rounding
-    await client.query(
-      `UPDATE orders
-       SET paid_amount = LEAST(total_amount, paid_amount + $1),
-           updated_at = NOW(),
-           updated_by = $2
-       WHERE id = $3`,
-      [effectivePayment, userId, order_id]
-    );
+    // NOTE: orders.paid_amount is maintained by the AFTER-INSERT trigger
+    // update_order_paid_amount() (migration 1768100000001), which adds this
+    // payment's amount capped at total_amount. Do NOT update paid_amount here —
+    // a second manual update double-counts the payment and corrupts partial /
+    // split payments. balance_amount is derived by the set_balance_amount trigger.
 
     await client.query('COMMIT');
 
