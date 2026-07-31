@@ -41,9 +41,11 @@ This is exactly the **split-payment** case (part UPI + part cash): the mechanism
 
 ---
 
-## Phase 1 — Record payment at order creation (core revenue fix)
+## Phase 1 — Record payment at order creation (core revenue fix) — ✅ IMPLEMENTED 2026-07-22
 
 Make the money show on the dashboard the moment a counter sale is made.
+
+**Status: done.** `createOrder` accepts optional `amount_paid_now` + `payment_method` + `cash_account_id`/`bank_account_id`; when present it records the payment and posts it to the ledger in the same transaction. Absent → order unpaid, identical to before (regression-tested). Wizard step 4 has an optional "Payment received now" section.
 
 **Backend** — `orderController.js` `createOrder`: accept optional `amount_paid_now` + `payment {method, cash_account_id|bank_account_id}`. If > 0, insert a `payments` row **in the same transaction** as the order (reuse the offline-payment column set) and let the Phase-0-fixed trigger set `paid_amount`. Absent field → identical to today (safety).
 
@@ -53,9 +55,11 @@ No migration. Risk: low (additive optional path). Depends on Phase 0.
 
 ---
 
-## Phase 2 — Post customer payments to the Cash Book / Bank Ledger (accounting correctness)
+## Phase 2 — Post customer payments to the Cash Book / Bank Ledger (accounting correctness) — ✅ IMPLEMENTED 2026-07-22
 
 Make Cash-in-Hand reflect money coming in, not just going out.
+
+**Status: done.** Added `postSourceCredit` + a `postCustomerPaymentToLedger` helper; every recorded payment now posts a credit to the Cash Book (cash → primary drawer or the chosen one) or Bank Ledger (upi/bank_transfer/card). Delete/edit reverse and re-post. Migration `1769000000011` adds `payments.cash_account_id`; migration `1769000000012` backfills historical payments (guarded/idempotent). **Decision taken:** recorder picks the cash drawer (defaults to primary); backfill uses the primary drawer. RecordPaymentForm gained a Cash Drawer picker.
 
 **Backend** — offline-payment path: after inserting the payment, post a **credit** in the same transaction:
 - `cash` → `cash_ledger_entries`, `source_type='customer_payment'`
@@ -73,11 +77,11 @@ Risk: medium → separate rollout, dry-run, backfill guard.
 
 ---
 
-## Phase 3 — "Quick Counter Sale" screen (the real ease-of-use win)
+## Phase 3 — "Quick Counter Sale" screen (the real ease-of-use win) — ✅ IMPLEMENTED 2026-07-22
 
-New route (e.g. `/orders/counter`), existing wizard untouched: one screen → pick items → "Cash received" → **Complete Sale**. Auto-uses the Walk-in Customer, skips delivery + availability gate, records order + payment + cash-book credit atomically (via Phases 1–2). Optionally capture the individual buyer's name/phone for per-person history (small additive field).
+New route `/orders/counter`, existing wizard untouched: one screen → pick items → "Cash received" → **Complete Sale**. Auto-uses the Walk-in Customer, skips delivery + availability gate, records order + payment + cash-book credit atomically (via Phases 1–2). Captures optional buyer name/phone into the order notes. Shows change-to-return. Reachable via a "Quick Counter Sale" button on the Orders list.
 
-Depends on Phases 1–2. Risk: low (new surface).
+**Status: done.** `pages/Orders/QuickCounterSale.jsx` (reuses `OrderItems`).
 
 ---
 

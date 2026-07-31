@@ -6,6 +6,71 @@
 const pool = require('../config/database');
 const PaymentGateway = require('../services/payments');
 const notificationEvents = require('../events/notificationEvents');
+const { postSourceCredit, reverseSourceEntries } = require('./expenseController');
+
+// Payment methods that represent money landing in a bank account vs the cash drawer.
+// (payment_method_enum: cash, card, upi, bank_transfer, credit, cod — no 'cheque'.)
+const BANK_METHODS = ['bank_transfer', 'upi', 'card'];
+
+// Primary cash drawer (used when a cash payment doesn't specify one).
+async function resolvePrimaryCashAccount(client) {
+  const r = await client.query(
+    `SELECT id FROM cash_accounts WHERE is_active = true ORDER BY sort_order, created_at LIMIT 1`
+  );
+  return r.rows[0]?.id || null;
+}
+
+/**
+ * Post a received customer payment as a CREDIT to the Cash Book (cash) or Bank
+ * Ledger (bank/UPI/card/cheque), so money coming in is reflected in balances —
+ * mirroring how expenses/payroll/supplies post debits when money goes out.
+ *
+ * Must be called inside the caller's transaction (same `client`). Idempotent:
+ * guarded by source_type='customer_payment' + source_id, so it is safe to call
+ * more than once and coexists with the manual bank "sync from payments" action
+ * (which uses the same guard). Silently skips when the target account can't be
+ * determined (e.g. a bank payment with no bank account chosen) — those stay
+ * available to the manual sync, exactly as before this change.
+ */
+async function postCustomerPaymentToLedger(client, {
+  paymentId, method, amount, cashAccountId, bankAccountId,
+  entryDate, partyName, referenceNumber, userId,
+}) {
+  const amt = parseFloat(amount);
+  if (!(amt > 0)) return;
+
+  const already = await client.query(
+    `SELECT 1 FROM cash_ledger_entries
+       WHERE source_type = 'customer_payment' AND source_id = $1 AND deleted_at IS NULL
+     UNION ALL
+     SELECT 1 FROM bank_ledger_entries
+       WHERE source_type = 'customer_payment' AND source_id = $1 AND deleted_at IS NULL
+     LIMIT 1`,
+    [paymentId]
+  );
+  if (already.rows.length > 0) return;
+
+  const common = {
+    entryDate: entryDate || new Date().toISOString().split('T')[0],
+    amount: amt,
+    partyName: partyName || 'Customer',
+    narration: 'Customer payment',
+    referenceNumber: referenceNumber || null,
+    sourceType: 'customer_payment',
+    sourceId: paymentId,
+    userId,
+  };
+
+  if (method === 'cash') {
+    const cashId = cashAccountId || (await resolvePrimaryCashAccount(client));
+    if (!cashId) return; // no active cash account configured — nothing to post to
+    await postSourceCredit(client, { ...common, paymentSource: 'cash', cashAccountId: cashId });
+  } else if (BANK_METHODS.includes(method)) {
+    if (!bankAccountId) return; // unknown bank — leave for the manual bank sync
+    await postSourceCredit(client, { ...common, paymentSource: 'bank', bankAccountId });
+  }
+  // 'credit' / 'cod' / anything else → no money moved, no ledger posting
+}
 
 /**
  * Get all payments with filters
@@ -354,7 +419,7 @@ const recordOfflinePayment = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { order_id, amount, payment_method, receipt_number, notes, bank_account_id, payment_date } =
+    const { order_id, amount, payment_method, receipt_number, notes, bank_account_id, cash_account_id, payment_date } =
       req.body;
     const userId = req.user?.id;
 
@@ -385,9 +450,12 @@ const recordOfflinePayment = async (req, res) => {
     // Fetch order with row lock to prevent race conditions
     // Fetch total_amount and paid_amount (source of truth) not just balance_amount
     const orderResult = await client.query(
-      `SELECT id, customer_id, total_amount, paid_amount FROM orders
-       WHERE id = $1 AND deleted_at IS NULL
-       FOR UPDATE`,
+      `SELECT o.id, o.customer_id, o.total_amount, o.paid_amount,
+              c.name AS customer_name
+       FROM orders o
+       LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE o.id = $1 AND o.deleted_at IS NULL
+       FOR UPDATE OF o`,
       [order_id]
     );
 
@@ -433,9 +501,9 @@ const recordOfflinePayment = async (req, res) => {
       `INSERT INTO payments (
          order_id, customer_id, payment_method, payment_gateway,
          amount, status, payment_date, receipt_number, received_by,
-         notes, bank_account_id, created_by
+         notes, bank_account_id, cash_account_id, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         order_id,
@@ -449,6 +517,7 @@ const recordOfflinePayment = async (req, res) => {
         userId,
         notes,
         bank_account_id || null,
+        cash_account_id || null,
         userId,
       ]
     );
@@ -458,6 +527,19 @@ const recordOfflinePayment = async (req, res) => {
     // payment's amount capped at total_amount. Do NOT update paid_amount here —
     // a second manual update double-counts the payment and corrupts partial /
     // split payments. balance_amount is derived by the set_balance_amount trigger.
+
+    // Post the received money to the Cash Book / Bank Ledger so balances reflect it.
+    await postCustomerPaymentToLedger(client, {
+      paymentId: paymentResult.rows[0].id,
+      method: payment_method,
+      amount: effectivePayment,
+      cashAccountId: cash_account_id || null,
+      bankAccountId: bank_account_id || null,
+      entryDate: payment_date || new Date().toISOString().split('T')[0],
+      partyName: order.customer_name,
+      referenceNumber: receipt_number,
+      userId,
+    });
 
     await client.query('COMMIT');
 
@@ -1064,6 +1146,7 @@ const deletePayment = async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     await client.query('BEGIN');
 
     const payResult = await client.query(
@@ -1104,6 +1187,9 @@ const deletePayment = async (req, res, next) => {
       );
     }
 
+    // Reverse the Cash Book / Bank Ledger credit this payment posted (if any).
+    await reverseSourceEntries(client, 'customer_payment', id, userId);
+
     await client.query('COMMIT');
     res.json({ success: true, message: 'Payment deleted and balances reversed' });
   } catch (err) {
@@ -1124,6 +1210,7 @@ const updatePayment = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { amount, payment_method, payment_date, receipt_number, notes } = req.body;
+    const userId = req.user?.id;
 
     await client.query('BEGIN');
 
@@ -1193,6 +1280,33 @@ const updatePayment = async (req, res, next) => {
       );
     }
 
+    // Re-sync the Cash Book / Bank Ledger credit to the edited values: reverse
+    // the old entry and post a fresh one from the payment's current fields.
+    const updated = await client.query(
+      `SELECT p.amount, p.payment_method, p.payment_date, p.receipt_number,
+              p.bank_account_id, p.cash_account_id, c.name AS customer_name
+       FROM payments p
+       LEFT JOIN orders o ON o.id = p.order_id
+       LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE p.id = $1`,
+      [id]
+    );
+    if (updated.rows.length > 0) {
+      const up = updated.rows[0];
+      await reverseSourceEntries(client, 'customer_payment', id, userId);
+      await postCustomerPaymentToLedger(client, {
+        paymentId: id,
+        method: up.payment_method,
+        amount: up.amount,
+        cashAccountId: up.cash_account_id,
+        bankAccountId: up.bank_account_id,
+        entryDate: up.payment_date,
+        partyName: up.customer_name,
+        referenceNumber: up.receipt_number,
+        userId,
+      });
+    }
+
     await client.query('COMMIT');
     res.json({ success: true, message: 'Payment updated successfully' });
   } catch (err) {
@@ -1217,4 +1331,6 @@ module.exports = {
   generateReceipt,
   deletePayment,
   updatePayment,
+  // Shared helper so order creation can record + post an at-sale payment atomically.
+  postCustomerPaymentToLedger,
 };

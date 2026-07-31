@@ -41,6 +41,33 @@ async function postSourceDebit(client, {
   }
 }
 
+// Post a CREDIT (money in) to the chosen ledger — mirror of postSourceDebit,
+// used for customer payments received into cash / bank.
+// Returns nothing; throws on error to roll back the caller's transaction.
+async function postSourceCredit(client, {
+  paymentSource, bankAccountId, cashAccountId,
+  entryDate, amount, partyName, narration, referenceNumber,
+  sourceType, sourceId, userId,
+}) {
+  if (paymentSource === 'bank') {
+    await client.query(
+      `INSERT INTO bank_ledger_entries
+         (bank_account_id, entry_date, entry_type, amount, party_name, narration,
+          reference_number, source_type, source_id, created_by)
+       VALUES ($1, $2, 'credit', $3, $4, $5, $6, $7, $8, $9)`,
+      [bankAccountId, entryDate, amount, partyName, narration, referenceNumber || null, sourceType, sourceId, userId]
+    );
+  } else {
+    await client.query(
+      `INSERT INTO cash_ledger_entries
+         (cash_account_id, entry_date, entry_type, amount, party_name, narration,
+          reference_number, source_type, source_id, created_by)
+       VALUES ($1, $2, 'credit', $3, $4, $5, $6, $7, $8, $9)`,
+      [cashAccountId, entryDate, amount, partyName, narration, referenceNumber || null, sourceType, sourceId, userId]
+    );
+  }
+}
+
 // Soft-delete any live ledger entries (bank + cash) for a given source record.
 async function reverseSourceEntries(client, sourceType, sourceId, userId) {
   // Note: bank_ledger_entries has no deleted_by column (only updated_by);
@@ -452,6 +479,7 @@ const updateCategory = async (req, res, next) => {
 
 module.exports = {
   postSourceDebit,
+  postSourceCredit,
   reverseSourceEntries,
   createExpense,
   updateExpense,

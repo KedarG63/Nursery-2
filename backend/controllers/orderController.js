@@ -8,6 +8,7 @@ const pool = require('../config/database');
 const lotAllocationService = require('../services/lotAllocationService');
 const { isValidStatusTransition } = require('../validators/orderValidator');
 const notificationEvents = require('../events/notificationEvents');
+const { postCustomerPaymentToLedger } = require('./paymentController');
 
 // Tax rate configuration (0% - GST exempt)
 const TAX_RATE = 0.00;
@@ -32,6 +33,12 @@ const createOrder = async (req, res) => {
       auto_allocate = false,
       skip_availability_check = false,
       order_date = null,
+      // Optional: record money collected at order time (e.g. a walk-in counter
+      // cash sale). Absent / 0 → order is created unpaid exactly as before.
+      amount_paid_now = 0,
+      payment_method = null, // how the money was received now: cash/upi/bank_transfer/card
+      cash_account_id = null,
+      bank_account_id = null,
     } = req.body;
 
     const userId = req.user?.id;
@@ -40,7 +47,7 @@ const createOrder = async (req, res) => {
 
     // 1. Validate customer exists and is active
     const customerResult = await client.query(
-      `SELECT id, status, credit_limit
+      `SELECT id, name, status, credit_limit
        FROM customers
        WHERE id = $1 AND deleted_at IS NULL`,
       [customer_id]
@@ -320,6 +327,48 @@ const createOrder = async (req, res) => {
          WHERE customer_id = $2`,
         [totalAmount, customer_id]
       );
+    }
+
+    // 8b. Record an immediate payment if money was collected at order time
+    //     (walk-in / counter sale). Additive & optional — absent → order unpaid,
+    //     identical to before. The payments AFTER-INSERT trigger sets paid_amount;
+    //     postCustomerPaymentToLedger posts the money into the Cash Book / Bank.
+    const paidNow = Math.round((parseFloat(amount_paid_now) || 0) * 100) / 100;
+    if (paidNow > 0) {
+      if (!payment_method) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'payment_method is required when amount_paid_now is provided',
+        });
+      }
+      const cappedPaid = Math.min(paidNow, totalAmount);
+      const entryDate = order_date || new Date().toISOString().split('T')[0];
+      const payIns = await client.query(
+        `INSERT INTO payments (
+           order_id, customer_id, payment_method, payment_gateway,
+           amount, status, payment_date, received_by,
+           bank_account_id, cash_account_id, created_by
+         )
+         VALUES ($1, $2, $3, 'manual', $4, 'success', $5, $6, $7, $8, $6)
+         RETURNING id`,
+        [
+          order.id, customer_id, payment_method, cappedPaid, entryDate, userId,
+          bank_account_id || null, cash_account_id || null,
+        ]
+      );
+
+      await postCustomerPaymentToLedger(client, {
+        paymentId: payIns.rows[0].id,
+        method: payment_method,
+        amount: cappedPaid,
+        cashAccountId: cash_account_id || null,
+        bankAccountId: bank_account_id || null,
+        entryDate,
+        partyName: customerResult.rows[0].name,
+        referenceNumber: null,
+        userId,
+      });
     }
 
     // 9. Auto-allocate lots by default (Phase 21 - Part 4)
