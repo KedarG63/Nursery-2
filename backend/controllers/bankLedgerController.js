@@ -638,6 +638,12 @@ const syncFromPayments = async (req, res, next) => {
     let syncedDebits = 0;
 
     // ── Credits: customer payments via bank/UPI/cheque ────────────────────────
+    // Only payments that name THIS account are claimed. Payments with a NULL
+    // bank_account_id used to be swept in here too, which meant whichever
+    // account was synced first absorbed every unattributed receipt in the
+    // system. Recording a payment now requires choosing the bank, so orphans
+    // are no longer created; any historical ones must be attributed on the
+    // payment row itself rather than guessed at here.
     if (sync_credits) {
       const payments = await client.query(
         `SELECT
@@ -653,7 +659,7 @@ const syncFromPayments = async (req, res, next) => {
            AND p.status = 'success'
            AND p.deleted_at IS NULL
            AND p.amount > 0
-           AND (p.bank_account_id = $1 OR p.bank_account_id IS NULL)
+           AND p.bank_account_id = $1
            AND NOT EXISTS (
              SELECT 1 FROM bank_ledger_entries
              WHERE source_type = 'customer_payment'

@@ -134,12 +134,13 @@ const PaymentMethod = ({
                         fullWidth
                         select
                         size="small"
-                        label="Bank Account (optional)"
+                        required
+                        label="Bank Account"
                         value={payNowBankAccount}
                         onChange={(e) => onPaymentChange('payNowBankAccount', e.target.value)}
-                        helperText="Leave blank if not tracking a specific bank"
+                        error={!payNowBankAccount}
+                        helperText={!payNowBankAccount ? 'Pick where the money landed' : ''}
                       >
-                        <MenuItem value=""><em>— Not specified —</em></MenuItem>
                         {bankAccounts.map((a) => (
                           <MenuItem key={a.id} value={a.id}>
                             {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}

@@ -72,7 +72,13 @@ const CreateOrder = () => {
       })
       .catch(() => {});
     getBankAccounts()
-      .then((r) => setBankAccounts(r.data || r.accounts || []))
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setBankAccounts(list);
+        // Default like the cash drawer above — a blank bank saved the payment
+        // with no account attached, keeping it out of every ledger.
+        setOrderData((prev) => ({ ...prev, payNowBankAccount: prev.payNowBankAccount || list[0]?.id || '' }));
+      })
       .catch(() => {});
   }, []);
 
@@ -277,7 +283,11 @@ const CreateOrder = () => {
         if (orderData.payNowVia === 'cash') {
           payload.cash_account_id = orderData.payNowCashAccount || null;
         } else {
-          payload.bank_account_id = orderData.payNowBankAccount || null;
+          if (!orderData.payNowBankAccount) {
+            toast.error('Select the bank account the money landed in');
+            return; // the finally below clears the loading flag
+          }
+          payload.bank_account_id = orderData.payNowBankAccount;
         }
       }
 

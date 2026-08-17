@@ -33,6 +33,10 @@ const PAYMENT_METHODS = [
   { value: 'card', label: 'Card' },
 ];
 
+// Methods where the money lands in a bank account, so one must be named.
+// Mirrors BANK_METHODS in backend/controllers/paymentController.js.
+const BANK_METHODS = ['bank_transfer', 'upi', 'card'];
+
 const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -63,7 +67,12 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const fetchBankAccounts = async () => {
     try {
       const response = await getBankAccounts();
-      setBankAccounts(response.data || response.accounts || []);
+      const list = response.data || response.accounts || [];
+      setBankAccounts(list);
+      // Default to the first account. A blank bank saved the payment with no
+      // account attached, which kept it out of every ledger until a bank sync
+      // guessed at it.
+      setFormData((prev) => ({ ...prev, bankAccountId: prev.bankAccountId || list[0]?.id || '' }));
     } catch (error) {
       console.error('Error fetching bank accounts:', error);
     }
@@ -119,6 +128,12 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
         formData.paymentMethod === 'cash'
           ? 'Receipt number is required'
           : 'Transaction reference is required';
+    }
+
+    // Without a bank account the payment posts to no ledger at all, so the
+    // money stays invisible until someone runs a bank sync.
+    if (BANK_METHODS.includes(formData.paymentMethod) && !formData.bankAccountId) {
+      newErrors.bankAccountId = 'Select the bank account the money landed in';
     }
 
     setErrors(newErrors);
@@ -203,7 +218,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
       transactionRef: '',
       paymentDate: format(new Date(), 'yyyy-MM-dd'),
       notes: '',
-      bankAccountId: '',
+      bankAccountId: bankAccounts[0]?.id || '',
       cashAccountId: cashAccounts[0]?.id || '',
     });
     setSelectedOrder(null);
@@ -314,12 +329,13 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
                 <TextField
                   fullWidth
                   select
-                  label="Bank Account (Optional)"
+                  required
+                  label="Bank Account"
                   value={formData.bankAccountId}
                   onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                  helperText="Where this payment lands — posts a credit to that bank ledger"
+                  error={Boolean(errors.bankAccountId)}
+                  helperText={errors.bankAccountId || 'Where this payment lands — posts a credit to that bank ledger'}
                 >
-                  <MenuItem value=""><em>— Not specified —</em></MenuItem>
                   {bankAccounts.map((acc) => (
                     <MenuItem key={acc.id} value={acc.id}>
                       {acc.account_name}

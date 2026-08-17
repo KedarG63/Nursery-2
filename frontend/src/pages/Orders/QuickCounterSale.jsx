@@ -76,7 +76,14 @@ const QuickCounterSale = () => {
       })
       .catch(() => {});
     getBankAccounts()
-      .then((r) => setBankAccounts(r.data || r.accounts || []))
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setBankAccounts(list);
+        // Default to the first account, exactly like the cash drawer above.
+        // Leaving this blank used to save the payment with no bank attached,
+        // which left it out of every ledger until someone ran a bank sync.
+        setBankAccountId((prev) => prev || list[0]?.id || '');
+      })
       .catch(() => {});
   }, []);
 
@@ -93,6 +100,7 @@ const QuickCounterSale = () => {
     const paid = parseFloat(amountReceived) || 0;
     if (paid <= 0) return toast.error('Enter the amount received');
     if (payVia === 'cash' && !cashAccountId) return toast.error('Select a cash drawer');
+    if (payVia !== 'cash' && !bankAccountId) return toast.error('Select the bank account the money landed in');
 
     const noteParts = [];
     if (buyerName) noteParts.push(`Walk-in: ${buyerName}`);
@@ -112,7 +120,7 @@ const QuickCounterSale = () => {
       // Payment is capped at the true order total server-side.
       amount_paid_now: paid,
       payment_method: payVia,
-      ...(payVia === 'cash' ? { cash_account_id: cashAccountId } : { bank_account_id: bankAccountId || null }),
+      ...(payVia === 'cash' ? { cash_account_id: cashAccountId } : { bank_account_id: bankAccountId }),
     };
 
     setSubmitting(true);
@@ -211,10 +219,11 @@ const QuickCounterSale = () => {
                   </TextField>
                 ) : (
                   <TextField
-                    fullWidth select size="small" label="Bank (optional)"
+                    fullWidth select size="small" required label="Bank Account"
                     value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}
+                    error={!bankAccountId}
+                    helperText={!bankAccountId ? 'Pick where the money landed' : ''}
                   >
-                    <MenuItem value=""><em>— Not specified —</em></MenuItem>
                     {bankAccounts.map((a) => <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>)}
                   </TextField>
                 )}
