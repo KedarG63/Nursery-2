@@ -5,7 +5,7 @@
 const EMPLOYEE_TYPES = ['salaried', 'daily_wage'];
 
 const validateEmployee = (req, res, next) => {
-  const { full_name, employee_type, monthly_salary, daily_rate } = req.body;
+  const { full_name, employee_type, monthly_salary, daily_rate, half_day_rate } = req.body;
   const errors = [];
 
   if (!full_name || !full_name.trim()) errors.push('full_name is required');
@@ -18,6 +18,11 @@ const validateEmployee = (req, res, next) => {
   } else if (employee_type === 'daily_wage') {
     if (daily_rate === undefined || daily_rate === null || Number(daily_rate) <= 0) {
       errors.push('daily_rate (> 0) is required for daily-wage workers');
+    }
+    // Optional — blank means a half day falls back to half the daily rate.
+    if (half_day_rate !== undefined && half_day_rate !== null && half_day_rate !== ''
+        && !(Number(half_day_rate) > 0)) {
+      errors.push('half_day_rate must be greater than 0 when provided');
     }
   }
 

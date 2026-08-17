@@ -82,7 +82,7 @@ const LabourerRoster = ({ canWrite }) => {
               <TableRow>
                 <TableCell>{t('payroll.code', 'Code')}</TableCell>
                 <TableCell>{t('payroll.name', 'Name')}</TableCell>
-                <TableCell align="right">{t('payroll.dailyRate', 'Daily Rate')}</TableCell>
+                <TableCell align="right">{t('payroll.rateFullHalf', 'Rate (full / half)')}</TableCell>
                 <TableCell>{t('payroll.attStatus', 'Attendance')}</TableCell>
                 <TableCell align="right">{t('payroll.units', 'Units (days)')}</TableCell>
               </TableRow>
@@ -93,7 +93,11 @@ const LabourerRoster = ({ canWrite }) => {
                 <TableRow key={r.employee_id} hover>
                   <TableCell>{r.employee_code}</TableCell>
                   <TableCell>{r.full_name}</TableCell>
-                  <TableCell align="right">{formatCurrency(r.daily_rate)}</TableCell>
+                  <TableCell align="right">
+                    {formatCurrency(r.daily_rate)}
+                    {' / '}
+                    {formatCurrency(r.half_day_rate != null ? r.half_day_rate : Number(r.daily_rate || 0) * 0.5)}
+                  </TableCell>
                   <TableCell>
                     <TextField select size="small" value={r.status} onChange={(e) => setStatus(r.employee_id, e.target.value)} disabled={!canWrite} sx={{ minWidth: 140 }}>
                       <MenuItem value="present">{t('payroll.present', 'Present')}</MenuItem>

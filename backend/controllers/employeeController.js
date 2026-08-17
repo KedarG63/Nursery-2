@@ -13,7 +13,7 @@ async function nextEmployeeCode() {
 const createEmployee = async (req, res, next) => {
   try {
     const {
-      full_name, phone, employee_type, monthly_salary, daily_rate,
+      full_name, phone, employee_type, monthly_salary, daily_rate, half_day_rate,
       date_of_joining, status, bank_account_name, bank_account_number,
       ifsc_code, upi_id, notes,
     } = req.body;
@@ -21,15 +21,16 @@ const createEmployee = async (req, res, next) => {
     const employee_code = await nextEmployeeCode();
     const result = await db.query(
       `INSERT INTO employees
-         (employee_code, full_name, phone, employee_type, monthly_salary, daily_rate,
+         (employee_code, full_name, phone, employee_type, monthly_salary, daily_rate, half_day_rate,
           date_of_joining, status, bank_account_name, bank_account_number, ifsc_code, upi_id, notes,
           created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
        RETURNING *`,
       [
         employee_code, full_name, phone || null, employee_type,
         employee_type === 'salaried' ? monthly_salary : null,
         employee_type === 'daily_wage' ? daily_rate : null,
+        employee_type === 'daily_wage' && half_day_rate ? half_day_rate : null,
         date_of_joining || null, status || 'active',
         bank_account_name || null, bank_account_number || null, ifsc_code || null, upi_id || null,
         notes || null, req.user.id,
@@ -99,7 +100,7 @@ const updateEmployee = async (req, res, next) => {
   try {
     const { id } = req.params;
     const {
-      full_name, phone, employee_type, monthly_salary, daily_rate,
+      full_name, phone, employee_type, monthly_salary, daily_rate, half_day_rate,
       date_of_joining, status, bank_account_name, bank_account_number,
       ifsc_code, upi_id, notes,
     } = req.body;
@@ -110,14 +111,16 @@ const updateEmployee = async (req, res, next) => {
     const result = await db.query(
       `UPDATE employees SET
          full_name = $1, phone = $2, employee_type = $3,
-         monthly_salary = $4, daily_rate = $5, date_of_joining = $6, status = $7,
-         bank_account_name = $8, bank_account_number = $9, ifsc_code = $10, upi_id = $11,
-         notes = $12, updated_by = $13, updated_at = NOW()
-       WHERE id = $14 RETURNING *`,
+         monthly_salary = $4, daily_rate = $5, half_day_rate = $6,
+         date_of_joining = $7, status = $8,
+         bank_account_name = $9, bank_account_number = $10, ifsc_code = $11, upi_id = $12,
+         notes = $13, updated_by = $14, updated_at = NOW()
+       WHERE id = $15 RETURNING *`,
       [
         full_name, phone || null, employee_type,
         employee_type === 'salaried' ? monthly_salary : null,
         employee_type === 'daily_wage' ? daily_rate : null,
+        employee_type === 'daily_wage' && half_day_rate ? half_day_rate : null,
         date_of_joining || null, status || 'active',
         bank_account_name || null, bank_account_number || null, ifsc_code || null, upi_id || null,
         notes || null, req.user.id, id,

@@ -22,7 +22,7 @@ import { canManageFinance } from '../../utils/roleCheck';
 import ConfirmDialog from '../../components/Common/ConfirmDialog';
 
 const emptyForm = {
-  full_name: '', phone: '', employee_type: 'salaried', monthly_salary: '', daily_rate: '',
+  full_name: '', phone: '', employee_type: 'salaried', monthly_salary: '', daily_rate: '', half_day_rate: '',
   date_of_joining: '', status: 'active', bank_account_name: '', bank_account_number: '', ifsc_code: '', upi_id: '', notes: '',
 };
 
@@ -37,6 +37,7 @@ const EmployeeDialog = ({ open, onClose, onSaved, editing }) => {
         full_name: editing.full_name || '', phone: editing.phone || '',
         employee_type: editing.employee_type || 'salaried',
         monthly_salary: editing.monthly_salary ?? '', daily_rate: editing.daily_rate ?? '',
+        half_day_rate: editing.half_day_rate ?? '',
         date_of_joining: editing.date_of_joining?.split('T')[0] || '', status: editing.status || 'active',
         bank_account_name: editing.bank_account_name || '', bank_account_number: editing.bank_account_number || '',
         ifsc_code: editing.ifsc_code || '', upi_id: editing.upi_id || '', notes: editing.notes || '',
@@ -55,6 +56,10 @@ const EmployeeDialog = ({ open, onClose, onSaved, editing }) => {
       ...form,
       monthly_salary: form.employee_type === 'salaried' ? Number(form.monthly_salary) : null,
       daily_rate: form.employee_type === 'daily_wage' ? Number(form.daily_rate) : null,
+      // Blank = a half day falls back to half the daily rate (the old behaviour).
+      half_day_rate: form.employee_type === 'daily_wage' && Number(form.half_day_rate) > 0
+        ? Number(form.half_day_rate)
+        : null,
       date_of_joining: form.date_of_joining || null,
     };
     setSaving(true);
@@ -84,10 +89,18 @@ const EmployeeDialog = ({ open, onClose, onSaved, editing }) => {
               <TextField label={t('payroll.monthlySalary', 'Monthly Salary')} type="number" fullWidth size="small"
                 value={form.monthly_salary} onChange={set('monthly_salary')} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
             ) : (
-              <TextField label={t('payroll.dailyRate', 'Daily Rate')} type="number" fullWidth size="small"
+              <TextField label={t('payroll.dailyRate', 'Full Day Rate')} type="number" fullWidth size="small"
                 value={form.daily_rate} onChange={set('daily_rate')} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
             )}
           </Grid>
+          {form.employee_type === 'daily_wage' && (
+            <Grid item xs={12} sm={6}>
+              <TextField label={t('payroll.halfDayRate', 'Half Day Rate')} type="number" fullWidth size="small"
+                value={form.half_day_rate} onChange={set('half_day_rate')}
+                helperText={t('payroll.halfDayRateHelp', 'Leave blank to use half the full day rate')}
+                InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
+            </Grid>
+          )}
           <Grid item xs={12} sm={6}><TextField label={t('payroll.joining', 'Date of Joining')} type="date" InputLabelProps={{ shrink: true }} fullWidth size="small" value={form.date_of_joining} onChange={set('date_of_joining')} /></Grid>
           <Grid item xs={12} sm={6}>
             <TextField select label={t('payroll.status', 'Status')} fullWidth size="small" value={form.status} onChange={set('status')}>
@@ -212,7 +225,11 @@ const EmployeesPage = () => {
                     </Typography>
                   </TableCell>
                   <TableCell><Chip size="small" variant="outlined" color={r.employee_type === 'salaried' ? 'primary' : 'secondary'} label={r.employee_type === 'salaried' ? t('payroll.salaried', 'Salaried') : t('payroll.dailyWage', 'Daily wage')} /></TableCell>
-                  <TableCell align="right">{r.employee_type === 'salaried' ? `${formatCurrency(r.monthly_salary)}/mo` : `${formatCurrency(r.daily_rate)}/day`}</TableCell>
+                  <TableCell align="right">
+                    {r.employee_type === 'salaried'
+                      ? `${formatCurrency(r.monthly_salary)}/mo`
+                      : `${formatCurrency(r.daily_rate)}/day${r.half_day_rate ? ` · ${formatCurrency(r.half_day_rate)}/½` : ''}`}
+                  </TableCell>
                   <TableCell align="right">{Number(r.outstanding_advance) > 0 ? <Typography color="warning.main" fontWeight={600}>{formatCurrency(r.outstanding_advance)}</Typography> : '-'}</TableCell>
                   <TableCell><Chip size="small" label={r.status} color={r.status === 'active' ? 'success' : 'default'} /></TableCell>
                   {canWrite && (

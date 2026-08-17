@@ -3,7 +3,9 @@
  *
  * Two uses:
  *  - Daily-wage labourers: mark days worked (present / half day / absent). Drives
- *    wages = SUM(units) * daily_rate for the period.
+ *    wages = SUM(units) * daily_rate for the period, except that rows marked
+ *    'half_day' are paid at employees.half_day_rate when one is set (a half day
+ *    is not necessarily half the full rate). See payrollController.computePreview.
  *  - Salaried staff: exception-based leave log. Present days are assumed; only
  *    leave is recorded — paid_leave (no deduction) or unpaid_leave (deducted).
  *    Half-day leave = units 0.5.
@@ -83,7 +85,7 @@ const listAttendance = async (req, res, next) => {
 
     if (work_date && !employee_id) {
       const rows = await db.query(
-        `SELECT e.id AS employee_id, e.employee_code, e.full_name, e.daily_rate,
+        `SELECT e.id AS employee_id, e.employee_code, e.full_name, e.daily_rate, e.half_day_rate,
                 a.id AS attendance_id, a.status, a.units, a.notes
          FROM employees e
          LEFT JOIN employee_attendance a ON a.employee_id = e.id AND a.work_date = $1
