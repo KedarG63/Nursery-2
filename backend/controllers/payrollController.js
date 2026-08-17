@@ -27,6 +27,13 @@ const shortDate = (d) => {
   const dt = d instanceof Date ? d : new Date(`${d}T00:00:00`);
   return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
+// Normalise a DATE column (Date or string) to 'YYYY-MM-DD' so it can be compared
+// lexically against the window bounds, which are plain strings.
+const toISODate = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string') return d.split('T')[0];
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 // Normalise a run request into a concrete window.
 function buildRunWindow(body) {
@@ -66,12 +73,16 @@ const runLabel = (run) =>
 // Compute per-employee amounts for a window; no DB writes.
 async function computePreview(runner, win) {
   const empType = win.run_type === 'salary' ? 'salaried' : 'daily_wage';
+  // Exclude anyone who had not joined yet by the end of the window — without
+  // this, a person who joined on 4 Aug still appeared in the July salary run.
+  // A NULL date_of_joining means "unknown / legacy record", so keep them.
   const employees = await runner.query(
-    `SELECT id, employee_code, full_name, monthly_salary, daily_rate
+    `SELECT id, employee_code, full_name, monthly_salary, daily_rate, half_day_rate, date_of_joining
      FROM employees
      WHERE deleted_at IS NULL AND status = 'active' AND employee_type = $1
+       AND (date_of_joining IS NULL OR date_of_joining <= $2)
      ORDER BY full_name`,
-    [empType]
+    [empType, win.end]
   );
 
   const items = [];
@@ -80,6 +91,7 @@ async function computePreview(runner, win) {
     let days_worked = null;
     let unpaid_leave_days = null;
     let leave_deducted = 0;
+    let payable_days = null;
 
     if (win.run_type === 'salary') {
       const fullSalary = parseFloat(e.monthly_salary || 0);
@@ -92,16 +104,48 @@ async function computePreview(runner, win) {
       unpaid_leave_days = parseFloat(lv.rows[0].d);
       const perDay = win.days_in_month > 0 ? fullSalary / win.days_in_month : 0;
       leave_deducted = parseFloat((unpaid_leave_days * perDay).toFixed(2));
-      gross = fullSalary; // gross = full salary; leave shown as a separate deduction
+
+      // Someone who joined partway through this month is paid only from their
+      // joining date. The query above already excluded anyone who had not
+      // joined by win.end, so a joining date inside the window means a part month.
+      const joined = toISODate(e.date_of_joining);
+      payable_days = win.days_in_month;
+      if (joined && joined > win.start) {
+        payable_days = win.days_in_month - Number(joined.slice(8, 10)) + 1;
+      }
+      gross = payable_days < win.days_in_month
+        ? parseFloat((perDay * payable_days).toFixed(2))
+        : fullSalary; // gross = full salary; leave shown as a separate deduction
     } else {
+      // half_day rows are paid at the employee's explicit half-day rate when one
+      // is set, because a half day is not necessarily half the full rate. Their
+      // units are removed from the units-based part so they are not paid twice.
+      // With no half_day_rate this reduces exactly to SUM(units) * daily_rate.
       const att = await runner.query(
-        `SELECT COALESCE(SUM(units), 0) AS units
+        `SELECT
+           COALESCE(SUM(units), 0) AS units,
+           COALESCE(SUM(units) FILTER (WHERE status = 'half_day'), 0) AS half_units,
+           COUNT(*) FILTER (WHERE status = 'half_day') AS half_days
          FROM employee_attendance
          WHERE employee_id = $1 AND work_date BETWEEN $2 AND $3`,
         [e.id, win.start, win.end]
       );
-      days_worked = parseFloat(att.rows[0].units);
-      gross = parseFloat((days_worked * parseFloat(e.daily_rate || 0)).toFixed(2));
+      const totalUnits = parseFloat(att.rows[0].units);
+      const dailyRate = parseFloat(e.daily_rate || 0);
+      const halfRate = e.half_day_rate === null || e.half_day_rate === undefined
+        ? null
+        : parseFloat(e.half_day_rate);
+
+      days_worked = totalUnits;
+      if (halfRate === null) {
+        gross = parseFloat((totalUnits * dailyRate).toFixed(2));
+      } else {
+        const halfUnits = parseFloat(att.rows[0].half_units);
+        const halfCount = parseInt(att.rows[0].half_days, 10);
+        gross = parseFloat((
+          (totalUnits - halfUnits) * dailyRate + halfCount * halfRate
+        ).toFixed(2));
+      }
     }
 
     const payable = parseFloat((gross - leave_deducted).toFixed(2));
@@ -120,6 +164,7 @@ async function computePreview(runner, win) {
       full_name: e.full_name,
       gross_amount: gross,
       days_worked,
+      payable_days, // preview-only: < days_in_month when a part month was prorated
       unpaid_leave_days,
       leave_deducted,
       outstanding_advance,
@@ -155,6 +200,7 @@ const previewRun = async (req, res, next) => {
         period_month: win.month, period_year: win.year,
         period_start: win.start, period_end: win.end,
         period_label: win.label,
+        days_in_month: win.days_in_month, // lets the UI flag a prorated part month
         items,
       },
     });
@@ -227,6 +273,25 @@ const createRun = async (req, res, next) => {
       [run_number, win.month, win.year, win.start, win.end, run_type, fy, notes || null, req.user.id]
     );
     const run = runRes.rows[0];
+
+    // The items array is client-supplied, so re-check eligibility here: a stale
+    // browser tab holding an old preview must not be able to pay someone for a
+    // period before they joined.
+    const notYetJoined = await client.query(
+      `SELECT full_name, date_of_joining FROM employees
+       WHERE id = ANY($1::uuid[]) AND date_of_joining IS NOT NULL AND date_of_joining > $2`,
+      [items.map((it) => it.employee_id), win.end]
+    );
+    if (notYetJoined.rows.length > 0) {
+      const who = notYetJoined.rows
+        .map((r) => `${r.full_name} (joined ${shortDate(r.date_of_joining)})`)
+        .join(', ');
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `These employees had not joined by ${shortDate(win.end)}: ${who}. Re-run the preview.`,
+      });
+    }
 
     for (const it of items) {
       const gross = parseFloat(it.gross_amount || 0);

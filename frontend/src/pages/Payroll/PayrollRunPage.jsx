@@ -275,7 +275,14 @@ const PayrollRunPage = () => {
                             : <Typography variant="body2" color="text.secondary">—</Typography>}
                         </TableCell>
                       )}
-                      <TableCell align="right">{formatCurrency(it.gross_amount)}</TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(it.gross_amount)}
+                        {!isWages && it.payable_days != null && it.payable_days < preview.days_in_month && (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            {t('payroll.partMonth', 'part month')} — {it.payable_days}/{preview.days_in_month} {t('payroll.daysShort', 'd')}
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell align="right">
                         <TextField type="number" size="small" value={it.advance_deducted}
                           onChange={(e) => setItemAdvance(it.employee_id, e.target.value)}
