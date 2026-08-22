@@ -691,6 +691,12 @@ const syncFromPayments = async (req, res, next) => {
     }
 
     // ── Debits: vendor payments via bank/cheque ────────────────────────────────
+    // Only payments that name THIS account. Previously there was no account
+    // filter at all — there was no column to filter on — so every bank/cheque
+    // vendor payment in the system was debited to whichever account was synced.
+    // seed_purchase_payments.bank_account_id (migration 1769000000014) makes
+    // this possible; legacy rows have it NULL and are correctly skipped, since
+    // guessing which account paid them is what caused the problem.
     if (sync_debits) {
       const vendorPayments = await client.query(
         `SELECT
@@ -704,13 +710,15 @@ const syncFromPayments = async (req, res, next) => {
          LEFT JOIN vendors v ON v.id = sp.vendor_id
          WHERE spp.payment_method IN ('bank_transfer', 'cheque')
            AND spp.amount > 0
+           AND spp.bank_account_id = $1
            AND NOT EXISTS (
              SELECT 1 FROM bank_ledger_entries
              WHERE source_type = 'vendor_payment'
                AND source_id = spp.id
                AND deleted_at IS NULL
            )
-         ORDER BY entry_date ASC`
+         ORDER BY entry_date ASC`,
+        [id]
       );
 
       for (const pmt of vendorPayments.rows) {

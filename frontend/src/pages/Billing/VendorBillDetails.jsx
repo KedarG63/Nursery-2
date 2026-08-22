@@ -17,6 +17,8 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { format } from 'date-fns';
 import { getVendorBill, updateDueDate, recordPayment } from '../../services/vendorBillService';
+import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
 import BillingStatusBadge from '../../components/Billing/BillingStatusBadge';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
@@ -51,9 +53,14 @@ const VendorBillDetails = () => {
     payment_date: format(new Date(), 'yyyy-MM-dd'),
     transaction_reference: '',
     notes: '',
+    payment_source: 'cash', // kept in step with payment_method below
+    bank_account_id: '',
+    cash_account_id: '',
   });
   const [paymentError, setPaymentError] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [cashAccounts, setCashAccounts] = useState([]);
 
   const isAdmin = user?.roles?.some((r) => ['Admin', 'Manager'].includes(r));
 
@@ -72,6 +79,25 @@ const VendorBillDetails = () => {
   };
 
   useEffect(() => { fetchBill(); }, [id]);
+
+  // Money leaving the business has to name the account it left, so both lists
+  // are loaded and defaulted to the first account by sort_order.
+  useEffect(() => {
+    getBankAccounts()
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setBankAccounts(list);
+        setPaymentData((f) => ({ ...f, bank_account_id: f.bank_account_id || list[0]?.id || '' }));
+      })
+      .catch(() => {});
+    getCashAccounts()
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setCashAccounts(list);
+        setPaymentData((f) => ({ ...f, cash_account_id: f.cash_account_id || list[0]?.id || '' }));
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSaveDueDate = async () => {
     if (!newDueDate) { toast.error('Please select a date'); return; }
@@ -99,15 +125,28 @@ const VendorBillDetails = () => {
       return;
     }
 
+    if (paymentData.payment_source === 'bank' && !paymentData.bank_account_id) {
+      setPaymentError('Select the bank account this payment goes out from'); return;
+    }
+    if (paymentData.payment_source === 'cash' && !paymentData.cash_account_id) {
+      setPaymentError('Select the cash drawer this payment goes out from'); return;
+    }
+
     setSubmittingPayment(true);
     try {
       await recordPayment(id, {
         ...paymentData,
         amount: amt,
+        // Send only the account matching the chosen source — the backend
+        // constraint allows exactly one.
+        bank_account_id: paymentData.payment_source === 'bank' ? paymentData.bank_account_id : null,
+        cash_account_id: paymentData.payment_source === 'cash' ? paymentData.cash_account_id : null,
       });
       toast.success('Payment recorded');
       setShowPaymentForm(false);
-      setPaymentData({ amount: '', payment_method: 'cash', payment_date: format(new Date(), 'yyyy-MM-dd'), transaction_reference: '', notes: '' });
+      // Reset payment_source alongside payment_method so the next payment does
+      // not open with a stale, contradictory pairing.
+      setPaymentData((f) => ({ ...f, amount: '', payment_method: 'cash', payment_source: 'cash', payment_date: format(new Date(), 'yyyy-MM-dd'), transaction_reference: '', notes: '' }));
       fetchBill();
     } catch (err) {
       setPaymentError(err?.message || 'Failed to record payment');
@@ -256,12 +295,59 @@ const VendorBillDetails = () => {
                   <Select
                     value={paymentData.payment_method}
                     label="Method *"
-                    onChange={(e) => setPaymentData({ ...paymentData, payment_method: e.target.value })}
+                    onChange={(e) => setPaymentData({
+                      ...paymentData,
+                      payment_method: e.target.value,
+                      // Keep the source in step so the record cannot say "cash
+                      // payment, taken out of the bank". Still overridable below.
+                      payment_source: e.target.value === 'cash' ? 'cash' : 'bank',
+                    })}
                   >
                     {PAYMENT_METHODS.map((m) => (
                       <MenuItem key={m} value={m}>{m.replace('_', ' ').toUpperCase()}</MenuItem>
                     ))}
                   </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Paid From *</InputLabel>
+                  <Select
+                    value={paymentData.payment_source}
+                    label="Paid From *"
+                    onChange={(e) => setPaymentData({ ...paymentData, payment_source: e.target.value })}
+                  >
+                    <MenuItem value="bank">BANK</MenuItem>
+                    <MenuItem value="cash">CASH IN HAND</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>{paymentData.payment_source === 'bank' ? 'Bank Account *' : 'Cash Drawer *'}</InputLabel>
+                  {paymentData.payment_source === 'bank' ? (
+                    <Select
+                      value={paymentData.bank_account_id}
+                      label="Bank Account *"
+                      onChange={(e) => setPaymentData({ ...paymentData, bank_account_id: e.target.value })}
+                    >
+                      {bankAccounts.map((a) => (
+                        <MenuItem key={a.id} value={a.id}>
+                          {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Select
+                      value={paymentData.cash_account_id}
+                      label="Cash Drawer *"
+                      onChange={(e) => setPaymentData({ ...paymentData, cash_account_id: e.target.value })}
+                    >
+                      {cashAccounts.map((a) => (
+                        <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>
+                      ))}
+                    </Select>
+                  )}
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>

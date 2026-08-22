@@ -4,6 +4,7 @@
  */
 
 const pool = require('../config/database');
+const { postSourceDebit } = require('./expenseController');
 
 /**
  * Create a new seed purchase
@@ -685,14 +686,32 @@ const recordPayment = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { payment_date, amount, payment_method, transaction_reference, notes } = req.body;
+    const {
+      payment_date, amount, payment_method, transaction_reference, notes,
+      payment_source, bank_account_id, cash_account_id,
+    } = req.body;
     const userId = req.user.id;
+
+    // Money leaving the business must name the account it left, or it never
+    // reaches the Cash Book / Bank Ledger.
+    if (!['cash', 'bank'].includes(payment_source)) {
+      return res.status(400).json({ success: false, message: 'payment_source must be cash or bank' });
+    }
+    if (payment_source === 'bank' && !bank_account_id) {
+      return res.status(400).json({ success: false, message: 'bank_account_id is required when paying from bank' });
+    }
+    if (payment_source === 'cash' && !cash_account_id) {
+      return res.status(400).json({ success: false, message: 'cash_account_id is required when paying from cash' });
+    }
 
     await client.query('BEGIN');
 
     // Check if purchase exists
     const purchaseCheck = await client.query(
-      'SELECT * FROM seed_purchases WHERE id = $1 AND deleted_at IS NULL',
+      `SELECT sp.*, COALESCE(v.vendor_name, 'Vendor') AS vendor_name
+       FROM seed_purchases sp
+       LEFT JOIN vendors v ON v.id = sp.vendor_id
+       WHERE sp.id = $1 AND sp.deleted_at IS NULL`,
       [id]
     );
 
@@ -716,15 +735,51 @@ const recordPayment = async (req, res) => {
       });
     }
 
+    // Validate the chosen account exists and is usable.
+    if (payment_source === 'bank') {
+      const b = await client.query(`SELECT id FROM bank_accounts WHERE id = $1 AND is_active = true`, [bank_account_id]);
+      if (b.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Bank account not found or inactive' });
+      }
+    } else {
+      const c = await client.query(`SELECT id FROM cash_accounts WHERE id = $1 AND is_active = true`, [cash_account_id]);
+      if (c.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Cash account not found or inactive' });
+      }
+    }
+
     // Insert payment
     const result = await client.query(
       `INSERT INTO seed_purchase_payments (
         seed_purchase_id, payment_date, amount, payment_method,
-        transaction_reference, notes, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        transaction_reference, notes, payment_source, bank_account_id, cash_account_id, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
-      [id, payment_date, amount, payment_method, transaction_reference, notes, userId]
+      [
+        id, payment_date, amount, payment_method, transaction_reference, notes,
+        payment_source,
+        payment_source === 'bank' ? bank_account_id : null,
+        payment_source === 'cash' ? cash_account_id : null,
+        userId,
+      ]
     );
+
+    // Post the matching DEBIT so cash/bank balances self-reconcile.
+    await postSourceDebit(client, {
+      paymentSource: payment_source,
+      bankAccountId: payment_source === 'bank' ? bank_account_id : null,
+      cashAccountId: payment_source === 'cash' ? cash_account_id : null,
+      entryDate: payment_date,
+      amount: parseFloat(amount),
+      partyName: purchase.vendor_name,
+      narration: `Vendor payment for ${purchase.purchase_number}`,
+      referenceNumber: transaction_reference || null,
+      sourceType: 'vendor_payment',
+      sourceId: result.rows[0].id,
+      userId,
+    });
 
     await client.query('COMMIT');
 
