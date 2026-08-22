@@ -9,6 +9,7 @@ const pool = require('../config/database');
 const db = require('../utils/db');
 const logger = require('../config/logger');
 const { generateInvoiceHTML } = require('../services/invoiceService');
+const { postCustomerPaymentToLedger } = require('./paymentController');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST INVOICES
@@ -579,7 +580,7 @@ const recordInvoicePayment = async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { amount, payment_method, payment_date, receipt_number, notes, bank_account_id } = req.body;
+    const { amount, payment_method, payment_date, receipt_number, notes, bank_account_id, cash_account_id } = req.body;
     const userId = req.user.id;
 
     if (!amount || parseFloat(amount) <= 0) {
@@ -587,6 +588,12 @@ const recordInvoicePayment = async (req, res, next) => {
     }
     if (!payment_method) {
       return res.status(400).json({ success: false, message: 'payment_method is required' });
+    }
+    // Without an account the payment posts to no ledger, so the money stays
+    // invisible in the Cash Book / Bank Ledger. Mirrors BANK_METHODS in
+    // paymentController.
+    if (['bank_transfer', 'upi', 'card'].includes(payment_method) && !bank_account_id) {
+      return res.status(400).json({ success: false, message: 'bank_account_id is required for bank, UPI and card payments' });
     }
 
     await client.query('BEGIN');
@@ -625,6 +632,9 @@ const recordInvoicePayment = async (req, res, next) => {
       ? (receipt_number || `MANUAL-${Date.now()}`)
       : null;
 
+    // One date for both the payment row and its ledger entry.
+    const entryDate = payment_date || new Date().toISOString().split('T')[0];
+
     // Create payment record.
     // Note: the trigger `update_order_paid_amount` fires on INSERT (status='success')
     // and already updates orders.paid_amount — no manual UPDATE needed.
@@ -633,9 +643,9 @@ const recordInvoicePayment = async (req, res, next) => {
          order_id, customer_id, payment_method, payment_gateway,
          amount, status, payment_date, receipt_number,
          gateway_transaction_id, received_by,
-         notes, bank_account_id, created_by
+         notes, bank_account_id, cash_account_id, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         invoice.order_id || null,
@@ -644,12 +654,13 @@ const recordInvoicePayment = async (req, res, next) => {
         'manual',
         effectiveAmount,
         'success',
-        payment_date || new Date().toISOString().split('T')[0],
+        entryDate,
         receipt_number || null,
         gatewayTransactionId,
         userId,
         notes || null,
         bank_account_id || null,
+        cash_account_id || null,
         userId,
       ]
     );
@@ -661,6 +672,24 @@ const recordInvoicePayment = async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [id, paymentId, effectiveAmount, userId, notes || null]
     );
+
+    // Post the receipt into the Cash Book / Bank Ledger, exactly as a payment
+    // recorded from the Payments page does. Without this an invoice receipt
+    // never reached any ledger, so the money was invisible in the balances.
+    const custRes = await client.query(
+      `SELECT name FROM customers WHERE id = $1`, [invoice.customer_id]
+    );
+    await postCustomerPaymentToLedger(client, {
+      paymentId,
+      method: payment_method,
+      amount: effectiveAmount,
+      cashAccountId: cash_account_id || null,
+      bankAccountId: bank_account_id || null,
+      entryDate,
+      partyName: custRes.rows[0]?.name || 'Customer',
+      referenceNumber: receipt_number || null,
+      userId,
+    });
 
     await client.query('COMMIT');
 

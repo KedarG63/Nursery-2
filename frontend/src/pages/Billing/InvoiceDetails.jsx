@@ -17,6 +17,8 @@ import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { getInvoice, issueInvoice, voidInvoice, removePayment, openInvoicePDF, recordInvoicePayment } from '../../services/invoiceService';
+import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
 import BillingStatusBadge from '../../components/Billing/BillingStatusBadge';
 import InvoiceItemsTable from '../../components/Billing/InvoiceItemsTable';
 import ApplyPaymentModal from '../../components/Billing/ApplyPaymentModal';
@@ -32,7 +34,9 @@ const InvoiceDetails = () => {
   const [error, setError] = useState('');
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
-  const [recordPaymentForm, setRecordPaymentForm] = useState({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' });
+  const [recordPaymentForm, setRecordPaymentForm] = useState({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '', bank_account_id: '', cash_account_id: '' });
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [cashAccounts, setCashAccounts] = useState([]);
   const [recordPaymentError, setRecordPaymentError] = useState('');
   const [recordPaymentLoading, setRecordPaymentLoading] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
@@ -56,6 +60,25 @@ const InvoiceDetails = () => {
   };
 
   useEffect(() => { fetchInvoice(); }, [id]);
+
+  // Load the accounts a receipt can land in, defaulting to the first of each so
+  // a payment is never saved without one (which would keep it out of the ledger).
+  useEffect(() => {
+    getBankAccounts()
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setBankAccounts(list);
+        setRecordPaymentForm((f) => ({ ...f, bank_account_id: f.bank_account_id || list[0]?.id || '' }));
+      })
+      .catch(() => {});
+    getCashAccounts()
+      .then((r) => {
+        const list = r.data || r.accounts || [];
+        setCashAccounts(list);
+        setRecordPaymentForm((f) => ({ ...f, cash_account_id: f.cash_account_id || list[0]?.id || '' }));
+      })
+      .catch(() => {});
+  }, []);
 
   const handleIssue = async () => {
     setActionLoading(true);
@@ -109,6 +132,10 @@ const InvoiceDetails = () => {
     const amt = parseFloat(recordPaymentForm.amount);
     if (isNaN(amt) || amt <= 0) { setRecordPaymentError('Amount must be greater than 0'); return; }
     if (!recordPaymentForm.payment_method) { setRecordPaymentError('Payment method is required'); return; }
+    const isCash = recordPaymentForm.payment_method === 'cash';
+    if (!isCash && !recordPaymentForm.bank_account_id) {
+      setRecordPaymentError('Select the bank account the money landed in'); return;
+    }
     setRecordPaymentLoading(true);
     try {
       await recordInvoicePayment(id, {
@@ -117,10 +144,13 @@ const InvoiceDetails = () => {
         payment_date: recordPaymentForm.payment_date || undefined,
         receipt_number: recordPaymentForm.receipt_number || undefined,
         notes: recordPaymentForm.notes || undefined,
+        ...(isCash
+          ? { cash_account_id: recordPaymentForm.cash_account_id || undefined }
+          : { bank_account_id: recordPaymentForm.bank_account_id }),
       });
       toast.success('Payment recorded successfully');
       setRecordPaymentOpen(false);
-      setRecordPaymentForm({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' });
+      setRecordPaymentForm((f) => ({ ...f, amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' }));
       fetchInvoice();
     } catch (err) {
       setRecordPaymentError(err?.message || 'Failed to record payment');
@@ -452,6 +482,39 @@ const InvoiceDetails = () => {
               <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
               <MenuItem value="card">Card</MenuItem>
             </TextField>
+            {recordPaymentForm.payment_method === 'cash' ? (
+              <TextField
+                label="Cash Drawer"
+                select
+                fullWidth
+                value={recordPaymentForm.cash_account_id}
+                onChange={(e) => setRecordPaymentForm((f) => ({ ...f, cash_account_id: e.target.value }))}
+                helperText="Which drawer this cash went into — posts a credit to that Cash Book"
+              >
+                {cashAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                label="Bank Account"
+                select
+                fullWidth
+                required
+                value={recordPaymentForm.bank_account_id}
+                onChange={(e) => setRecordPaymentForm((f) => ({ ...f, bank_account_id: e.target.value }))}
+                error={!recordPaymentForm.bank_account_id}
+                helperText={!recordPaymentForm.bank_account_id
+                  ? 'Pick where the money landed'
+                  : 'Where this payment lands — posts a credit to that bank ledger'}
+              >
+                {bankAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>
+                    {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField
               label="Payment Date"
               type="date"
