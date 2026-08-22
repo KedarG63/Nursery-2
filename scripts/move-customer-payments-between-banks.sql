@@ -21,6 +21,8 @@
 -- ============================================================================
 
 
+\set ON_ERROR_STOP on
+
 -- ── STEP 1: identify the accounts ───────────────────────────────────────────
 \echo ''
 \echo '=== Bank accounts (in the order the UI lists them) ==='
@@ -28,9 +30,38 @@ SELECT id, account_name, bank_name, account_number, sort_order, is_active
 FROM bank_accounts
 ORDER BY sort_order, created_at;
 
--- >>> EDIT THESE TWO LINES with the ids printed above, then re-run. <<<
-\set FROM_ACCOUNT '00000000-0000-0000-0000-000000000000'
-\set TO_ACCOUNT   '00000000-0000-0000-0000-000000000000'
+-- Pass the accounts on the command line:
+--   psql ... -v FROM_ACCOUNT=<id> -v TO_ACCOUNT=<id> -f this-file.sql
+-- (or edit the defaults below).
+\if :{?FROM_ACCOUNT}
+\else
+  \set FROM_ACCOUNT '00000000-0000-0000-0000-000000000000'
+\endif
+\if :{?TO_ACCOUNT}
+\else
+  \set TO_ACCOUNT '00000000-0000-0000-0000-000000000000'
+\endif
+
+-- Stop loudly if the accounts were never supplied. Without this the script
+-- reports a cheerful "UPDATE 0" and looks like it worked.
+-- (Evaluated into a psql variable rather than as a failing cast in a WHERE:
+--  Postgres constant-folds a literal cast at planning time, so it would error
+--  even when the condition is false.)
+SELECT CASE
+         WHEN :'FROM_ACCOUNT' = '00000000-0000-0000-0000-000000000000'
+           OR :'TO_ACCOUNT'   = '00000000-0000-0000-0000-000000000000'
+         THEN 'true' ELSE 'false'
+       END AS accounts_unset \gset
+
+\if :accounts_unset
+\echo ''
+\echo '****************************************************************'
+\echo '  ABORTED: account ids not supplied. Nothing has been changed.'
+\echo '  Re-run with the ids listed above, e.g.:'
+\echo '    psql ... -v FROM_ACCOUNT=<from-id> -v TO_ACCOUNT=<to-id> -f ...'
+\echo '****************************************************************'
+\quit
+\endif
 
 
 -- ── STEP 2: what is sitting on the FROM account, and where it came from ─────
