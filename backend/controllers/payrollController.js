@@ -367,6 +367,7 @@ const getRun = async (req, res, next) => {
 
     const items = await db.query(
       `SELECT pi.*, e.full_name, e.employee_code, e.employee_type,
+              e.bank_account_number, e.upi_id,
               ba.account_name AS bank_account_name, ca.account_name AS cash_account_name
        FROM payroll_items pi
        JOIN employees e ON e.id = pi.employee_id
@@ -383,15 +384,54 @@ const getRun = async (req, res, next) => {
   }
 };
 
-// Pay all pending items in a run from one source; post ledger debits + recover advances.
+// Validate one {payment_source, bank_account_id, cash_account_id} triple.
+// Returns an error string, or null when it is well formed.
+function validatePayTarget({ payment_source, bank_account_id, cash_account_id }, label) {
+  if (!['cash', 'bank'].includes(payment_source)) return `${label}: payment_source must be cash or bank`;
+  if (payment_source === 'bank' && !bank_account_id) return `${label}: bank_account_id required`;
+  if (payment_source === 'cash' && !cash_account_id) return `${label}: cash_account_id required`;
+  return null;
+}
+
+/**
+ * Pay the pending items in a run and post the ledger debits + recover advances.
+ *
+ * Some staff are paid in cash and some by transfer, so the source is settled per
+ * employee. `items` optionally carries per-item overrides:
+ *   [{ payroll_item_id, payment_source, bank_account_id, cash_account_id }]
+ * Anything not listed falls back to the run-level payment_source, so a request
+ * without `items` behaves exactly as before.
+ *
+ * payroll_items already stores payment_source/bank_account_id/cash_account_id per
+ * row (constraint chk_payroll_item_source), and the ledger debit is posted per
+ * item, so this needs no schema change — only the write path was collapsing
+ * every employee onto one account.
+ */
 const payRun = async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { payment_source, bank_account_id, cash_account_id, paid_date } = req.body;
-    if (!['cash', 'bank'].includes(payment_source)) return res.status(400).json({ success: false, message: 'payment_source must be cash or bank' });
-    if (payment_source === 'bank' && !bank_account_id) return res.status(400).json({ success: false, message: 'bank_account_id required' });
-    if (payment_source === 'cash' && !cash_account_id) return res.status(400).json({ success: false, message: 'cash_account_id required' });
+    const { payment_source, bank_account_id, cash_account_id, paid_date, items: overrides } = req.body;
+
+    const fallbackErr = validatePayTarget({ payment_source, bank_account_id, cash_account_id }, 'Default');
+    if (fallbackErr) return res.status(400).json({ success: false, message: fallbackErr });
+
+    // Index overrides by payroll_item_id, validating each one up front so a bad
+    // row is rejected before anything is written.
+    const overrideMap = new Map();
+    if (overrides !== undefined) {
+      if (!Array.isArray(overrides)) {
+        return res.status(400).json({ success: false, message: 'items must be an array when provided' });
+      }
+      for (const o of overrides) {
+        if (!o || !o.payroll_item_id) {
+          return res.status(400).json({ success: false, message: 'each item override needs a payroll_item_id' });
+        }
+        const err = validatePayTarget(o, `Item ${o.payroll_item_id}`);
+        if (err) return res.status(400).json({ success: false, message: err });
+        overrideMap.set(o.payroll_item_id, o);
+      }
+    }
 
     await client.query('BEGIN');
 
@@ -410,13 +450,62 @@ const payRun = async (req, res, next) => {
       [id]
     );
 
-    let paidCount = 0;
+    // An override naming an item that is not pending in this run means the caller
+    // is working from a stale view — reject rather than silently ignoring it.
+    const pendingIds = new Set(items.rows.map((r) => r.id));
+    for (const key of overrideMap.keys()) {
+      if (!pendingIds.has(key)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `Item ${key} is not pending in this run. Reload the run and try again.`,
+        });
+      }
+    }
+
+    // Every account this call will touch, so an unknown or disabled one fails
+    // cleanly here instead of surfacing as a foreign-key error mid-transaction.
+    const bankIds = new Set();
+    const cashIds = new Set();
     for (const item of items.rows) {
+      const t = overrideMap.get(item.id) || { payment_source, bank_account_id, cash_account_id };
+      if (t.payment_source === 'bank') bankIds.add(t.bank_account_id);
+      else cashIds.add(t.cash_account_id);
+    }
+    if (bankIds.size > 0) {
+      const found = await client.query(
+        `SELECT id FROM bank_accounts WHERE id = ANY($1::uuid[]) AND is_active = true`, [[...bankIds]]
+      );
+      if (found.rows.length !== bankIds.size) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'A chosen bank account was not found or is inactive' });
+      }
+    }
+    if (cashIds.size > 0) {
+      const found = await client.query(
+        `SELECT id FROM cash_accounts WHERE id = ANY($1::uuid[]) AND is_active = true`, [[...cashIds]]
+      );
+      if (found.rows.length !== cashIds.size) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'A chosen cash account was not found or is inactive' });
+      }
+    }
+
+    let paidCount = 0;
+    let cashCount = 0;
+    let bankCount = 0;
+    for (const item of items.rows) {
+      // Per-employee source, falling back to the run-level choice.
+      const target = overrideMap.get(item.id) || { payment_source, bank_account_id, cash_account_id };
+      const itemSource = target.payment_source;
+      const itemBankId = itemSource === 'bank' ? target.bank_account_id : null;
+      const itemCashId = itemSource === 'cash' ? target.cash_account_id : null;
+
       if (parseFloat(item.net_amount) > 0) {
         await postSourceDebit(client, {
-          paymentSource: payment_source,
-          bankAccountId: bank_account_id,
-          cashAccountId: cash_account_id,
+          paymentSource: itemSource,
+          bankAccountId: itemBankId,
+          cashAccountId: itemCashId,
           entryDate,
           amount: parseFloat(item.net_amount),
           partyName: item.full_name,
@@ -453,21 +542,27 @@ const payRun = async (req, res, next) => {
       await client.query(
         `UPDATE payroll_items SET status = 'paid', payment_source = $1, bank_account_id = $2, cash_account_id = $3, paid_at = NOW(), updated_at = NOW()
          WHERE id = $4`,
-        [
-          payment_source,
-          payment_source === 'bank' ? bank_account_id : null,
-          payment_source === 'cash' ? cash_account_id : null,
-          item.id,
-        ]
+        [itemSource, itemBankId, itemCashId, item.id]
       );
       paidCount++;
+      if (itemSource === 'cash') cashCount++; else bankCount++;
     }
 
     await client.query(`UPDATE payroll_runs SET status = 'paid', updated_by = $1, updated_at = NOW() WHERE id = $2`, [req.user.id, id]);
 
     await client.query('COMMIT');
-    logger.info('Payroll run paid', { runId: id, paidCount, source: payment_source });
-    res.json({ success: true, message: `Paid ${paidCount} employee(s) from ${payment_source}`, paid_count: paidCount });
+    logger.info('Payroll run paid', { runId: id, paidCount, cashCount, bankCount });
+
+    const split = cashCount > 0 && bankCount > 0
+      ? ` (${cashCount} from cash, ${bankCount} from bank)`
+      : ` from ${cashCount > 0 ? 'cash' : 'bank'}`;
+    res.json({
+      success: true,
+      message: `Paid ${paidCount} employee(s)${paidCount > 0 ? split : ''}`,
+      paid_count: paidCount,
+      cash_count: cashCount,
+      bank_count: bankCount,
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

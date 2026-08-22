@@ -48,7 +48,7 @@ const PayrollRunPage = () => {
   const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const [pay, setPay] = useState({ open: false, run: null, payment_source: 'cash', bank_account_id: '', cash_account_id: '', loading: false });
+  const [pay, setPay] = useState({ open: false, run: null, rows: [], payment_source: 'cash', bank_account_id: '', cash_account_id: '', loading: false, loadingRows: false });
   const [view, setView] = useState({ open: false, run: null, loading: false });
   const [confirm, setConfirm] = useState({ open: false, run: null, loading: false });
   const [cashAccounts, setCashAccounts] = useState([]);
@@ -119,16 +119,68 @@ const PayrollRunPage = () => {
     finally { setCreating(false); }
   };
 
-  const openPay = (run) => setPay({ open: true, run, payment_source: 'cash', bank_account_id: bankAccounts[0]?.id || '', cash_account_id: cashAccounts[0]?.id || '', loading: false });
+  // Load the run's pending items so each employee can be paid from their own
+  // source — some staff are paid in cash, some by transfer.
+  const openPay = async (run) => {
+    const defaultCash = cashAccounts[0]?.id || '';
+    const defaultBank = bankAccounts[0]?.id || '';
+    setPay({ open: true, run, rows: [], payment_source: 'cash', bank_account_id: defaultBank, cash_account_id: defaultCash, loading: false, loadingRows: true });
+    try {
+      const res = await getRun(run.id);
+      const rows = (res.data.items || [])
+        .filter((it) => it.status === 'pending')
+        .map((it) => {
+          // Default to bank for anyone who has transfer details on file.
+          const paidOnline = Boolean(it.bank_account_number || it.upi_id);
+          return {
+            payroll_item_id: it.id,
+            full_name: it.full_name,
+            net_amount: it.net_amount,
+            payment_source: paidOnline ? 'bank' : 'cash',
+            bank_account_id: defaultBank,
+            cash_account_id: defaultCash,
+          };
+        });
+      setPay((p) => ({ ...p, run: res.data, rows, loadingRows: false }));
+    } catch (err) {
+      toast.error(err.message || 'Failed to load run');
+      setPay((p) => ({ ...p, open: false, loadingRows: false }));
+    }
+  };
+
+  const setRow = (itemId, patch) => setPay((p) => ({
+    ...p,
+    rows: p.rows.map((r) => (r.payroll_item_id === itemId ? { ...r, ...patch } : r)),
+  }));
+
+  // "Set all to…" — bulk-apply one source across every row.
+  const setAllRows = (source) => setPay((p) => ({
+    ...p,
+    rows: p.rows.map((r) => ({ ...r, payment_source: source })),
+  }));
 
   const doPay = async () => {
+    const bad = pay.rows.find((r) =>
+      (r.payment_source === 'bank' && !r.bank_account_id) ||
+      (r.payment_source === 'cash' && !r.cash_account_id));
+    if (bad) return toast.error(t('payroll.errPayAccount', `Choose an account for ${bad.full_name}`));
+
     setPay((p) => ({ ...p, loading: true }));
     try {
+      // The run-level source is the fallback for anything not itemised.
       const body = { payment_source: pay.payment_source };
       if (pay.payment_source === 'bank') body.bank_account_id = pay.bank_account_id; else body.cash_account_id = pay.cash_account_id;
+      body.items = pay.rows.map((r) => ({
+        payroll_item_id: r.payroll_item_id,
+        payment_source: r.payment_source,
+        ...(r.payment_source === 'bank'
+          ? { bank_account_id: r.bank_account_id }
+          : { cash_account_id: r.cash_account_id }),
+      }));
+
       const res = await payRun(pay.run.id, body);
       toast.success(res.message || t('payroll.paid', 'Payroll paid'));
-      setPay({ open: false, run: null, payment_source: 'cash', bank_account_id: '', cash_account_id: '', loading: false });
+      setPay({ open: false, run: null, rows: [], payment_source: 'cash', bank_account_id: '', cash_account_id: '', loading: false, loadingRows: false });
       load();
     } catch (err) { toast.error(err.message || 'Failed to pay'); setPay((p) => ({ ...p, loading: false })); }
   };
@@ -306,33 +358,80 @@ const PayrollRunPage = () => {
       </Dialog>
 
       {/* Pay dialog */}
-      <Dialog open={pay.open} onClose={() => setPay((p) => ({ ...p, open: false }))} maxWidth="xs" fullWidth>
+      <Dialog open={pay.open} onClose={() => setPay((p) => ({ ...p, open: false }))} maxWidth="md" fullWidth>
         <DialogTitle>{t('payroll.payRun', 'Pay Payroll Run')}</DialogTitle>
         <DialogContent dividers>
-          {pay.run && (
+          {pay.loadingRows ? (
+            <Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box>
+          ) : pay.run && (
             <Stack spacing={2} mt={1}>
               <Typography variant="body2">{pay.run.run_number} — {pay.run.period_label}</Typography>
               <Typography variant="h6" fontWeight={700}>{t('payroll.totalNet', 'Total Net')}: {formatCurrency(pay.run.total_net)}</Typography>
               <Divider />
-              <TextField select label={t('accounting.paidFrom', 'Pay From')} size="small" value={pay.payment_source} onChange={(e) => setPay((p) => ({ ...p, payment_source: e.target.value }))}>
-                <MenuItem value="cash">{t('accounting.cashInHand', 'Cash in Hand')}</MenuItem>
-                <MenuItem value="bank">{t('accounting.bank', 'Bank')}</MenuItem>
-              </TextField>
-              {pay.payment_source === 'cash' ? (
-                <TextField select label={t('accounting.cashAccount', 'Cash Account')} size="small" value={pay.cash_account_id} onChange={(e) => setPay((p) => ({ ...p, cash_account_id: e.target.value }))}>
-                  {cashAccounts.map((a) => <MenuItem key={a.id} value={a.id}>{a.account_name} ({formatCurrency(a.current_balance)})</MenuItem>)}
-                </TextField>
-              ) : (
-                <TextField select label={t('accounting.bankAccount', 'Bank Account')} size="small" value={pay.bank_account_id} onChange={(e) => setPay((p) => ({ ...p, bank_account_id: e.target.value }))}>
-                  {bankAccounts.map((a) => <MenuItem key={a.id} value={a.id}>{a.account_name} ({formatCurrency(a.current_balance)})</MenuItem>)}
-                </TextField>
-              )}
+
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" color="text.secondary">{t('payroll.setAll', 'Set all to')}:</Typography>
+                <Button size="small" variant="outlined" onClick={() => setAllRows('cash')}>{t('accounting.cashInHand', 'Cash in Hand')}</Button>
+                <Button size="small" variant="outlined" onClick={() => setAllRows('bank')}>{t('accounting.bank', 'Bank')}</Button>
+              </Stack>
+
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>{t('payroll.name', 'Name')}</TableCell>
+                      <TableCell align="right">{t('payroll.net', 'Net')}</TableCell>
+                      <TableCell>{t('accounting.paidFrom', 'Pay From')}</TableCell>
+                      <TableCell>{t('payroll.account', 'Account')}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pay.rows.length === 0 && (
+                      <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                        <Typography color="text.secondary">{t('payroll.noPending', 'No pending employees in this run')}</Typography>
+                      </TableCell></TableRow>
+                    )}
+                    {pay.rows.map((r) => (
+                      <TableRow key={r.payroll_item_id}>
+                        <TableCell>{r.full_name}</TableCell>
+                        <TableCell align="right">{formatCurrency(r.net_amount)}</TableCell>
+                        <TableCell>
+                          <TextField select size="small" sx={{ minWidth: 130 }} value={r.payment_source}
+                            onChange={(e) => setRow(r.payroll_item_id, { payment_source: e.target.value })}>
+                            <MenuItem value="cash">{t('accounting.cashInHand', 'Cash in Hand')}</MenuItem>
+                            <MenuItem value="bank">{t('accounting.bank', 'Bank')}</MenuItem>
+                          </TextField>
+                        </TableCell>
+                        <TableCell>
+                          {r.payment_source === 'cash' ? (
+                            <TextField select size="small" sx={{ minWidth: 190 }} value={r.cash_account_id}
+                              onChange={(e) => setRow(r.payroll_item_id, { cash_account_id: e.target.value })}>
+                              {cashAccounts.map((a) => <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>)}
+                            </TextField>
+                          ) : (
+                            <TextField select size="small" sx={{ minWidth: 190 }} value={r.bank_account_id}
+                              onChange={(e) => setRow(r.payroll_item_id, { bank_account_id: e.target.value })}>
+                              {bankAccounts.map((a) => <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>)}
+                            </TextField>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Typography variant="caption" color="text.secondary">
+                {t('payroll.paySplitHint', 'Cash')}: {formatCurrency(pay.rows.filter((r) => r.payment_source === 'cash').reduce((s, r) => s + Number(r.net_amount || 0), 0))}
+                {' · '}
+                {t('accounting.bank', 'Bank')}: {formatCurrency(pay.rows.filter((r) => r.payment_source === 'bank').reduce((s, r) => s + Number(r.net_amount || 0), 0))}
+              </Typography>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPay((p) => ({ ...p, open: false }))} disabled={pay.loading}>{t('common.cancel', 'Cancel')}</Button>
-          <Button variant="contained" color="success" onClick={doPay} disabled={pay.loading}>{pay.loading ? <CircularProgress size={20} /> : t('payroll.confirmPay', 'Confirm & Pay')}</Button>
+          <Button variant="contained" color="success" onClick={doPay} disabled={pay.loading || pay.loadingRows || pay.rows.length === 0}>{pay.loading ? <CircularProgress size={20} /> : t('payroll.confirmPay', 'Confirm & Pay')}</Button>
         </DialogActions>
       </Dialog>
 
