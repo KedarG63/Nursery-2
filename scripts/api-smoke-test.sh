@@ -76,10 +76,11 @@ first_id() {
 section() { echo; echo "── $1 ──"; }
 
 section "Health"
-check GET /api/health
-check GET /api/health/detailed
-check GET /api/health/ready
-check GET /api/health/live
+# Mounted at /health, NOT /api/health (server.js: app.use('/health', ...)).
+check GET /health
+check GET /health/detailed
+check GET /health/ready
+check GET /health/live
 
 section "Auth & users"
 check GET /api/auth/profile
@@ -140,7 +141,10 @@ check GET /api/finance/profit-loss
 BANK_ID=$(first_id /api/bank-accounts)
 if [[ -n "$BANK_ID" ]]; then
   check GET "/api/bank-accounts/$BANK_ID/ledger"
-  check GET "/api/bank-accounts/$BANK_ID/summary"
+  # The summary endpoint requires an explicit financial year (Apr-Mar).
+  FY_START=$(date +%-m); FY_YEAR=$(date +%Y)
+  if [ "$FY_START" -lt 4 ]; then FY_YEAR=$((FY_YEAR - 1)); fi
+  check GET "/api/bank-accounts/$BANK_ID/summary?financial_year=${FY_YEAR}-$(printf '%02d' $(( (FY_YEAR + 1) % 100 )))"
 else
   echo "  SKIP bank ledger (no bank accounts)"; SKIP=$((SKIP+1))
 fi
