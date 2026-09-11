@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -19,6 +19,8 @@ import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import CustomerSelect from '../../components/Orders/CustomerSelect';
 import { createServiceOrder } from '../../services/serviceOrderService';
+import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
 
 /**
  * Create Service Order Page
@@ -41,10 +43,35 @@ const CreateServiceOrder = () => {
   const [serviceFee, setServiceFee] = useState('');
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [advanceMethod, setAdvanceMethod] = useState('cash');
+  // Where an advance lands. Blank by design — an explicit pick is required so
+  // the money reaches the Cash Book / Bank Ledger.
+  const [advanceSource, setAdvanceSource] = useState('cash');
+  const [advanceAccountId, setAdvanceAccountId] = useState('');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [cashAccounts, setCashAccounts] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [expectedReadyDate, setExpectedReadyDate] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    getBankAccounts()
+      .then((r) => setBankAccounts(r.data || r.accounts || []))
+      .catch(() => {});
+    getCashAccounts()
+      .then((r) => setCashAccounts(r.data || r.accounts || []))
+      .catch(() => {});
+  }, []);
+
+  // Keep the source in step with the method, and clear the account so the user
+  // picks one explicitly rather than inheriting a stale choice.
+  const changeAdvanceMethod = (method) => {
+    setAdvanceMethod(method);
+    setAdvanceSource(method === 'cash' ? 'cash' : 'bank');
+    setAdvanceAccountId('');
+  };
+
+  const advanceAccountOptions = advanceSource === 'cash' ? cashAccounts : bankAccounts;
 
   const validate = () => {
     if (!customer) {
@@ -62,6 +89,12 @@ const CreateServiceOrder = () => {
     }
     if (advanceAmount && parseFloat(advanceAmount) > fee) {
       toast.error('Advance cannot exceed the service fee');
+      return false;
+    }
+    if (advanceAmount && parseFloat(advanceAmount) > 0 && !advanceAccountId) {
+      toast.error(advanceSource === 'cash'
+        ? 'Select the cash drawer the advance went into'
+        : 'Select the bank account the advance landed in');
       return false;
     }
     if (startDate && expectedReadyDate && expectedReadyDate < startDate) {
@@ -82,6 +115,14 @@ const CreateServiceOrder = () => {
         service_fee: parseFloat(serviceFee),
         advance_amount: advanceAmount ? parseFloat(advanceAmount) : 0,
         advance_method: advanceMethod,
+        ...(advanceAmount && parseFloat(advanceAmount) > 0
+          ? {
+            advance_payment_source: advanceSource,
+            ...(advanceSource === 'cash'
+              ? { advance_cash_account_id: advanceAccountId }
+              : { advance_bank_account_id: advanceAccountId }),
+          }
+          : {}),
         start_date: startDate || null,
         expected_ready_date: expectedReadyDate || null,
         notes: notes.trim() || null,
@@ -215,7 +256,7 @@ const CreateServiceOrder = () => {
                 fullWidth
                 label="Payment Method"
                 value={advanceMethod}
-                onChange={(e) => setAdvanceMethod(e.target.value)}
+                onChange={(e) => changeAdvanceMethod(e.target.value)}
                 disabled={!advanceAmount}
               >
                 {PAYMENT_METHODS.map((m) => (
@@ -225,6 +266,28 @@ const CreateServiceOrder = () => {
                 ))}
               </TextField>
             </Grid>
+            {advanceAmount && parseFloat(advanceAmount) > 0 ? (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  required
+                  label={advanceSource === 'cash' ? 'Cash Drawer' : 'Bank Account'}
+                  value={advanceAccountId}
+                  onChange={(e) => setAdvanceAccountId(e.target.value)}
+                  error={!advanceAccountId}
+                  helperText={!advanceAccountId
+                    ? 'Pick where the advance landed — this posts it to the ledger'
+                    : ' '}
+                >
+                  {advanceAccountOptions.map((a) => (
+                    <MenuItem key={a.id} value={a.id}>
+                      {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            ) : null}
 
             <Grid item xs={12}>
               <TextField

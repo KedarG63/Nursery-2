@@ -6,8 +6,36 @@
  */
 
 const pool = require('../config/database');
+const { postSourceCredit, reverseSourceEntries } = require('./expenseController');
 
 const VALID_STATUSES = ['pending', 'in_progress', 'ready', 'completed', 'cancelled'];
+
+// Ledger source type for money received against a service order. Deliberately
+// distinct from 'customer_payment': the ledgers have a partial unique index on
+// (source_type, source_id), and service_order_payments.id must not share a
+// namespace with payments.id.
+const SOURCE_TYPE = 'service_payment';
+
+// Validate the {payment_source, bank_account_id, cash_account_id} triple.
+// Returns an error string, or null when it is well formed. The account is
+// always required — money that names no account reaches no ledger.
+function validatePaymentTarget({ payment_source, bank_account_id, cash_account_id }) {
+  if (!['cash', 'bank'].includes(payment_source)) return 'payment_source must be cash or bank';
+  if (payment_source === 'bank' && !bank_account_id) return 'bank_account_id is required when paid into bank';
+  if (payment_source === 'cash' && !cash_account_id) return 'cash_account_id is required when paid in cash';
+  return null;
+}
+
+// Confirm the chosen account exists and is active, so a bad id fails cleanly
+// rather than as a foreign-key error mid-transaction.
+async function assertAccountUsable(client, { payment_source, bank_account_id, cash_account_id }) {
+  if (payment_source === 'bank') {
+    const r = await client.query(`SELECT id FROM bank_accounts WHERE id = $1 AND is_active = true`, [bank_account_id]);
+    return r.rows.length > 0 ? null : 'Bank account not found or inactive';
+  }
+  const r = await client.query(`SELECT id FROM cash_accounts WHERE id = $1 AND is_active = true`, [cash_account_id]);
+  return r.rows.length > 0 ? null : 'Cash account not found or inactive';
+}
 
 // Allowed status transitions
 const STATUS_TRANSITIONS = {
@@ -33,6 +61,9 @@ const createServiceOrder = async (req, res) => {
       service_fee,
       advance_amount = 0,
       advance_method = 'cash',
+      advance_payment_source = null,
+      advance_bank_account_id = null,
+      advance_cash_account_id = null,
       start_date = null,
       expected_ready_date = null,
       notes = null,
@@ -58,6 +89,18 @@ const createServiceOrder = async (req, res) => {
         success: false,
         message: 'Advance amount cannot exceed the service fee',
       });
+    }
+
+    // An advance taken at creation must name the account it landed in, or it
+    // never reaches the Cash Book / Bank Ledger.
+    const advanceTarget = {
+      payment_source: advance_payment_source,
+      bank_account_id: advance_bank_account_id,
+      cash_account_id: advance_cash_account_id,
+    };
+    if (advance_amount && parseFloat(advance_amount) > 0) {
+      const err = validatePaymentTarget(advanceTarget);
+      if (err) return res.status(400).json({ success: false, message: `Advance: ${err}` });
     }
 
     const userId = req.user?.id;
@@ -107,13 +150,42 @@ const createServiceOrder = async (req, res) => {
 
     // Optional advance payment recorded at creation
     if (advance_amount && parseFloat(advance_amount) > 0) {
-      await client.query(
+      const acctErr = await assertAccountUsable(client, advanceTarget);
+      if (acctErr) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: `Advance: ${acctErr}` });
+      }
+
+      const advIns = await client.query(
         `INSERT INTO service_order_payments (
-           service_order_id, amount, payment_method, notes, received_by
+           service_order_id, amount, payment_method, notes, received_by,
+           payment_source, bank_account_id, cash_account_id
          )
-         VALUES ($1, $2, $3, $4, $5)`,
-        [serviceOrder.id, advance_amount, advance_method, 'Advance at creation', userId]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, payment_date`,
+        [
+          serviceOrder.id, advance_amount, advance_method, 'Advance at creation', userId,
+          advance_payment_source,
+          advance_payment_source === 'bank' ? advance_bank_account_id : null,
+          advance_payment_source === 'cash' ? advance_cash_account_id : null,
+        ]
       );
+
+      // Post the matching CREDIT so the money shows up in the balances.
+      const custName = await client.query(`SELECT name FROM customers WHERE id = $1`, [customer_id]);
+      await postSourceCredit(client, {
+        paymentSource: advance_payment_source,
+        bankAccountId: advance_payment_source === 'bank' ? advance_bank_account_id : null,
+        cashAccountId: advance_payment_source === 'cash' ? advance_cash_account_id : null,
+        entryDate: (order_date || new Date().toISOString().split('T')[0]),
+        amount: parseFloat(advance_amount),
+        partyName: custName.rows[0]?.name || 'Customer',
+        narration: `Service order advance ${serviceOrder.service_order_number}`,
+        referenceNumber: serviceOrder.service_order_number,
+        sourceType: SOURCE_TYPE,
+        sourceId: advIns.rows[0].id,
+        userId,
+      });
     }
 
     await client.query('COMMIT');
@@ -424,52 +496,104 @@ const updateServiceOrderStatus = async (req, res) => {
  * POST /api/service-orders/:id/payments
  */
 const recordPayment = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { amount, payment_method = 'cash', notes = null } = req.body;
+    const {
+      amount, payment_method = 'cash', notes = null,
+      payment_source, bank_account_id = null, cash_account_id = null,
+    } = req.body;
     const userId = req.user?.id;
 
     if (!amount || parseFloat(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'A positive amount is required' });
     }
 
-    const existing = await pool.query(
-      `SELECT service_fee, paid_amount FROM service_orders WHERE id = $1 AND deleted_at IS NULL`,
+    // Money received must name the account it landed in, or it reaches no ledger.
+    const target = { payment_source, bank_account_id, cash_account_id };
+    const targetErr = validatePaymentTarget(target);
+    if (targetErr) return res.status(400).json({ success: false, message: targetErr });
+
+    // The payment row and its ledger entry must land together or not at all.
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      `SELECT so.service_fee, so.paid_amount, so.service_order_number,
+              COALESCE(c.name, 'Customer') AS customer_name
+       FROM service_orders so
+       LEFT JOIN customers c ON c.id = so.customer_id
+       WHERE so.id = $1 AND so.deleted_at IS NULL
+       FOR UPDATE OF so`,
       [id]
     );
 
     if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Service order not found' });
     }
 
-    const { service_fee, paid_amount } = existing.rows[0];
+    const { service_fee, paid_amount, service_order_number, customer_name } = existing.rows[0];
     const remaining = parseFloat(service_fee) - parseFloat(paid_amount);
 
     if (parseFloat(amount) > remaining + 0.001) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Payment exceeds the outstanding balance of ${remaining.toFixed(2)}`,
       });
     }
 
+    const acctErr = await assertAccountUsable(client, target);
+    if (acctErr) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: acctErr });
+    }
+
     // Trigger keeps service_orders.paid_amount in sync
-    await pool.query(
+    const payIns = await client.query(
       `INSERT INTO service_order_payments (
-         service_order_id, amount, payment_method, notes, received_by
+         service_order_id, amount, payment_method, notes, received_by,
+         payment_source, bank_account_id, cash_account_id
        )
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, amount, payment_method, notes, userId]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, payment_date`,
+      [
+        id, amount, payment_method, notes, userId,
+        payment_source,
+        payment_source === 'bank' ? bank_account_id : null,
+        payment_source === 'cash' ? cash_account_id : null,
+      ]
     );
+
+    // Post the matching CREDIT so the money appears in the Cash Book / Bank Ledger.
+    await postSourceCredit(client, {
+      paymentSource: payment_source,
+      bankAccountId: payment_source === 'bank' ? bank_account_id : null,
+      cashAccountId: payment_source === 'cash' ? cash_account_id : null,
+      entryDate: new Date(payIns.rows[0].payment_date).toISOString().split('T')[0],
+      amount: parseFloat(amount),
+      partyName: customer_name,
+      narration: `Service order payment ${service_order_number}`,
+      referenceNumber: service_order_number,
+      sourceType: SOURCE_TYPE,
+      sourceId: payIns.rows[0].id,
+      userId,
+    });
+
+    await client.query('COMMIT');
 
     const updated = await getServiceOrderById(id);
     res.status(201).json({ success: true, message: 'Payment recorded', data: updated });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error recording service order payment:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to record payment',
       error: error.message,
     });
+  } finally {
+    client.release();
   }
 };
 
@@ -478,39 +602,64 @@ const recordPayment = async (req, res) => {
  * DELETE /api/service-orders/:id
  */
 const deleteServiceOrder = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const existing = await pool.query(
-      `SELECT status FROM service_orders WHERE id = $1 AND deleted_at IS NULL`,
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      `SELECT status FROM service_orders WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
       [id]
     );
 
     if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Service order not found' });
     }
 
     if (existing.rows[0].status === 'completed') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'Cannot delete a completed service order',
       });
     }
 
-    await pool.query(
+    // This is a SOFT delete, so ON DELETE CASCADE never fires and the
+    // paid_amount trigger never reverses. Any ledger credits posted for this
+    // order's payments would otherwise be orphaned, permanently inflating the
+    // cash/bank balance. Reverse them explicitly, in the same transaction.
+    const payments = await client.query(
+      `SELECT id FROM service_order_payments WHERE service_order_id = $1`, [id]
+    );
+    for (const p of payments.rows) {
+      await reverseSourceEntries(client, SOURCE_TYPE, p.id, userId);
+    }
+
+    await client.query(
       `UPDATE service_orders SET deleted_at = NOW(), deleted_by = $1, updated_at = NOW() WHERE id = $2`,
       [userId, id]
     );
 
-    res.json({ success: true, message: 'Service order deleted successfully' });
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Service order deleted successfully${payments.rows.length > 0
+        ? `; ${payments.rows.length} ledger entr${payments.rows.length === 1 ? 'y' : 'ies'} reversed` : ''}`,
+    });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error deleting service order:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete service order',
       error: error.message,
     });
+  } finally {
+    client.release();
   }
 };
 

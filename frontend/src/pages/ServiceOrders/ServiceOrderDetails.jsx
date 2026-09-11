@@ -44,6 +44,8 @@ import {
   recordServiceOrderPayment,
   deleteServiceOrder,
 } from '../../services/serviceOrderService';
+import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { canEdit } from '../../utils/roleCheck';
 
@@ -78,6 +80,12 @@ const ServiceOrderDetails = () => {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  // Where the money landed. Deliberately starts blank — an explicit pick is
+  // required, because a payment with no account reaches no ledger.
+  const [paymentSource, setPaymentSource] = useState('cash');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [cashAccounts, setCashAccounts] = useState([]);
 
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState(false);
@@ -100,6 +108,27 @@ const ServiceOrderDetails = () => {
     if (id) fetchOrder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Load both account lists so the receipt can name where the money landed.
+  useEffect(() => {
+    getBankAccounts()
+      .then((r) => setBankAccounts(r.data || r.accounts || []))
+      .catch(() => {});
+    getCashAccounts()
+      .then((r) => setCashAccounts(r.data || r.accounts || []))
+      .catch(() => {});
+  }, []);
+
+  // Keep the source in step with the method so a record cannot say
+  // "cash payment, received into the bank". The account is cleared so the
+  // user must pick one explicitly rather than inheriting a stale choice.
+  const changePaymentMethod = (method) => {
+    setPaymentMethod(method);
+    setPaymentSource(method === 'cash' ? 'cash' : 'bank');
+    setPaymentAccountId('');
+  };
+
+  const accountOptions = paymentSource === 'cash' ? cashAccounts : bankAccounts;
 
   const handleStatusChange = async (status) => {
     setStatusMenuAnchor(null);
@@ -126,13 +155,28 @@ const ServiceOrderDetails = () => {
       toast.error('Payment exceeds the outstanding balance');
       return;
     }
+    if (!paymentAccountId) {
+      toast.error(paymentSource === 'cash'
+        ? 'Select the cash drawer this money went into'
+        : 'Select the bank account this money landed in');
+      return;
+    }
     try {
       setActionLoading(true);
-      await recordServiceOrderPayment(id, { amount, payment_method: paymentMethod });
+      await recordServiceOrderPayment(id, {
+        amount,
+        payment_method: paymentMethod,
+        payment_source: paymentSource,
+        ...(paymentSource === 'cash'
+          ? { cash_account_id: paymentAccountId }
+          : { bank_account_id: paymentAccountId }),
+      });
       toast.success('Payment recorded');
       setPaymentDialog(false);
       setPaymentAmount('');
       setPaymentMethod('cash');
+      setPaymentSource('cash');
+      setPaymentAccountId('');
       fetchOrder();
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -391,11 +435,30 @@ const ServiceOrderDetails = () => {
             fullWidth
             label="Payment Method"
             value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
+            onChange={(e) => changePaymentMethod(e.target.value)}
+            sx={{ mb: 2 }}
           >
             {PAYMENT_METHODS.map((m) => (
               <MenuItem key={m.value} value={m.value}>
                 {m.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            fullWidth
+            required
+            label={paymentSource === 'cash' ? 'Cash Drawer' : 'Bank Account'}
+            value={paymentAccountId}
+            onChange={(e) => setPaymentAccountId(e.target.value)}
+            error={!paymentAccountId}
+            helperText={!paymentAccountId
+              ? 'Pick where the money landed — this posts it to the ledger'
+              : ' '}
+          >
+            {accountOptions.map((a) => (
+              <MenuItem key={a.id} value={a.id}>
+                {a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}
               </MenuItem>
             ))}
           </TextField>
