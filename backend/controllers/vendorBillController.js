@@ -73,7 +73,7 @@ const listVendorBills = async (req, res, next) => {
          sp.id, sp.purchase_number, sp.invoice_number, sp.invoice_date,
          sp.purchase_date, sp.due_date, sp.payment_status, sp.amount_paid,
          sp.grand_total,
-         (sp.grand_total - sp.amount_paid) AS balance_due,
+         (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) AS balance_due,
          CASE
            WHEN sp.due_date IS NOT NULL AND sp.payment_status != 'paid' AND sp.due_date < CURRENT_DATE
            THEN CURRENT_DATE - sp.due_date
@@ -118,7 +118,7 @@ const getVendorBill = async (req, res, next) => {
     const result = await db.query(
       `SELECT
          sp.*,
-         (sp.grand_total - sp.amount_paid) AS balance_due,
+         (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) AS balance_due,
          CASE
            WHEN sp.due_date IS NOT NULL AND sp.payment_status != 'paid' AND sp.due_date < CURRENT_DATE
            THEN CURRENT_DATE - sp.due_date
@@ -216,6 +216,7 @@ const recordPayment = async (req, res, next) => {
 
     const billResult = await client.query(
       `SELECT sp.id, sp.grand_total, sp.amount_paid, sp.payment_status,
+              COALESCE(sp.vendor_credit_applied, 0) AS vendor_credit_applied,
               sp.purchase_number, COALESCE(v.vendor_name, 'Vendor') AS vendor_name
        FROM seed_purchases sp
        LEFT JOIN vendors v ON v.id = sp.vendor_id
@@ -234,7 +235,11 @@ const recordPayment = async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'This vendor bill is already fully paid' });
     }
 
-    const balance = parseFloat(bill.grand_total) - parseFloat(bill.amount_paid);
+    // Credit already offset against this bill is settled — it is not payable,
+    // so it must not be payable in cash again.
+    const balance = parseFloat(bill.grand_total)
+      - parseFloat(bill.amount_paid)
+      - parseFloat(bill.vendor_credit_applied);
     const amtNum = parseFloat(amount);
     if (amtNum > balance + 0.01) {
       // Allow a small tolerance for floating-point
@@ -296,7 +301,7 @@ const recordPayment = async (req, res, next) => {
 
     const updated = await db.query(
       `SELECT id, purchase_number, grand_total, amount_paid, payment_status,
-              (grand_total - amount_paid) AS balance_due
+              (grand_total - amount_paid - COALESCE(vendor_credit_applied, 0)) AS balance_due
        FROM seed_purchases WHERE id = $1`,
       [id]
     );
@@ -324,20 +329,20 @@ const getAgingReport = async (req, res, next) => {
          v.vendor_code,
          v.vendor_name,
          v.contact_person,
-         COALESCE(SUM(CASE WHEN sp.due_date IS NULL THEN (sp.grand_total - sp.amount_paid) END), 0)                                                   AS no_due_date,
-         COALESCE(SUM(CASE WHEN sp.due_date IS NOT NULL AND sp.due_date < $1::date THEN (sp.grand_total - sp.amount_paid) END), 0)                   AS current_due,
-         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 0 AND 30 THEN (sp.grand_total - sp.amount_paid) END), 0)                            AS aged_1_30,
-         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 31 AND 60 THEN (sp.grand_total - sp.amount_paid) END), 0)                           AS aged_31_60,
-         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 61 AND 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                           AS aged_61_90,
-         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) > 90 THEN (sp.grand_total - sp.amount_paid) END), 0)                                       AS aged_over_90,
-         SUM(sp.grand_total - sp.amount_paid) AS total_outstanding
+         COALESCE(SUM(CASE WHEN sp.due_date IS NULL THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                                                   AS no_due_date,
+         COALESCE(SUM(CASE WHEN sp.due_date IS NOT NULL AND sp.due_date < $1::date THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                   AS current_due,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 0 AND 30 THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                            AS aged_1_30,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 31 AND 60 THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                           AS aged_31_60,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) BETWEEN 61 AND 90 THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                           AS aged_61_90,
+         COALESCE(SUM(CASE WHEN (sp.due_date - $1::date) > 90 THEN (sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) END), 0)                                       AS aged_over_90,
+         SUM(sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) AS total_outstanding
        FROM vendors v
        JOIN seed_purchases sp ON sp.vendor_id = v.id
          AND sp.payment_status IN ('pending', 'partial')
          AND sp.deleted_at IS NULL
        WHERE v.deleted_at IS NULL
        GROUP BY v.id, v.vendor_code, v.vendor_name, v.contact_person
-       HAVING SUM(sp.grand_total - sp.amount_paid) > 0
+       HAVING SUM(sp.grand_total - sp.amount_paid - COALESCE(sp.vendor_credit_applied, 0)) > 0
        ORDER BY total_outstanding DESC`,
       [asOf]
     );

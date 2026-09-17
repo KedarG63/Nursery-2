@@ -92,8 +92,10 @@ const getOverview = async (req, res, next) => {
          FROM service_orders WHERE deleted_at IS NULL AND status != 'cancelled'`
       ),
       db.query(
-        `SELECT COALESCE(SUM(grand_total - amount_paid), 0) AS total,
-                COUNT(*) FILTER (WHERE grand_total > amount_paid)::int AS count
+        // vendor_credit_applied is credit from accepted returns already offset
+        // against this bill — it is settled, so it is no longer payable.
+        `SELECT COALESCE(SUM(grand_total - amount_paid - COALESCE(vendor_credit_applied, 0)), 0) AS total,
+                COUNT(*) FILTER (WHERE grand_total - amount_paid - COALESCE(vendor_credit_applied, 0) > 0)::int AS count
          FROM seed_purchases WHERE deleted_at IS NULL`
       ),
       db.query(
@@ -195,9 +197,14 @@ const getProfitLoss = async (req, res, next) => {
         [win.start, win.end]
       ),
       db.query(
+        // Only returns the vendor has actually accepted reduce purchase cost.
+        // Without the status filter a draft under consideration — or worse, one
+        // the vendor REJECTED — still cut the cost figure.
         `SELECT COALESCE(SUM(return_amount), 0) AS total
          FROM vendor_return_notes
-         WHERE deleted_at IS NULL AND return_date BETWEEN $1 AND $2`,
+         WHERE deleted_at IS NULL
+           AND status IN ('accepted', 'credited')
+           AND return_date BETWEEN $1 AND $2`,
         [win.start, win.end]
       ),
       db.query(
@@ -263,15 +270,26 @@ const getProfitLoss = async (req, res, next) => {
         SELECT date_trunc('month', paid_at) AS m, SUM(gross_amount - COALESCE(leave_deducted, 0)) AS v
         FROM payroll_items WHERE status = 'paid' AND paid_at::date BETWEEN $1 AND $2
         GROUP BY 1
+      ),
+      -- Accepted vendor returns reduce that month's purchase cost, matching the
+      -- headline figure above. Without this the chart contradicts the summary.
+      ret AS (
+        SELECT date_trunc('month', return_date) AS m, SUM(return_amount) AS v
+        FROM vendor_return_notes
+        WHERE deleted_at IS NULL
+          AND status IN ('accepted', 'credited')
+          AND return_date BETWEEN $1 AND $2
+        GROUP BY 1
       )
       SELECT
         TO_CHAR(months.m, 'YYYY-MM') AS month_key,
         COALESCE(inc.v, 0) + COALESCE(svc.v, 0) AS income,
-        COALESCE(pur.v, 0) + COALESCE(sup.v, 0) + COALESCE(exp.v, 0) + COALESCE(pay.v, 0) AS costs
+        COALESCE(pur.v, 0) - COALESCE(ret.v, 0) + COALESCE(sup.v, 0) + COALESCE(exp.v, 0) + COALESCE(pay.v, 0) AS costs
       FROM months
       LEFT JOIN inc ON inc.m = months.m
       LEFT JOIN svc ON svc.m = months.m
       LEFT JOIN pur ON pur.m = months.m
+      LEFT JOIN ret ON ret.m = months.m
       LEFT JOIN sup ON sup.m = months.m
       LEFT JOIN exp ON exp.m = months.m
       LEFT JOIN pay ON pay.m = months.m
