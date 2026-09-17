@@ -6,14 +6,86 @@
  *   draft → submitted → rejected
  *
  * When a return is accepted the packets_returned count on the originating
- * seed_purchase is incremented.  When the credit is applied to a future
- * purchase payment the vendor_credit_applied column on that purchase is
- * updated and the return note status moves to 'credited'.
+ * seed_purchase is incremented.
+ *
+ * SETTLEMENT (migration 1769000000016): an accepted return is settled through
+ * `vendor_return_settlements`, one row per event, so a single return can be
+ * part-offset against a bill and part-refunded in cash. The invariant
+ *
+ *     return_amount = SUM(credit_offset) + SUM(refund) + open_balance
+ *
+ * is enforced by a database trigger, not just here. `credited_amount` and
+ * `credited_to_purchase_id` on the note are kept in sync as a denormalised
+ * cache of the offset total / most recent target.
  */
 
 const pool = require('../config/database');
 const db   = require('../utils/db');
 const logger = require('../config/logger');
+const { postSourceCredit } = require('./expenseController');
+
+// Recompute a return note's settlement cache and status from its settlements.
+// Called inside the caller's transaction, after any settlement change.
+// Status stays 'accepted' while open credit remains, so it keeps showing up in
+// getAvailableCredits; it becomes 'credited' only once fully settled.
+async function refreshReturnSettlement(client, returnNoteId) {
+  const agg = await client.query(
+    `SELECT
+       COALESCE(SUM(amount), 0)                                                    AS settled,
+       COALESCE(SUM(amount) FILTER (WHERE settlement_type = 'credit_offset'), 0)   AS offset_total,
+       (SELECT s2.target_purchase_id FROM vendor_return_settlements s2
+         WHERE s2.return_note_id = $1 AND s2.settlement_type = 'credit_offset'
+         ORDER BY s2.created_at DESC LIMIT 1)                                      AS last_target
+     FROM vendor_return_settlements WHERE return_note_id = $1`,
+    [returnNoteId]
+  );
+  const { settled, offset_total, last_target } = agg.rows[0];
+
+  const note = await client.query(
+    `SELECT return_amount FROM vendor_return_notes WHERE id = $1`, [returnNoteId]
+  );
+  const returnAmount = parseFloat(note.rows[0].return_amount);
+  const fullySettled = parseFloat(settled) >= returnAmount - 0.005;
+
+  await client.query(
+    `UPDATE vendor_return_notes
+        SET credited_amount         = $1,
+            credited_to_purchase_id = $2,
+            credited_at             = CASE WHEN $3 THEN NOW() ELSE credited_at END,
+            status                  = CASE WHEN $3 THEN 'credited'::vendor_return_status_enum
+                                           ELSE 'accepted'::vendor_return_status_enum END,
+            updated_at              = NOW()
+      WHERE id = $4`,
+    [offset_total, last_target, fullySettled, returnNoteId]
+  );
+
+  return { settled: parseFloat(settled), returnAmount, open: parseFloat((returnAmount - parseFloat(settled)).toFixed(2)) };
+}
+
+// Recompute a bill's vendor_credit_applied from the settlements pointing at it,
+// and re-derive its payment_status. Never incremental — always recomputed from
+// the settlement rows, so it cannot drift.
+async function refreshPurchaseCredit(client, purchaseId) {
+  const res = await client.query(
+    `UPDATE seed_purchases sp
+        SET vendor_credit_applied = sub.total,
+            payment_status = CASE
+              WHEN sp.grand_total - sp.amount_paid - sub.total <= 0.005 THEN 'paid'::purchase_payment_status_enum
+              WHEN sp.amount_paid > 0 OR sub.total > 0                  THEN 'partial'::purchase_payment_status_enum
+              ELSE 'pending'::purchase_payment_status_enum
+            END,
+            updated_at = NOW()
+       FROM (
+         SELECT COALESCE(SUM(amount), 0) AS total
+         FROM vendor_return_settlements
+         WHERE target_purchase_id = $1 AND settlement_type = 'credit_offset'
+       ) sub
+      WHERE sp.id = $1
+      RETURNING sp.vendor_credit_applied, sp.payment_status`,
+    [purchaseId]
+  );
+  return res.rows[0];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // helpers
@@ -415,7 +487,7 @@ const applyCredit = async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { target_purchase_id, amount_to_apply } = req.body;
+    const { target_purchase_id, amount_to_apply, notes } = req.body;
 
     if (!target_purchase_id || !amount_to_apply) {
       return res.status(400).json({ success: false, message: 'target_purchase_id and amount_to_apply are required' });
@@ -439,11 +511,19 @@ const applyCredit = async (req, res, next) => {
     }
 
     const vrn = returnCheck.rows[0];
-    const alreadyCredited = parseFloat(vrn.credited_amount) || 0;
-    const available = parseFloat(vrn.return_amount) - alreadyCredited;
+
+    // Open balance comes from the settlement rows, not the cached scalar —
+    // refunds consume the return just as offsets do, and the previous code
+    // looked only at credited_amount.
+    const settledRes = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS settled
+       FROM vendor_return_settlements WHERE return_note_id = $1`,
+      [id]
+    );
+    const available = parseFloat(vrn.return_amount) - parseFloat(settledRes.rows[0].settled);
     const applyAmt  = parseFloat(amount_to_apply);
 
-    if (applyAmt > available) {
+    if (applyAmt > available + 0.005) {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
@@ -481,39 +561,173 @@ const applyCredit = async (req, res, next) => {
       });
     }
 
-    // Apply credit to the target purchase; auto-mark as paid if credit clears the balance
-    const newCreditTotal = parseFloat(tp.vendor_credit_applied) + applyAmt;
-    const newBalance = parseFloat(tp.grand_total) - parseFloat(tp.amount_paid) - newCreditTotal;
-    const newPaymentStatus = newBalance <= 0.001 ? 'paid' : tp.payment_status;
-
+    // Record the settlement event. The DB trigger refuses any insert that would
+    // push total settlements past return_amount.
     await client.query(
-      `UPDATE seed_purchases
-       SET vendor_credit_applied = $1,
-           payment_status        = $2,
-           updated_at            = NOW()
-       WHERE id = $3`,
-      [newCreditTotal, newPaymentStatus, target_purchase_id]
+      `INSERT INTO vendor_return_settlements
+         (return_note_id, settlement_type, amount, target_purchase_id, notes, created_by)
+       VALUES ($1, 'credit_offset', $2, $3, $4, $5)`,
+      [id, applyAmt, target_purchase_id, notes || null, req.user.id]
     );
 
-    // Mark return note as credited
-    await client.query(
-      `UPDATE vendor_return_notes
-       SET status                  = 'credited',
-           credited_to_purchase_id = $1,
-           credited_amount         = $2,
-           credited_at             = NOW(),
-           updated_by              = $3,
-           updated_at              = NOW()
-       WHERE id = $4`,
-      [target_purchase_id, applyAmt, req.user.id, id]
-    );
+    // Recompute both sides from the settlement rows — never incrementally, so
+    // the cached totals cannot drift from the ledger.
+    const purchase = await refreshPurchaseCredit(client, target_purchase_id);
+    const settlement = await refreshReturnSettlement(client, id);
 
     await client.query('COMMIT');
 
     logger.info('Vendor return credit applied', {
-      returnId: id, targetPurchaseId: target_purchase_id, amount: applyAmt, userId: req.user.id,
+      returnId: id, targetPurchaseId: target_purchase_id, amount: applyAmt,
+      openBalance: settlement.open, userId: req.user.id,
     });
-    res.json({ success: true, message: `Credit of ${applyAmt.toFixed(2)} applied to purchase ${purchaseCheck.rows[0].id}` });
+    res.json({
+      success: true,
+      message: settlement.open > 0
+        ? `Credit of ${applyAmt.toFixed(2)} applied. ${settlement.open.toFixed(2)} still available on this return.`
+        : `Credit of ${applyAmt.toFixed(2)} applied. Return note fully settled.`,
+      data: {
+        applied: applyAmt,
+        open_balance: settlement.open,
+        target_credit_applied: purchase.vendor_credit_applied,
+        target_payment_status: purchase.payment_status,
+      },
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECORD A CASH/BANK REFUND against an accepted return
+// POST /api/vendor-returns/:id/refund
+// The vendor paid money back rather than issuing credit against a future bill.
+// Posts a CREDIT to the chosen ledger — money coming in.
+// ─────────────────────────────────────────────────────────────────────────────
+const recordRefund = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const {
+      amount, payment_source, bank_account_id = null, cash_account_id = null,
+      refund_date = null, notes = null,
+    } = req.body;
+
+    const amt = parseFloat(amount);
+    if (!(amt > 0)) {
+      return res.status(400).json({ success: false, message: 'A positive amount is required' });
+    }
+    if (!['cash', 'bank'].includes(payment_source)) {
+      return res.status(400).json({ success: false, message: 'payment_source must be cash or bank' });
+    }
+    if (payment_source === 'bank' && !bank_account_id) {
+      return res.status(400).json({ success: false, message: 'bank_account_id is required when the refund lands in a bank' });
+    }
+    if (payment_source === 'cash' && !cash_account_id) {
+      return res.status(400).json({ success: false, message: 'cash_account_id is required when the refund is taken in cash' });
+    }
+
+    await client.query('BEGIN');
+
+    const noteRes = await client.query(
+      `SELECT vrn.id, vrn.status, vrn.return_amount, vrn.return_number,
+              COALESCE(v.vendor_name, 'Vendor') AS vendor_name
+       FROM vendor_return_notes vrn
+       LEFT JOIN vendors v ON v.id = vrn.vendor_id
+       WHERE vrn.id = $1 AND vrn.deleted_at IS NULL
+       FOR UPDATE OF vrn`,
+      [id]
+    );
+    if (noteRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Return note not found' });
+    }
+    const note = noteRes.rows[0];
+    if (!['accepted', 'credited'].includes(note.status)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Only a return the vendor has accepted can be refunded',
+      });
+    }
+
+    const settledRes = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS settled
+       FROM vendor_return_settlements WHERE return_note_id = $1`,
+      [id]
+    );
+    const open = parseFloat(note.return_amount) - parseFloat(settledRes.rows[0].settled);
+    if (amt > open + 0.005) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Only ${open.toFixed(2)} is unsettled on this return (${amt.toFixed(2)} requested)`,
+      });
+    }
+
+    // Validate the destination account up front so a bad id is a clean 400.
+    if (payment_source === 'bank') {
+      const b = await client.query(`SELECT id FROM bank_accounts WHERE id = $1 AND is_active = true`, [bank_account_id]);
+      if (b.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Bank account not found or inactive' });
+      }
+    } else {
+      const c = await client.query(`SELECT id FROM cash_accounts WHERE id = $1 AND is_active = true`, [cash_account_id]);
+      if (c.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Cash account not found or inactive' });
+      }
+    }
+
+    const entryDate = refund_date || new Date().toISOString().split('T')[0];
+
+    const ins = await client.query(
+      `INSERT INTO vendor_return_settlements
+         (return_note_id, settlement_type, amount, settlement_date,
+          payment_source, bank_account_id, cash_account_id, notes, created_by)
+       VALUES ($1, 'refund', $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        id, amt, entryDate, payment_source,
+        payment_source === 'bank' ? bank_account_id : null,
+        payment_source === 'cash' ? cash_account_id : null,
+        notes, req.user.id,
+      ]
+    );
+
+    // Money coming IN from the vendor — a credit to our cash drawer / bank.
+    await postSourceCredit(client, {
+      paymentSource: payment_source,
+      bankAccountId: payment_source === 'bank' ? bank_account_id : null,
+      cashAccountId: payment_source === 'cash' ? cash_account_id : null,
+      entryDate,
+      amount: amt,
+      partyName: note.vendor_name,
+      narration: `Vendor refund for return ${note.return_number}`,
+      referenceNumber: note.return_number,
+      sourceType: 'vendor_return_refund',
+      sourceId: ins.rows[0].id,
+      userId: req.user.id,
+    });
+
+    const settlement = await refreshReturnSettlement(client, id);
+
+    await client.query('COMMIT');
+
+    logger.info('Vendor return refund recorded', {
+      returnId: id, amount: amt, source: payment_source, openBalance: settlement.open, userId: req.user.id,
+    });
+    res.status(201).json({
+      success: true,
+      message: settlement.open > 0
+        ? `Refund of ${amt.toFixed(2)} recorded. ${settlement.open.toFixed(2)} still unsettled on this return.`
+        : `Refund of ${amt.toFixed(2)} recorded. Return note fully settled.`,
+      data: { refunded: amt, open_balance: settlement.open },
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -536,17 +750,26 @@ const getAvailableCredits = async (req, res, next) => {
          vrn.id, vrn.return_number, vrn.return_date,
          vrn.packets_returned, vrn.return_amount,
          COALESCE(vrn.credited_amount, 0) AS credited_amount,
-         vrn.return_amount - COALESCE(vrn.credited_amount, 0) AS available_credit,
+         COALESCE(st.settled, 0)                     AS settled_total,
+         COALESCE(st.refunded, 0)                    AS refunded_total,
+         vrn.return_amount - COALESCE(st.settled, 0) AS available_credit,
          sp.purchase_number, sp.seed_lot_number,
          p.name AS product_name
        FROM vendor_return_notes vrn
        JOIN seed_purchases sp ON sp.id = vrn.seed_purchase_id
        JOIN skus s ON s.id = sp.sku_id
        JOIN products p ON p.id = sp.product_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(amount), 0) AS settled,
+                COALESCE(SUM(amount) FILTER (WHERE settlement_type = 'refund'), 0) AS refunded
+         FROM vendor_return_settlements WHERE return_note_id = vrn.id
+       ) st ON true
        WHERE vrn.vendor_id = $1
          AND vrn.status = 'accepted'
          AND vrn.deleted_at IS NULL
-         AND (vrn.return_amount - COALESCE(vrn.credited_amount, 0)) > 0
+         -- open balance nets refunds as well as offsets; the old query looked
+         -- only at credited_amount, so a refunded return still showed credit
+         AND (vrn.return_amount - COALESCE(st.settled, 0)) > 0.005
        ORDER BY vrn.return_date ASC`,
       [vendorId]
     );
@@ -601,6 +824,7 @@ module.exports = {
   acceptReturn,
   rejectReturn,
   applyCredit,
+  recordRefund,
   getAvailableCredits,
   deleteReturn,
 };

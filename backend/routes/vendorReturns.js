@@ -30,4 +30,7 @@ router.post('/:id/accept',       authorize(['Admin', 'Manager']),     ctrl.accep
 router.post('/:id/reject',       authorize(['Admin', 'Manager']),     ctrl.rejectReturn);
 router.post('/:id/apply-credit', authorize(['Admin', 'Manager']),     ctrl.applyCredit);
 
+// ── Settlement: vendor paid the money back instead of issuing credit ─────────
+router.post('/:id/refund',       authorize(['Admin', 'Manager']),     ctrl.recordRefund);
+
 module.exports = router;
