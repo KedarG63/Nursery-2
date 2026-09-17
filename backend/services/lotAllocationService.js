@@ -304,27 +304,15 @@ const releaseAllocatedLots = async (orderId) => {
   try {
     await client.query('BEGIN');
 
-    // Get all allocated order items
-    const allocatedItemsResult = await client.query(
-      `SELECT id, sku_id, lot_id, quantity
-       FROM order_items
-       WHERE order_id = $1 AND lot_id IS NOT NULL`,
-      [orderId]
-    );
+    // Lot quantities are released by trigger_update_lot_allocation when lot_id
+    // is set to NULL below ("lot removed" branch). Do NOT also update lots
+    // manually here: that released every cancelled unit TWICE, silently taking
+    // the extra from other orders' allocations on the same lot and creating
+    // phantom available stock (or failing lots_allocated_quantity_check when
+    // the lot had nothing else to take from). available_quantity is recomputed
+    // by trigger_calculate_available_quantity.
 
-    // Restore lot quantities for each allocated item (Phase 21 - Part 4)
-    for (const item of allocatedItemsResult.rows) {
-      await client.query(
-        `UPDATE lots
-         SET allocated_quantity = allocated_quantity - $1,
-             available_quantity = available_quantity + $1,
-             updated_at = NOW()
-         WHERE id = $2`,
-        [item.quantity, item.lot_id]
-      );
-    }
-
-    // Update all allocated order items to remove lot assignments
+    // Remove lot assignments — the trigger releases the allocation exactly once
     const result = await client.query(
       `UPDATE order_items
        SET lot_id = NULL,
