@@ -451,6 +451,7 @@ const recordOfflinePayment = async (req, res) => {
     // Fetch total_amount and paid_amount (source of truth) not just balance_amount
     const orderResult = await client.query(
       `SELECT o.id, o.customer_id, o.total_amount, o.paid_amount,
+              COALESCE(o.credit_applied, 0) AS credit_applied,
               c.name AS customer_name
        FROM orders o
        LEFT JOIN customers c ON c.id = o.customer_id
@@ -469,10 +470,13 @@ const recordOfflinePayment = async (req, res) => {
 
     const order = orderResult.rows[0];
 
-    // Compute from source of truth (consistent with DB trigger)
+    // Compute from source of truth (consistent with DB trigger). Credit from a
+    // customer return or store credit already reduces what is collectable —
+    // ignoring it would let a customer pay for goods they gave back.
     const totalAmount = parseFloat(order.total_amount);
     const currentPaid = parseFloat(order.paid_amount);
-    const orderBalance = Math.round((totalAmount - currentPaid) * 100) / 100;
+    const creditApplied = parseFloat(order.credit_applied);
+    const orderBalance = Math.round((totalAmount - currentPaid - creditApplied) * 100) / 100;
     const paymentAmount = Math.round(parseFloat(amount) * 100) / 100;
 
     // Validate amount is positive

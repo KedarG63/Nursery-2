@@ -78,6 +78,7 @@ const getOverview = async (req, res, next) => {
     const [
       cashFlows, bankFlows, cashOutBySource, bankOutBySource,
       receivablesOrders, receivablesService, payablesSeed, payablesSupplies, advances,
+      storeCredit,
     ] = await Promise.all([
       db.query(flowSql('cash_ledger_entries', 'cash_account_id'), [win.start, win.end]),
       db.query(flowSql('bank_ledger_entries', 'bank_account_id'), [win.start, win.end]),
@@ -107,6 +108,18 @@ const getOverview = async (req, res, next) => {
         `SELECT COALESCE(SUM(amount - amount_recovered), 0) AS total,
                 COUNT(*) FILTER (WHERE amount > amount_recovered)::int AS count
          FROM employee_advances WHERE deleted_at IS NULL AND status = 'outstanding'`
+      ),
+      db.query(
+        // Store credit is money we OWE customers from returns — a liability.
+        `SELECT COALESCE(SUM(balance), 0) AS total,
+                COUNT(*) FILTER (WHERE balance > 0)::int AS count
+         FROM (
+           SELECT customer_id,
+                  SUM(CASE WHEN entry_type = 'issued' THEN amount ELSE -amount END) AS balance
+           FROM customer_store_credit_ledger
+           WHERE deleted_at IS NULL
+           GROUP BY customer_id
+         ) per_customer`
       ),
     ]);
 
@@ -154,6 +167,10 @@ const getOverview = async (req, res, next) => {
           total: round2(advances.rows[0].total),
           count: advances.rows[0].count,
         },
+        store_credit_liability: {
+          total: round2(storeCredit.rows[0].total),
+          customers_count: storeCredit.rows[0].count,
+        },
       },
     });
   } catch (err) {
@@ -177,7 +194,7 @@ const getProfitLoss = async (req, res, next) => {
   try {
     const win = resolveWindow(req.query.from_date, req.query.to_date);
 
-    const [sales, service, purchases, returns, expensesByCat, payrollAgg, suppliesByCat] = await Promise.all([
+    const [sales, service, purchases, returns, expensesByCat, payrollAgg, suppliesByCat, customerReturns] = await Promise.all([
       db.query(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*)::int AS count
          FROM orders
@@ -234,6 +251,16 @@ const getProfitLoss = async (req, res, next) => {
          ORDER BY total DESC`,
         [win.start, win.end]
       ),
+      db.query(
+        // Accepted customer returns are sales returns: they reduce product
+        // sales income in the period the goods came back, at their PRORATED
+        // value — never touching the original order's total_amount.
+        `SELECT COALESCE(SUM(return_amount), 0) AS total, COUNT(*)::int AS count
+         FROM customer_return_notes
+         WHERE deleted_at IS NULL AND status = 'accepted'
+           AND return_date BETWEEN $1 AND $2`,
+        [win.start, win.end]
+      ),
     ]);
 
     // Monthly series across the window (income vs costs vs net)
@@ -280,16 +307,25 @@ const getProfitLoss = async (req, res, next) => {
           AND status IN ('accepted', 'credited')
           AND return_date BETWEEN $1 AND $2
         GROUP BY 1
+      ),
+      -- Accepted customer returns reduce that month's sales, matching the headline.
+      cret AS (
+        SELECT date_trunc('month', return_date) AS m, SUM(return_amount) AS v
+        FROM customer_return_notes
+        WHERE deleted_at IS NULL AND status = 'accepted'
+          AND return_date BETWEEN $1 AND $2
+        GROUP BY 1
       )
       SELECT
         TO_CHAR(months.m, 'YYYY-MM') AS month_key,
-        COALESCE(inc.v, 0) + COALESCE(svc.v, 0) AS income,
+        COALESCE(inc.v, 0) - COALESCE(cret.v, 0) + COALESCE(svc.v, 0) AS income,
         COALESCE(pur.v, 0) - COALESCE(ret.v, 0) + COALESCE(sup.v, 0) + COALESCE(exp.v, 0) + COALESCE(pay.v, 0) AS costs
       FROM months
       LEFT JOIN inc ON inc.m = months.m
       LEFT JOIN svc ON svc.m = months.m
       LEFT JOIN pur ON pur.m = months.m
       LEFT JOIN ret ON ret.m = months.m
+      LEFT JOIN cret ON cret.m = months.m
       LEFT JOIN sup ON sup.m = months.m
       LEFT JOIN exp ON exp.m = months.m
       LEFT JOIN pay ON pay.m = months.m
@@ -300,10 +336,12 @@ const getProfitLoss = async (req, res, next) => {
     const income = {
       product_sales: round2(sales.rows[0].total),
       product_sales_count: sales.rows[0].count,
+      customer_returns: round2(customerReturns.rows[0].total), // reduces product sales
+      customer_returns_count: customerReturns.rows[0].count,
       service_income: round2(service.rows[0].total),
       service_income_count: service.rows[0].count,
     };
-    income.total = round2(income.product_sales + income.service_income);
+    income.total = round2(income.product_sales - income.customer_returns + income.service_income);
 
     const totalExpenses = round2(expensesByCat.rows.reduce((s, r) => s + num(r.total), 0));
     const totalSupplies = round2(suppliesByCat.rows.reduce((s, r) => s + num(r.total), 0));

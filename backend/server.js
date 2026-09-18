@@ -96,6 +96,7 @@ const materialPurchaseRoutes = require('./routes/materialPurchases'); // Supplie
 const invoiceRoutes = require('./routes/invoices'); // Phase 23: Billing
 const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billing
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
+const customerReturnRoutes = require('./routes/customerReturns'); // Feature: Seedling returns from customers
 const bankLedgerRoutes   = require('./routes/bankLedger');    // Feature: Bank Ledger
 const trashRoutes        = require('./routes/trash');          // Feature: Trash / Recycle Bin
 const serviceOrderRoutes = require('./routes/serviceOrders');  // Feature: Service / Grow-Only orders
@@ -131,6 +132,7 @@ app.use('/api/material-purchases', materialPurchaseRoutes); // Supplies & Materi
 app.use('/api/invoices', invoiceRoutes); // Phase 23: Billing
 app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
+app.use('/api/customer-returns', customerReturnRoutes); // Feature: Seedling returns from customers
 app.use('/api/bank-accounts', bankLedgerRoutes);   // Feature: Bank Ledger
 app.use('/api/trash', trashRoutes);                // Feature: Trash / Recycle Bin
 app.use('/api/service-orders', serviceOrderRoutes); // Feature: Service / Grow-Only orders
