@@ -44,6 +44,7 @@ const StoreCreditPanel = ({ order, onApplied }) => {
 
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
@@ -65,8 +66,12 @@ const StoreCreditPanel = ({ order, onApplied }) => {
     try {
       const res = await customerReturnService.getStoreCredit(order.customer_id);
       setBalance(parseFloat(res.data?.balance || 0));
+      setLoadFailed(false);
     } catch (err) {
-      console.error('Failed to load store credit:', err);
+      // A failed lookup must not look like "no credit" — this panel hides
+      // itself when the balance is zero, so silently failing would make a
+      // customer's real credit disappear from the screen.
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -103,8 +108,25 @@ const StoreCreditPanel = ({ order, onApplied }) => {
     }
   };
 
+  if (loading) return null;
+
+  // Say so rather than hiding — silence here is indistinguishable from
+  // "this customer has no credit", which may be untrue.
+  if (loadFailed) {
+    return (
+      <Alert
+        severity="warning"
+        sx={{ mb: 3 }}
+        action={<Button color="inherit" size="small" onClick={fetchBalance}>Retry</Button>}
+      >
+        Store credit for this customer could not be checked. If they are owed credit,
+        it will not be shown until this loads.
+      </Alert>
+    );
+  }
+
   // Nothing to show: no credit available and none ever applied here.
-  if (loading || (balance <= 0.005 && applied <= 0.005)) return null;
+  if (balance <= 0.005 && applied <= 0.005) return null;
 
   return (
     <>

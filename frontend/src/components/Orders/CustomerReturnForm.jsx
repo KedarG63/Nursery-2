@@ -303,7 +303,7 @@ const CustomerReturnForm = ({ open, orderId, onClose, onCreated }) => {
                                 helperText={
                                   (lotsBySku[i.sku_id] || []).length === 0
                                     ? 'No lots found for this plant — create one first'
-                                    : 'This sale never reserved a lot, so the stock has to be told where to land'
+                                    : 'This sale was not linked to a lot, so choose where these plants should go'
                                 }
                               >
                                 {(lotsBySku[i.sku_id] || []).map((l) => (

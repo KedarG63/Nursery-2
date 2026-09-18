@@ -33,16 +33,26 @@ const logger = require('../config/logger');
 const EPSILON = 0.005;
 
 /**
- * Each check: a title, why it matters in plain words, and a query returning the
- * rows that violate it. An empty result set is a pass.
+ * Each check carries TWO labels, because the same check reads very differently
+ * depending on the result:
+ *
+ *   verified — shown when it passes. A calm statement of what is confirmed
+ *              correct. Most of the time every check passes, so this is what
+ *              staff actually read, and it must not sound like an accusation.
+ *   title    — shown only when rows are found. Names the problem directly.
+ *   explain  — why it matters. Only shown alongside a real finding.
+ *
+ * None of these may contain table or column names: this page is read by the
+ * people running the nursery, not by whoever maintains the schema.
  */
 const CHECKS = [
   {
     key: 'customer_return_oversettled',
-    title: 'Customer returns settled for more than they are worth',
+    verified: 'Every customer return is settled within its value',
+    title: 'Some customer returns have been settled for more than they are worth',
     explain:
-      'A return can be offset, refunded and credited, but the three together must never exceed its value. '
-      + 'If they do, the business has given back more than it took in.',
+      'A return can be put against an unpaid order, refunded, or kept as store credit — but the three '
+      + 'together must never add up to more than the return is worth.',
     severity: 'critical',
     sql: `
       SELECT crn.id, crn.return_number, c.name AS customer_name,
@@ -60,10 +70,11 @@ const CHECKS = [
 
   {
     key: 'vendor_return_oversettled',
-    title: 'Vendor returns settled for more than they are worth',
+    verified: 'Every vendor return is settled within its value',
+    title: 'Some vendor returns have been settled for more than they are worth',
     explain:
-      'The same rule on the purchase side: credit taken against bills plus cash the vendor paid back '
-      + 'must never exceed the value of what was returned.',
+      'The same rule on the purchase side: credit taken against bills, plus any cash the vendor paid '
+      + 'back, must never add up to more than the value of what was returned.',
     severity: 'critical',
     sql: `
       SELECT vrn.id, vrn.return_number, v.vendor_name,
@@ -81,10 +92,11 @@ const CHECKS = [
 
   {
     key: 'order_credit_applied_drift',
-    title: 'Order credit does not match its settlement rows',
+    verified: 'Order balances match the returns and store credit behind them',
+    title: 'Some order balances do not match the returns and credit behind them',
     explain:
-      'orders.credit_applied is a cached total of the return offsets and store credit applied to that order. '
-      + 'Recomputed from the rows themselves, it must match exactly — a difference means an order balance is wrong.',
+      'The credit shown on an order should equal the returns and store credit actually recorded against it. '
+      + 'Where it differs, that order is showing the customer the wrong balance.',
     severity: 'critical',
     sql: `
       SELECT o.id, o.order_number, c.name AS customer_name,
@@ -108,10 +120,11 @@ const CHECKS = [
 
   {
     key: 'purchase_credit_applied_drift',
-    title: 'Purchase bill credit does not match its settlement rows',
+    verified: 'Purchase bills match the return credit taken against them',
+    title: 'Some purchase bills do not match the return credit taken against them',
     explain:
-      'seed_purchases.vendor_credit_applied is the cached total of vendor return credit set against that bill. '
-      + 'If it drifts, accounts payable is overstated or understated by the difference.',
+      'The credit shown on a purchase bill should equal the vendor returns actually set against it. '
+      + 'Where it differs, the amount owed to that vendor is wrong by the difference.',
     severity: 'critical',
     sql: `
       SELECT sp.id, sp.purchase_number, v.vendor_name,
@@ -132,10 +145,11 @@ const CHECKS = [
 
   {
     key: 'customer_refund_missing_ledger',
-    title: 'Customer refunds with no matching ledger entry',
+    verified: 'Every customer refund appears in the cash book or bank ledger',
+    title: 'Some customer refunds are missing from the cash book and bank ledger',
     explain:
-      'Every refund paid to a customer must appear once in the cash book or bank ledger for the same amount. '
-      + 'A refund missing here is money that left the business without being recorded anywhere.',
+      'Every refund paid to a customer should appear once, for the same amount, in the cash book or the '
+      + 'bank ledger. One that is missing is money that left without being written down anywhere.',
     severity: 'critical',
     sql: `
       SELECT crs.id, crn.return_number, c.name AS customer_name,
@@ -162,10 +176,11 @@ const CHECKS = [
 
   {
     key: 'vendor_refund_missing_ledger',
-    title: 'Vendor refunds with no matching ledger entry',
+    verified: 'Every vendor refund appears in the cash book or bank ledger',
+    title: 'Some vendor refunds are missing from the cash book and bank ledger',
     explain:
-      'Money a vendor paid back must appear once in the cash book or bank ledger for the same amount. '
-      + 'Missing here means cash came in that the books never saw.',
+      'Money a vendor paid back should appear once, for the same amount, in the cash book or the bank '
+      + 'ledger. One that is missing means cash came in that the books never saw.',
     severity: 'critical',
     sql: `
       SELECT vrs.id, vrn.return_number, v.vendor_name,
@@ -192,10 +207,11 @@ const CHECKS = [
 
   {
     key: 'orphan_refund_ledger_entries',
-    title: 'Ledger entries pointing at a refund that no longer exists',
+    verified: 'No leftover refund entries in the cash book or bank ledger',
+    title: 'Some cash book or bank entries refer to a refund that no longer exists',
     explain:
-      'The mirror of the previous two checks: a live ledger entry whose settlement row has gone. '
-      + 'This inflates or deflates an account balance with nothing to justify it.',
+      'The opposite of the two checks above: an entry still counted in an account balance, for a refund '
+      + 'that has since been removed. It moves that balance with nothing to justify it.',
     severity: 'critical',
     sql: `
       SELECT * FROM (
@@ -232,10 +248,11 @@ const CHECKS = [
 
   {
     key: 'negative_store_credit',
-    title: 'Customers whose store credit has gone negative',
+    verified: 'No customer has spent more store credit than they were given',
+    title: 'Some customers have spent more store credit than they were given',
     explain:
-      'Store credit applied can never exceed store credit issued. A negative balance means an order '
-      + 'was discounted with credit the customer never had.',
+      'Store credit spent can never be more than store credit issued. Where it is, an order was reduced '
+      + 'using credit the customer never actually had.',
     severity: 'critical',
     sql: `
       SELECT scl.customer_id, c.name AS customer_name,
@@ -252,10 +269,11 @@ const CHECKS = [
 
   {
     key: 'order_overcollected',
-    title: 'Orders settled beyond their own total',
+    verified: 'No order has been collected beyond its total',
+    title: 'Some orders have been collected beyond their total',
     explain:
-      'Cash taken plus credit applied must never exceed what the order is worth. '
-      + 'Beyond that, the customer has been charged for something they did not buy.',
+      'Cash taken plus credit applied should never come to more than the order is worth. '
+      + 'Anything above that has been collected from the customer twice.',
     severity: 'critical',
     sql: `
       SELECT o.id, o.order_number, c.name AS customer_name,
@@ -271,10 +289,11 @@ const CHECKS = [
 
   {
     key: 'accepted_return_without_restock',
-    title: 'Accepted returns whose stock movement was never recorded',
+    verified: 'Every accepted return recorded how its plants went back into stock',
+    title: 'Some accepted returns did not record how their plants went back into stock',
     explain:
-      'Accepting a return always puts the plants back into a lot, and which way it did that is written down. '
-      + 'A blank here means stock may have moved without a record, or not moved at all.',
+      'Accepting a return always puts the plants back into a lot, and how that happened is written down '
+      + 'at the time. A blank means the stock may not have gone back at all — worth counting those trays.',
     severity: 'warning',
     sql: `
       SELECT crn.return_number, c.name AS customer_name, crn.accepted_at,
@@ -294,10 +313,11 @@ const CHECKS = [
 
   {
     key: 'unsettled_returns',
-    title: 'Accepted returns still owing money back',
+    verified: 'Nothing is waiting to be refunded or credited to a customer',
+    title: 'Money still to be given back to customers',
     explain:
-      'Not an error — these are real open liabilities waiting for a refund or a store credit decision. '
-      + 'They are listed so the amount owed to customers is never a surprise.',
+      'Not a mistake — these returns have been accepted and are waiting for someone to choose a refund '
+      + 'or store credit. They are listed so the amount owed to customers is never a surprise.',
     severity: 'info',
     sql: `
       SELECT crn.id, crn.return_number, c.name AS customer_name, o.order_number,
@@ -316,10 +336,11 @@ const CHECKS = [
 
   {
     key: 'unsettled_vendor_returns',
-    title: 'Accepted vendor returns still owed to us',
+    verified: 'No vendor owes us anything on returns',
+    title: 'Money vendors still owe us on returns',
     explain:
-      'Also not an error — credit the vendor owes that has not yet been taken against a bill or paid back. '
-      + 'Left unwatched, this is the money most often quietly lost.',
+      'Not a mistake — credit a vendor owes that has not yet been taken off a bill or paid back. '
+      + 'This is the money most easily forgotten, so it is listed until it is claimed.',
     severity: 'info',
     sql: `
       SELECT vrn.id, vrn.return_number, v.vendor_name,
@@ -353,6 +374,7 @@ const getReturnsReconciliation = async (req, res, next) => {
         results.push({
           key: check.key,
           title: check.title,
+          verified: check.verified,
           explain: check.explain,
           severity: check.severity,
           passed: r.rows.length === 0,
@@ -360,14 +382,18 @@ const getReturnsReconciliation = async (req, res, next) => {
           rows: r.rows,
         });
       } catch (err) {
+        // The real error goes to the server log. The page is read by the people
+        // running the nursery, so it gets a plain sentence — a raw database
+        // error on screen tells them nothing and looks alarming.
         logger.error('Reconciliation check failed to run', { check: check.key, error: err.message });
         results.push({
           key: check.key,
           title: check.title,
+          verified: check.verified,
           explain: check.explain,
           severity: check.severity,
           passed: null,
-          error: err.message,
+          error: 'This check could not be completed. The details have been logged for support.',
           count: 0,
           rows: [],
         });

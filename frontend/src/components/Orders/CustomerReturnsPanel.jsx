@@ -46,6 +46,7 @@ const CustomerReturnsPanel = ({ order, onChanged }) => {
 
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [actionId, setActionId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [settling, setSettling] = useState(null); // note row or null
@@ -55,8 +56,11 @@ const CustomerReturnsPanel = ({ order, onChanged }) => {
     try {
       const res = await customerReturnService.listReturns({ order_id: order.id, limit: 50 });
       setReturns(res.data || []);
+      setLoadFailed(false);
     } catch (err) {
-      console.error('Failed to load returns:', err);
+      // Never fall through to "no returns" — saying there are none when we
+      // simply could not check invites someone to record the same return twice.
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -110,13 +114,21 @@ const CustomerReturnsPanel = ({ order, onChanged }) => {
           <Typography variant="h6">Returns</Typography>
         </Box>
         {canWrite && (
-          <Tooltip title={isCancelled ? 'A cancelled order cannot have a return' : ''}>
+          <Tooltip
+            title={
+              isCancelled ? 'A cancelled order cannot have a return'
+                : loadFailed ? 'Existing returns could not be loaded — retry first'
+                : ''
+            }
+          >
             <span>
               <Button
                 size="small"
                 variant="outlined"
                 startIcon={<AddIcon />}
-                disabled={isCancelled}
+                // Blocked while the existing returns are unknown, so the same
+                // plants cannot be returned twice by accident.
+                disabled={isCancelled || loadFailed}
                 onClick={() => setShowForm(true)}
               >
                 Record Return
@@ -130,6 +142,14 @@ const CustomerReturnsPanel = ({ order, onChanged }) => {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
           <CircularProgress size={24} />
         </Box>
+      ) : loadFailed ? (
+        <Alert
+          severity="warning"
+          action={<Button color="inherit" size="small" onClick={fetchReturns}>Retry</Button>}
+        >
+          Returns for this order could not be loaded, so this list may be incomplete.
+          Please retry before recording a new return.
+        </Alert>
       ) : returns.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No plants have been returned on this order.
