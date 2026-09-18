@@ -31,6 +31,7 @@ import lotService from '../../services/lotService';
 import vendorReturnService from '../../services/vendorReturnService';
 import vendorBillService from '../../services/vendorBillService';
 import VendorReturnForm from './VendorReturnForm';
+import VendorRefundDialog from './VendorRefundDialog';
 import useAuth from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -53,6 +54,9 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
   const [loadingPurchases, setLoadingPurchases] = useState(false);
   const [applyingCredit, setApplyingCredit] = useState(false);
   const [creditSearch, setCreditSearch] = useState('');
+
+  // Refund dialog state — the vendor paid us back instead of giving credit
+  const [refundDialog, setRefundDialog] = useState(null); // vrn row or null
 
   useEffect(() => {
     if (open && purchase) {
@@ -131,7 +135,8 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
       return;
     }
     setCreditDialog(vrn);
-    const available = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
+    // From the settlement ledger — nets earlier credit AND any refund taken.
+    const available = parseFloat(vrn.open_balance ?? 0);
     setCreditAmount(available.toFixed(2));
     setTargetPurchaseId('');
     setCreditSearch('');
@@ -659,7 +664,13 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
 
               <Grid item xs={12}>
                 {returnNotes.map((vrn, index) => {
-                  const availableCredit = parseFloat(vrn.return_amount) - parseFloat(vrn.credited_amount || 0);
+                  // open_balance comes from the settlement ledger, so it nets BOTH
+                  // credit applied to bills and cash the vendor paid back.
+                  // vrn.credited_amount counts only the credit half — using it here
+                  // would overstate what is still open once a refund exists.
+                  const availableCredit = parseFloat(vrn.open_balance ?? 0);
+                  const refunded = parseFloat(vrn.refund_total || 0);
+                  const creditOffset = parseFloat(vrn.credit_offset_total || 0);
                   const isActioning = actionLoading === vrn.id;
                   return (
                     <Card
@@ -700,17 +711,26 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
                               </Typography>
                             </Grid>
                           )}
-                          {vrn.status === 'credited' && vrn.credited_amount && (
+                          {/* Settlement breakdown — every rupee of the return
+                              value is either credited, refunded, or still open. */}
+                          {creditOffset > 0 && (
                             <Grid item xs={12}>
                               <Typography variant="caption" color="success.main">
-                                ₹{parseFloat(vrn.credited_amount).toFixed(2)} credited to a future purchase
+                                ₹{creditOffset.toFixed(2)} credited against a purchase bill
                               </Typography>
                             </Grid>
                           )}
-                          {vrn.status === 'accepted' && availableCredit > 0 && (
+                          {refunded > 0 && (
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="success.main">
+                                ₹{refunded.toFixed(2)} paid back by the vendor
+                              </Typography>
+                            </Grid>
+                          )}
+                          {['accepted', 'credited'].includes(vrn.status) && availableCredit > 0.005 && (
                             <Grid item xs={12}>
                               <Typography variant="caption" color="warning.main">
-                                ₹{availableCredit.toFixed(2)} credit pending — not yet applied to any bill
+                                ₹{availableCredit.toFixed(2)} still unsettled — not yet credited or refunded
                               </Typography>
                             </Grid>
                           )}
@@ -752,15 +772,27 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
                               </Button>
                             </>
                           )}
-                          {vrn.status === 'accepted' && availableCredit > 0 && isAdminOrManager && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="warning"
-                              onClick={() => openCreditDialog(vrn)}
-                            >
-                              Apply Credit to a Bill — ₹{availableCredit.toFixed(2)}
-                            </Button>
+                          {/* Both settlements stay available while anything is
+                              open, including on a partially-settled note. */}
+                          {['accepted', 'credited'].includes(vrn.status) && availableCredit > 0.005 && isAdminOrManager && (
+                            <>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="warning"
+                                onClick={() => openCreditDialog(vrn)}
+                              >
+                                Apply Credit to a Bill — ₹{availableCredit.toFixed(2)}
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="success"
+                                onClick={() => setRefundDialog(vrn)}
+                              >
+                                Vendor Paid Us Back
+                              </Button>
+                            </>
                           )}
                         </Box>
                       </CardContent>
@@ -895,6 +927,17 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
         }}
       />
 
+      {/* Vendor Refund (nested dialog) — the vendor paid the money back */}
+      <VendorRefundDialog
+        open={Boolean(refundDialog)}
+        returnNote={refundDialog}
+        onClose={() => setRefundDialog(null)}
+        onRecorded={(result) => {
+          toast.success(result?.message || 'Refund recorded');
+          fetchReturnNotes();
+        }}
+      />
+
       {/* Apply Credit Dialog */}
       {creditDialog && (
         <Dialog open onClose={() => setCreditDialog(null)} maxWidth="sm" fullWidth>
@@ -902,7 +945,7 @@ const PurchaseDetails = ({ open, onClose, purchase }) => {
           <DialogContent dividers>
             <Alert severity="info" sx={{ mb: 2 }}>
               Return <strong>{creditDialog.return_number}</strong> — credit available:{' '}
-              <strong>{formatCurrency(parseFloat(creditDialog.return_amount) - parseFloat(creditDialog.credited_amount || 0))}</strong>
+              <strong>{formatCurrency(parseFloat(creditDialog.open_balance ?? 0))}</strong>
             </Alert>
 
             {loadingPurchases ? (

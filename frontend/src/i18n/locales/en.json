@@ -52,7 +52,9 @@
     "payroll": "Payroll",
     "advances": "Advances",
     "trash": "Trash",
-    "users": "Users"
+    "users": "Users",
+    "returns": "Customer Returns",
+    "reconciliation": "Reconciliation"
   },
   "navGroups": {
     "catalog": "Catalog",

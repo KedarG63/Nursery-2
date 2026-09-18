@@ -54,6 +54,15 @@ const vendorReturnService = {
     return response.data;
   },
 
+  /**
+   * The vendor paid the money back rather than issuing credit.
+   * Money comes IN, so an explicit destination account is required.
+   */
+  recordRefund: async (id, payload) => {
+    const response = await api.post(`/api/vendor-returns/${id}/refund`, payload);
+    return response.data;
+  },
+
   // ── Display helpers ────────────────────────────────────────────────────────
   getStatusColor: (status) => {
     const map = {

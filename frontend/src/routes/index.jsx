@@ -50,6 +50,8 @@ import FinanceOverviewPage from '../pages/Accounting/FinanceOverviewPage';
 import ProfitLossPage from '../pages/Accounting/ProfitLossPage';
 import CashBookPage from '../pages/Accounting/CashBookPage';
 import DepositsPage from '../pages/Accounting/DepositsPage';
+import ReconciliationPage from '../pages/Accounting/ReconciliationPage';
+import CustomerReturnsList from '../pages/Returns/CustomerReturnsList';
 import EmployeesPage from '../pages/Payroll/EmployeesPage';
 import EmployeeDetails from '../pages/Payroll/EmployeeDetails';
 import AttendancePage from '../pages/Payroll/AttendancePage';
@@ -107,6 +109,9 @@ const AppRoutes = () => {
         <Route path="orders/counter" element={<QuickCounterSale />} />
         <Route path="orders/:id" element={<OrderDetails />} />
 
+        {/* Customer Returns — plants brought back by customers */}
+        <Route path="returns" element={<CustomerReturnsList />} />
+
         {/* Service Orders (grow-only) */}
         <Route path="service-orders" element={<ServiceOrdersList />} />
         <Route path="service-orders/create" element={<CreateServiceOrder />} />
@@ -151,6 +156,7 @@ const AppRoutes = () => {
         <Route path="accounting/expenses" element={<ExpensesPage />} />
         <Route path="accounting/cash-book" element={<CashBookPage />} />
         <Route path="accounting/deposits" element={<DepositsPage />} />
+        <Route path="accounting/reconciliation" element={<ReconciliationPage />} />
 
         {/* Payroll */}
         <Route path="payroll" element={<Navigate to="/payroll/runs" replace />} />

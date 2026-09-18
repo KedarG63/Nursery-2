@@ -105,7 +105,14 @@ const RETURN_SELECT = `
     p.name              AS product_name,
     s.sku_code,
     u1.full_name AS created_by_name,
-    u2.full_name AS updated_by_name
+    u2.full_name AS updated_by_name,
+    -- Derived from the settlement ledger, never from vrn.credited_amount:
+    -- that column holds credit applied to bills ONLY, so it ignores refunds.
+    -- Anything showing "how much is still open" must use open_balance.
+    COALESCE(st.settled, 0)                     AS settled_total,
+    COALESCE(st.offset_total, 0)                AS credit_offset_total,
+    COALESCE(st.refund_total, 0)                AS refund_total,
+    vrn.return_amount - COALESCE(st.settled, 0) AS open_balance
   FROM vendor_return_notes vrn
   JOIN vendors       v  ON v.id  = vrn.vendor_id
   JOIN seed_purchases sp ON sp.id = vrn.seed_purchase_id
@@ -113,6 +120,12 @@ const RETURN_SELECT = `
   JOIN products      p  ON p.id  = sp.product_id
   LEFT JOIN users    u1 ON u1.id = vrn.created_by
   LEFT JOIN users    u2 ON u2.id = vrn.updated_by
+  LEFT JOIN LATERAL (
+    SELECT SUM(amount) AS settled,
+           SUM(amount) FILTER (WHERE settlement_type = 'credit_offset') AS offset_total,
+           SUM(amount) FILTER (WHERE settlement_type = 'refund')        AS refund_total
+    FROM vendor_return_settlements WHERE return_note_id = vrn.id
+  ) st ON true
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────

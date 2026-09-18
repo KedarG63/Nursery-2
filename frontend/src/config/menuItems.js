@@ -26,6 +26,8 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import InsightsIcon from '@mui/icons-material/Insights';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 
 /**
  * Sidebar navigation.
@@ -98,6 +100,14 @@ const menuGroups = [
         icon: GrassIcon,
         path: '/service-orders',
         roles: ['Admin', 'Manager', 'Sales'],
+      },
+      {
+        id: 'returns',
+        label: 'Customer Returns',
+        labelKey: 'nav.returns',
+        icon: AssignmentReturnIcon,
+        path: '/returns',
+        roles: ['Admin', 'Manager', 'Sales', 'Accountant'],
       },
       {
         id: 'customers',
@@ -209,6 +219,14 @@ const menuGroups = [
         labelKey: 'nav.deposits',
         icon: MoveDownIcon,
         path: '/accounting/deposits',
+        roles: ['Admin', 'Manager', 'Accountant'],
+      },
+      {
+        id: 'accounting-reconciliation',
+        label: 'Reconciliation',
+        labelKey: 'nav.reconciliation',
+        icon: FactCheckIcon,
+        path: '/accounting/reconciliation',
         roles: ['Admin', 'Manager', 'Accountant'],
       },
     ],

@@ -23,6 +23,8 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import OrderSummary from '../../components/Orders/OrderSummary';
 import OrderTimeline from '../../components/Orders/OrderTimeline';
+import StoreCreditPanel from '../../components/Orders/StoreCreditPanel';
+import CustomerReturnsPanel from '../../components/Orders/CustomerReturnsPanel';
 import { getOrder, getOrderTimeline, deleteOrder } from '../../services/orderService';
 import { canEdit } from '../../utils/roleCheck';
 
@@ -193,6 +195,13 @@ const OrderDetails = () => {
       <Box sx={{ mb: 3 }}>
         <OrderSummary order={order} onStatusUpdate={fetchOrderData} />
       </Box>
+
+      {/* Store credit — shown only when there is credit to spend or already spent.
+          Applying it changes the order balance, so the order is refetched. */}
+      <StoreCreditPanel order={order} onApplied={fetchOrderData} />
+
+      {/* Returns against this order */}
+      <CustomerReturnsPanel order={order} onChanged={fetchOrderData} />
 
       {/* Order Timeline */}
       <OrderTimeline timeline={timeline} />

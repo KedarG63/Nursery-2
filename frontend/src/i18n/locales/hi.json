@@ -52,7 +52,9 @@
     "payroll": "वेतन",
     "advances": "अग्रिम",
     "trash": "ट्रैश",
-    "users": "उपयोगकर्ता"
+    "users": "उपयोगकर्ता",
+    "returns": "ग्राहक वापसी",
+    "reconciliation": "मिलान"
   },
   "navGroups": {
     "catalog": "सूची",

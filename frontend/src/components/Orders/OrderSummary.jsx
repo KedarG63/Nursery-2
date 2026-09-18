@@ -391,12 +391,30 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
                 </Typography>
               </Box>
 
+              {/* Returns and store credit settle part of an order without any
+                  money being paid, so a balance of total - paid alone would
+                  overstate what the customer owes. */}
+              {parseFloat(order.credit_applied || 0) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Settled by Returns / Store Credit
+                  </Typography>
+                  <Typography variant="body1" color="info.main" fontWeight={500}>
+                    {formatCurrency(order.credit_applied)}
+                  </Typography>
+                </Box>
+              )}
+
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
                   Balance Due
                 </Typography>
                 <Typography variant="body1" color="error.main" fontWeight={500}>
-                  {formatCurrency((order.total_amount || 0) - (order.paid_amount || 0))}
+                  {formatCurrency(
+                    (order.total_amount || 0)
+                    - (order.paid_amount || 0)
+                    - (order.credit_applied || 0)
+                  )}
                 </Typography>
               </Box>
 
