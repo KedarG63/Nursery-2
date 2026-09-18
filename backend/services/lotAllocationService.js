@@ -295,14 +295,30 @@ const checkLotAvailability = async (skuId, quantity) => {
 
 /**
  * Release allocated lots for an order (deallocate)
+ *
+ * Pass the caller's client when this runs inside an existing transaction.
+ * updateOrderStatus does exactly that: it holds the order row lock from
+ * `UPDATE orders SET status='cancelled'` and then calls this. Taking a SECOND
+ * pool connection here meant the new connection blocked forever on
+ * `UPDATE orders SET expected_ready_date` — waiting for a lock held by the
+ * caller, which was itself waiting for this function to return. An
+ * application-level deadlock Postgres cannot detect, so cancellation hung until
+ * the request timed out, leaking two connections each time.
+ *
+ * Running on the caller's client removes the second connection entirely, and
+ * makes the status change and the lot release commit together or not at all.
+ *
  * @param {string} orderId - Order UUID
+ * @param {object} [externalClient] - Caller's client; when given, the caller
+ *   owns BEGIN/COMMIT/ROLLBACK and the connection's lifetime.
  * @returns {Promise<object>} Deallocation result
  */
-const releaseAllocatedLots = async (orderId) => {
-  const client = await pool.connect();
+const releaseAllocatedLots = async (orderId, externalClient = null) => {
+  const client = externalClient || await pool.connect();
+  const ownsTransaction = !externalClient;
 
   try {
-    await client.query('BEGIN');
+    if (ownsTransaction) await client.query('BEGIN');
 
     // Lot quantities are released by trigger_update_lot_allocation when lot_id
     // is set to NULL below ("lot removed" branch). Do NOT also update lots
@@ -334,7 +350,7 @@ const releaseAllocatedLots = async (orderId) => {
       [orderId]
     );
 
-    await client.query('COMMIT');
+    if (ownsTransaction) await client.query('COMMIT');
 
     return {
       success: true,
@@ -342,10 +358,12 @@ const releaseAllocatedLots = async (orderId) => {
       deallocated_items: result.rows.length,
     };
   } catch (error) {
-    await client.query('ROLLBACK');
+    // When the caller owns the transaction it also owns the rollback —
+    // rolling back here would silently discard the caller's other work.
+    if (ownsTransaction) await client.query('ROLLBACK');
     throw error;
   } finally {
-    client.release();
+    if (ownsTransaction) client.release();
   }
 };
 

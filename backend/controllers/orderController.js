@@ -13,6 +13,17 @@ const { postCustomerPaymentToLedger } = require('./paymentController');
 // Tax rate configuration (0% - GST exempt)
 const TAX_RATE = 0.00;
 
+// True when any item on the order has an accepted customer return.
+async function orderHasAcceptedReturns(client, orderId) {
+  const r = await client.query(
+    `SELECT 1 FROM customer_return_notes
+     WHERE order_id = $1 AND status = 'accepted' AND deleted_at IS NULL
+     LIMIT 1`,
+    [orderId]
+  );
+  return r.rows.length > 0;
+}
+
 /**
  * Create a new order
  * POST /api/orders
@@ -722,6 +733,21 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    // An order with an accepted customer return was genuinely sold and partly
+    // given back; cancelling it would erase that sale. The return module is the
+    // way to un-sell units. (trg_guard_order_item_with_returns enforces this in
+    // the database too — checked here first so the user gets a clear message.)
+    if (status === 'cancelled') {
+      const blocked = await orderHasAcceptedReturns(client, id);
+      if (blocked) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: 'This order has an accepted customer return and cannot be cancelled. Record a return for the remaining items instead.',
+        });
+      }
+    }
+
     // Update order status
     await client.query(
       `UPDATE orders
@@ -730,9 +756,12 @@ const updateOrderStatus = async (req, res) => {
       [status, userId, id]
     );
 
-    // If cancelling order, release allocated lots
+    // If cancelling order, release allocated lots.
+    // Runs on THIS client: taking a second connection deadlocked against the
+    // order row lock held by the UPDATE above. Sharing the transaction also
+    // makes the status change and the lot release atomic.
     if (status === 'cancelled') {
-      await lotAllocationService.releaseAllocatedLots(id);
+      await lotAllocationService.releaseAllocatedLots(id, client);
     }
 
     await client.query('COMMIT');
@@ -1096,6 +1125,17 @@ const deleteOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Cannot delete an order with status "${order.status}"`,
+      });
+    }
+
+    // Soft delete never touches order_items, so the database guard would not
+    // catch this — but it would orphan an accepted return whose credit and
+    // P&L effect still stand. Goods were handed over and partly given back.
+    if (await orderHasAcceptedReturns(client, id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: `Order ${order.order_number} has an accepted customer return and cannot be deleted.`,
       });
     }
 
