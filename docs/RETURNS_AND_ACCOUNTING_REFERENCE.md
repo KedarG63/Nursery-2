@@ -20,6 +20,7 @@ application code can be bypassed by a script, a migration, or a future bug:
 | Vendor return note | `SUM(settlements) <= return_amount` |
 | Customer return note | `SUM(settlements) <= return_amount` |
 | Order | `paid_amount + credit_applied <= total_amount` |
+| Vendor payment (bulk) | `SUM(allocations) <= amount`, all allocations to bills of the same vendor |
 
 Balances are **never stored**. They are computed from the ledgers every time.
 A stored balance is a second source of truth, and second sources of truth drift.
@@ -275,6 +276,10 @@ freeze guards · over-settlement rejected on both sides.
 - **Soft delete never fires `ON DELETE CASCADE`** — ledger reversal must be explicit in
   every soft-delete path.
 - `session_replication_role = replica` to disable triggers for test-data surgery.
+- **A bill-payment row with `vendor_payment_id` has no ledger entry of its own.**
+  Anything that back-fills or re-posts ledger entries from `seed_purchase_payments`
+  / `material_purchase_payments` must skip those rows (see §11), or the money is
+  counted twice.
 
 ---
 
@@ -300,3 +305,73 @@ together in one combined deploy, as agreed. Pending on production:
 Run the reconciliation report immediately after deploying. On a correct
 production database it should read **balanced**, and any row it lists is
 pre-existing drift worth looking at before it compounds.
+
+---
+
+## 11. Bulk vendor payments (Sep 2026)
+
+Why: the accounts team came from Tally, where one payment to a vendor is adjusted
+against many invoices ("Agst Ref"). Here every payment was tied to one bill, so ten
+invoices meant ten payments and ten bank-book lines for what was one transfer.
+
+**Model** — migration `1769000000018`, `vendorPaymentController.js`,
+`/api/vendor-payments`, UI under *Accounting → Vendor Payments*:
+
+- `vendor_payments` is the voucher: vendor, date, amount, cash/bank account,
+  method, reference.
+- An **allocation** is an ordinary row in `seed_purchase_payments` or
+  `material_purchase_payments` carrying `vendor_payment_id`. The existing status
+  triggers therefore keep each bill's `amount_paid` / `payment_status` right, and
+  every bill screen, aging report and the P&L work unchanged.
+- **Only the voucher posts to the ledger**: one debit, `source_type =
+  'vendor_bulk_payment'`, `source_id = vendor_payments.id`. Allocation rows post
+  nothing.
+- **Advance** = `amount − SUM(allocations)`. Derived, never stored. It is applied to
+  later bills from the voucher page (no new ledger entry — the money already left).
+
+**Enforced in the database** (`assert_vendor_payment_allocation`,
+`assert_bill_vendor_unchanged_when_allocated`): allocations never exceed the voucher,
+only go to that vendor's bills, and a bill holding allocations cannot change vendor.
+
+**Guards added to existing code:**
+
+- `bankLedgerController.syncFromPayments` skips rows with `vendor_payment_id`.
+  Without it, "Sync from payments" would re-post every allocation as its own debit.
+- `materialPurchaseController.deletePayment` refuses allocation rows (409), and
+  `purchaseController.deletePurchase` refuses a seed bill holding allocations — its
+  soft delete would leave the allocation counting against a hidden bill.
+- Vendor 360 now covers supplies as well as seeds, counts a voucher as one payment,
+  and subtracts return credit from outstanding. `GET /vendors/:id` outstanding
+  likewise.
+
+**Also fixed here:** `update_seed_purchase_payment_status()` ignored
+`vendor_credit_applied`, so a bill settled partly by return credit and partly by
+payment ended `partial` with ₹0 due, and could not be paid or credited further. It
+now uses the same rule as `refreshPurchaseCredit()`. Only the function was replaced;
+existing rows were not rewritten. Pre-flight for prod:
+
+```sql
+SELECT COUNT(*) FROM seed_purchases
+WHERE payment_status <> 'paid' AND deleted_at IS NULL
+  AND amount_paid + COALESCE(vendor_credit_applied, 0) >= grand_total - 0.005;
+```
+
+Any rows it finds are stale statuses; recomputing them is a separate, approved step.
+
+**Reconciliation** gained four checks: voucher missing from / doubled in the books,
+voucher over-allocated (or voided with bills still against it), an allocation with
+its own ledger entry, and a ledger entry for a voided voucher.
+
+**Finance Overview** reports `vendor_advances` (shown on the *To Pay (Vendors)*
+card) and labels `vendor_bulk_payment`, `vendor_payment` and
+`customer_return_refund` in "Where the Money Went".
+
+**Noticed, not fixed:**
+
+- `PaymentSourcePicker` preselects the first bank and cash account from two async
+  loads that each spread the *initial* value, so the second can blank the first.
+  `VendorPaymentForm` works around it by merging; other callers are unchanged.
+- The allocation list links seed bills to `/billing/vendor-bills/:id`, which is
+  Admin/Manager only — an Accountant following the link gets a 403.
+- `npm run test:unit` fails under Jest 30 (`--testPathPattern` was renamed).
+

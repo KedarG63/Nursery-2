@@ -54,7 +54,8 @@
     "trash": "Trash",
     "users": "Users",
     "returns": "Customer Returns",
-    "reconciliation": "Reconciliation"
+    "reconciliation": "Reconciliation",
+    "vendorPayments": "Vendor Payments"
   },
   "navGroups": {
     "catalog": "Catalog",
@@ -67,6 +68,9 @@
     "administration": "Administration"
   },
   "finance": {
+    "srcVendorBulk": "Vendor Payments (several bills)",
+    "srcCustomerRefunds": "Customer Refunds",
+    "vendorAdvances": "Advance with vendors",
     "overviewTitle": "Finance Overview",
     "overviewSub": "Your whole money position in one place — balances, flows, and what is owed",
     "plTitle": "Profit & Loss",
@@ -126,6 +130,7 @@
     "monthlyTrend": "Month by Month"
   },
   "summary": {
+    "vendorAdvance": "Advance with vendor",
     "title": "360° Business Summary",
     "week": "This Week",
     "month": "This Month",

@@ -417,7 +417,13 @@ const VendorBillDetails = () => {
                   <TableRow key={p.id}>
                     <TableCell>{formatDate(p.payment_date)}</TableCell>
                     <TableCell>{p.payment_method?.replace(/_/g, ' ').toUpperCase()}</TableCell>
-                    <TableCell>{p.transaction_reference || '—'}</TableCell>
+                    <TableCell>
+                      {p.vendor_payment_number ? (
+                        <Link component={RouterLink} to={`/accounting/vendor-payments/${p.vendor_payment_id}`}>
+                          via {p.vendor_payment_number}
+                        </Link>
+                      ) : (p.transaction_reference || '—')}
+                    </TableCell>
                     <TableCell>{p.recorded_by_name || '—'}</TableCell>
                     <TableCell align="right"><Typography fontWeight={600} color="success.main">{formatCurrency(p.amount)}</Typography></TableCell>
                   </TableRow>

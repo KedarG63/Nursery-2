@@ -173,34 +173,66 @@ const vendorSummary = async (req, res) => {
     const vendor = await pool.query(`SELECT id, vendor_name FROM vendors WHERE id = $1 AND deleted_at IS NULL`, [id]);
     if (vendor.rows.length === 0) return res.status(404).json({ success: false, message: 'Vendor not found' });
 
+    // Seed and supplies bills are separate registers for the same vendor;
+    // every figure below covers both.
+    const BILLS = `
+      SELECT purchase_number, purchase_date, grand_total, amount_paid, payment_status::text AS payment_status,
+             COALESCE(vendor_credit_applied, 0) AS credit
+      FROM seed_purchases WHERE vendor_id = $1 AND deleted_at IS NULL
+      UNION ALL
+      SELECT purchase_number, purchase_date, grand_total, amount_paid, payment_status::text, 0
+      FROM material_purchases WHERE vendor_id = $1 AND deleted_at IS NULL`;
+
+    // Money paid out, one row per real payment: a bulk voucher is ONE payment
+    // however many bills it settled, so its allocation rows are excluded here.
+    const PAYMENTS = `
+      SELECT spp.transaction_reference AS ref, spp.payment_date, spp.amount, spp.payment_method::text AS detail
+      FROM seed_purchase_payments spp JOIN seed_purchases sp ON sp.id = spp.seed_purchase_id
+      WHERE sp.vendor_id = $1 AND spp.vendor_payment_id IS NULL
+      UNION ALL
+      SELECT COALESCE(mpp.reference_number, mp.purchase_number), mpp.payment_date, mpp.amount, mpp.payment_source::text
+      FROM material_purchase_payments mpp JOIN material_purchases mp ON mp.id = mpp.material_purchase_id
+      WHERE mp.vendor_id = $1 AND mpp.vendor_payment_id IS NULL
+      UNION ALL
+      SELECT vp.payment_number, vp.payment_date, vp.amount, vp.payment_method::text
+      FROM vendor_payments vp
+      WHERE vp.vendor_id = $1 AND vp.deleted_at IS NULL`;
+
     const [headline, purchaseSeries, paySeries, allTime, returnsAgg, expensesAgg, recentPurch, recentPays, recentExp] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS purchase_count,
                 COALESCE(SUM(grand_total),0) AS purchased,
                 COALESCE(SUM(amount_paid),0) AS paid
-         FROM seed_purchases
-         WHERE vendor_id = $1 AND deleted_at IS NULL AND purchase_date BETWEEN $2 AND $3`,
+         FROM (${BILLS}) b
+         WHERE purchase_date BETWEEN $2 AND $3`,
         [id, win.start, win.end]
       ),
       pool.query(
         `SELECT TO_CHAR(date_trunc('${g}', purchase_date), 'YYYY-MM-DD') AS k,
                 COALESCE(SUM(grand_total),0) AS purchased
-         FROM seed_purchases WHERE vendor_id = $1 AND deleted_at IS NULL AND purchase_date BETWEEN $2 AND $3
+         FROM (${BILLS}) b WHERE purchase_date BETWEEN $2 AND $3
          GROUP BY 1`,
         [id, win.start, win.end]
       ),
       pool.query(
-        `SELECT TO_CHAR(date_trunc('${g}', spp.payment_date), 'YYYY-MM-DD') AS k,
-                COALESCE(SUM(spp.amount),0) AS paid
-         FROM seed_purchase_payments spp
-         JOIN seed_purchases sp ON sp.id = spp.seed_purchase_id
-         WHERE sp.vendor_id = $1 AND spp.payment_date BETWEEN $2 AND $3
+        `SELECT TO_CHAR(date_trunc('${g}', payment_date), 'YYYY-MM-DD') AS k,
+                COALESCE(SUM(amount),0) AS paid
+         FROM (${PAYMENTS}) p
+         WHERE payment_date BETWEEN $2 AND $3
          GROUP BY 1`,
         [id, win.start, win.end]
       ),
       pool.query(
-        `SELECT COALESCE(SUM(grand_total - amount_paid),0) AS total_outstanding
-         FROM seed_purchases WHERE vendor_id = $1 AND deleted_at IS NULL`,
+        // Return credit offset against a bill is settled, so not outstanding.
+        // Advance = bulk-payment money not yet applied to any bill.
+        `SELECT
+           (SELECT COALESCE(SUM(grand_total - amount_paid - credit),0) FROM (${BILLS}) b) AS total_outstanding,
+           (SELECT COALESCE(SUM(
+              vp.amount
+              - COALESCE((SELECT SUM(amount) FROM seed_purchase_payments     WHERE vendor_payment_id = vp.id), 0)
+              - COALESCE((SELECT SUM(amount) FROM material_purchase_payments WHERE vendor_payment_id = vp.id), 0)
+            ),0)
+            FROM vendor_payments vp WHERE vp.vendor_id = $1 AND vp.deleted_at IS NULL) AS advance`,
         [id]
       ),
       pool.query(
@@ -215,15 +247,14 @@ const vendorSummary = async (req, res) => {
       ),
       pool.query(
         `SELECT purchase_number AS ref, purchase_date AS date, grand_total AS amount, payment_status AS detail
-         FROM seed_purchases WHERE vendor_id = $1 AND deleted_at IS NULL AND purchase_date BETWEEN $2 AND $3
+         FROM (${BILLS}) b WHERE purchase_date BETWEEN $2 AND $3
          ORDER BY purchase_date DESC LIMIT 10`,
         [id, win.start, win.end]
       ),
       pool.query(
-        `SELECT spp.transaction_reference AS ref, spp.payment_date AS date, spp.amount, spp.payment_method AS detail
-         FROM seed_purchase_payments spp JOIN seed_purchases sp ON sp.id = spp.seed_purchase_id
-         WHERE sp.vendor_id = $1 AND spp.payment_date BETWEEN $2 AND $3
-         ORDER BY spp.payment_date DESC LIMIT 10`,
+        `SELECT ref, payment_date AS date, amount, detail
+         FROM (${PAYMENTS}) p WHERE payment_date BETWEEN $2 AND $3
+         ORDER BY payment_date DESC LIMIT 10`,
         [id, win.start, win.end]
       ),
       pool.query(
@@ -262,6 +293,7 @@ const vendorSummary = async (req, res) => {
           expenses: parseFloat(expensesAgg.rows[0].expenses),
           expense_count: expensesAgg.rows[0].expense_count,
           total_outstanding: parseFloat(allTime.rows[0].total_outstanding),
+          advance: parseFloat(allTime.rows[0].advance),
         },
         series,
         transactions,

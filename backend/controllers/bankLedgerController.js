@@ -711,6 +711,9 @@ const syncFromPayments = async (req, res, next) => {
          WHERE spp.payment_method IN ('bank_transfer', 'cheque')
            AND spp.amount > 0
            AND spp.bank_account_id = $1
+           -- Allocations of a bulk vendor payment post nothing themselves: the
+           -- voucher already debited the whole amount ('vendor_bulk_payment').
+           AND spp.vendor_payment_id IS NULL
            AND NOT EXISTS (
              SELECT 1 FROM bank_ledger_entries
              WHERE source_type = 'vendor_payment'

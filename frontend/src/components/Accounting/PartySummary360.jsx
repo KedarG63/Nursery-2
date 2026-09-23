@@ -19,10 +19,11 @@ const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
  * Props:
  *   fetchSummary(params) -> { data: { headline, series, transactions, ... } }
  *   kpis        : [{ key, label, color }]  (read from headline)
+ *   kpiMd       : grid width per KPI at md+ (default 2.4 = five per row)
  *   seriesBars  : [{ key, label, color }]  (recharts bars)
  *   txTypeColors: { typeName: 'mui color' }
  */
-const PartySummary360 = ({ fetchSummary, kpis, seriesBars, txTypeColors = {} }) => {
+const PartySummary360 = ({ fetchSummary, kpis, seriesBars, txTypeColors = {}, kpiMd = 2.4 }) => {
   const { t } = useTranslation();
   const [period, setPeriod] = useState('month');
   const [data, setData] = useState(null);
@@ -60,7 +61,7 @@ const PartySummary360 = ({ fetchSummary, kpis, seriesBars, txTypeColors = {} }) 
           {/* KPI cards */}
           <Grid container spacing={2} mb={2}>
             {kpis.map((k) => (
-              <Grid item xs={6} sm={4} md={2.4} key={k.key}>
+              <Grid item xs={6} sm={4} md={kpiMd} key={k.key}>
                 <Card elevation={1} sx={{ borderTop: `4px solid ${k.color || '#1A3329'}` }}>
                   <CardContent sx={{ py: 1.5 }}>
                     <Typography variant="caption" color="text.secondary">{k.label}</Typography>

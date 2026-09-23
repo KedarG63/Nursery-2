@@ -54,7 +54,8 @@
     "trash": "ट्रैश",
     "users": "उपयोगकर्ता",
     "returns": "ग्राहक वापसी",
-    "reconciliation": "मिलान"
+    "reconciliation": "मिलान",
+    "vendorPayments": "विक्रेता भुगतान"
   },
   "navGroups": {
     "catalog": "सूची",
@@ -67,6 +68,9 @@
     "administration": "प्रशासन"
   },
   "finance": {
+    "srcVendorBulk": "विक्रेता भुगतान (कई बिल)",
+    "srcCustomerRefunds": "ग्राहक रिफंड",
+    "vendorAdvances": "विक्रेताओं के पास अग्रिम",
     "overviewTitle": "वित्त अवलोकन",
     "overviewSub": "एक ही जगह पूरी पैसों की स्थिति — बैलेंस, आवक-जावक और बकाया",
     "plTitle": "लाभ-हानि",
@@ -126,6 +130,7 @@
     "monthlyTrend": "माह-दर-माह"
   },
   "summary": {
+    "vendorAdvance": "विक्रेता के पास अग्रिम",
     "title": "360° व्यापार सारांश",
     "week": "इस सप्ताह",
     "month": "इस माह",

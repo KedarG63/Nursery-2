@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container, Box, Typography, Button, Breadcrumbs, Link, CircularProgress, Chip, Stack,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Storefront as StorefrontIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Storefront as StorefrontIcon, CurrencyRupee as PayIcon } from '@mui/icons-material';
 import { Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useTranslation } from 'react-i18next';
+import { useSelector } from 'react-redux';
+import { canManageFinance } from '../../utils/roleCheck';
 import vendorService from '../../services/vendorService';
 import { getVendorSummary } from '../../services/partySummaryService';
 import PartySummary360 from '../../components/Accounting/PartySummary360';
@@ -15,6 +17,7 @@ const VendorDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { user } = useSelector((state) => state.auth);
   const [vendor, setVendor] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,16 +58,28 @@ const VendorDetails = () => {
             </Box>
           </Stack>
         </Stack>
+        {canManageFinance(user?.roles) && (
+          <Button
+            variant="contained"
+            startIcon={<PayIcon />}
+            onClick={() => navigate(`/accounting/vendor-payments/new?vendorId=${id}`)}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {t('vendorPayments.payVendor', 'Pay Vendor')}
+          </Button>
+        )}
       </Box>
 
       <PartySummary360
         fetchSummary={(params) => getVendorSummary(id, params)}
+        kpiMd={2}
         kpis={[
           { key: 'purchase_count', label: t('summary.purchases', 'Purchases'), color: '#1A3329', raw: true },
           { key: 'purchased', label: t('summary.purchased', 'Purchased'), color: '#1976d2' },
           { key: 'paid', label: t('summary.paid', 'Paid'), color: '#2e7d32' },
           { key: 'expenses', label: t('summary.expenses', 'Expenses'), color: '#ed6c02' },
           { key: 'total_outstanding', label: t('summary.outstanding', 'Outstanding'), color: '#c62828' },
+          { key: 'advance', label: t('summary.vendorAdvance', 'Advance with vendor'), color: '#b26a00' },
         ]}
         seriesBars={[
           { key: 'purchased', label: t('summary.purchased', 'Purchased'), color: '#1976d2' },

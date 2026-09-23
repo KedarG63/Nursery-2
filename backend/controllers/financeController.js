@@ -78,7 +78,7 @@ const getOverview = async (req, res, next) => {
     const [
       cashFlows, bankFlows, cashOutBySource, bankOutBySource,
       receivablesOrders, receivablesService, payablesSeed, payablesSupplies, advances,
-      storeCredit,
+      storeCredit, vendorAdvances,
     ] = await Promise.all([
       db.query(flowSql('cash_ledger_entries', 'cash_account_id'), [win.start, win.end]),
       db.query(flowSql('bank_ledger_entries', 'bank_account_id'), [win.start, win.end]),
@@ -120,6 +120,21 @@ const getOverview = async (req, res, next) => {
            WHERE deleted_at IS NULL
            GROUP BY customer_id
          ) per_customer`
+      ),
+      db.query(
+        // Part of a bulk vendor payment not yet applied to any bill — money
+        // already paid out that vendors owe us in goods. An asset.
+        `SELECT COALESCE(SUM(advance), 0) AS total,
+                COUNT(DISTINCT vendor_id) FILTER (WHERE advance > 0.005)::int AS count
+         FROM (
+           SELECT vp.vendor_id,
+                  vp.amount
+                  - COALESCE((SELECT SUM(amount) FROM seed_purchase_payments     WHERE vendor_payment_id = vp.id), 0)
+                  - COALESCE((SELECT SUM(amount) FROM material_purchase_payments WHERE vendor_payment_id = vp.id), 0)
+                    AS advance
+           FROM vendor_payments vp
+           WHERE vp.deleted_at IS NULL
+         ) per_voucher`
       ),
     ]);
 
@@ -170,6 +185,10 @@ const getOverview = async (req, res, next) => {
         store_credit_liability: {
           total: round2(storeCredit.rows[0].total),
           customers_count: storeCredit.rows[0].count,
+        },
+        vendor_advances: {
+          total: round2(vendorAdvances.rows[0].total),
+          vendors_count: vendorAdvances.rows[0].count,
         },
       },
     });

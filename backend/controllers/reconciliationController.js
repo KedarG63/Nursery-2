@@ -22,6 +22,8 @@
  *   - no document is settled for more than it is worth
  *   - every cached credit total equals the sum of its settlement rows
  *   - every refund that moved money has exactly one matching ledger entry
+ *   - every bulk vendor payment has exactly one ledger entry, is never applied
+ *     to bills beyond its amount, and none of its bills is booked separately
  *   - no customer's store credit is negative
  *   - no order is settled beyond its own total
  */
@@ -242,6 +244,123 @@ const CHECKS = [
       -- This check needs no tolerance, but every query is called with the same
       -- single parameter, so it is consumed here. The cast is required: Postgres
       -- cannot infer a bare parameter's type from "IS NOT NULL" alone.
+      WHERE $1::numeric IS NOT NULL
+      ORDER BY entry_date DESC`,
+  },
+
+  {
+    key: 'vendor_payment_missing_ledger',
+    verified: 'Every payment made to a vendor for several bills appears once in the cash book or bank ledger',
+    title: 'Some vendor payments are missing from the cash book and bank ledger',
+    explain:
+      'A single payment that settles several bills leaves the account once, for its full amount. '
+      + 'One that is missing, doubled, or for a different amount means the account balance is wrong.',
+    severity: 'critical',
+    sql: `
+      SELECT vp.id, vp.payment_number, v.vendor_name, vp.amount, vp.payment_date, vp.payment_source,
+             COALESCE(led.entries, 0)      AS ledger_entries,
+             COALESCE(led.ledger_total, 0) AS ledger_total
+      FROM vendor_payments vp
+      JOIN vendors v ON v.id = vp.vendor_id
+      CROSS JOIN LATERAL (
+        SELECT COUNT(*) AS entries, COALESCE(SUM(amount), 0) AS ledger_total
+        FROM (
+          SELECT amount FROM bank_ledger_entries
+           WHERE source_type = 'vendor_bulk_payment' AND source_id = vp.id AND deleted_at IS NULL
+          UNION ALL
+          SELECT amount FROM cash_ledger_entries
+           WHERE source_type = 'vendor_bulk_payment' AND source_id = vp.id AND deleted_at IS NULL
+        ) x
+      ) led
+      WHERE vp.deleted_at IS NULL
+        AND (led.entries <> 1 OR ABS(led.ledger_total - vp.amount) > $1)
+      ORDER BY vp.payment_date DESC`,
+  },
+
+  {
+    key: 'vendor_payment_overallocated',
+    verified: 'No vendor payment has been spread across bills for more than was paid',
+    title: 'Some vendor payments have been applied to bills for more than was paid',
+    explain:
+      'The bills a payment settles can add up to at most the payment itself; anything left over is an '
+      + 'advance with the vendor. Where they add up to more, bills are shown as paid with money that never left.',
+    severity: 'critical',
+    sql: `
+      SELECT vp.id, vp.payment_number, v.vendor_name, vp.amount, alloc.allocated,
+             alloc.allocated - vp.amount AS excess,
+             vp.deleted_at IS NOT NULL AS voided
+      FROM vendor_payments vp
+      JOIN vendors v ON v.id = vp.vendor_id
+      CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT SUM(amount) FROM seed_purchase_payments     WHERE vendor_payment_id = vp.id), 0)
+             + COALESCE((SELECT SUM(amount) FROM material_purchase_payments WHERE vendor_payment_id = vp.id), 0)
+               AS allocated
+      ) alloc
+      -- A voided payment must have no bills left against it at all.
+      WHERE alloc.allocated > vp.amount + $1
+         OR (vp.deleted_at IS NOT NULL AND alloc.allocated > 0)
+      ORDER BY vp.payment_date DESC`,
+  },
+
+  {
+    key: 'vendor_payment_allocation_double_posted',
+    verified: 'No bill settled by a combined vendor payment was also counted separately in the books',
+    title: 'Some bills settled by a combined vendor payment were also counted separately in the books',
+    explain:
+      'When one payment settles several bills, only the payment itself goes in the cash book or bank '
+      + 'ledger. A separate entry for one of its bills counts that money twice.',
+    severity: 'critical',
+    sql: `
+      SELECT * FROM (
+        SELECT 'bank' AS ledger, ble.id, ble.entry_date, ble.amount, ble.narration,
+               vp.payment_number
+        FROM bank_ledger_entries ble
+        JOIN (
+          SELECT id, vendor_payment_id FROM seed_purchase_payments     WHERE vendor_payment_id IS NOT NULL
+          UNION ALL
+          SELECT id, vendor_payment_id FROM material_purchase_payments WHERE vendor_payment_id IS NOT NULL
+        ) a ON a.id = ble.source_id
+        JOIN vendor_payments vp ON vp.id = a.vendor_payment_id
+        WHERE ble.deleted_at IS NULL
+        UNION ALL
+        SELECT 'cash', cle.id, cle.entry_date, cle.amount, cle.narration,
+               vp.payment_number
+        FROM cash_ledger_entries cle
+        JOIN (
+          SELECT id, vendor_payment_id FROM seed_purchase_payments     WHERE vendor_payment_id IS NOT NULL
+          UNION ALL
+          SELECT id, vendor_payment_id FROM material_purchase_payments WHERE vendor_payment_id IS NOT NULL
+        ) a ON a.id = cle.source_id
+        JOIN vendor_payments vp ON vp.id = a.vendor_payment_id
+        WHERE cle.deleted_at IS NULL
+      ) doubled
+      -- Tolerance is irrelevant here; consumed so every check shares one call signature.
+      WHERE $1::numeric IS NOT NULL
+      ORDER BY entry_date DESC`,
+  },
+
+  {
+    key: 'orphan_vendor_payment_ledger_entries',
+    verified: 'No leftover vendor payment entries in the cash book or bank ledger',
+    title: 'Some cash book or bank entries refer to a vendor payment that was cancelled or no longer exists',
+    explain:
+      'Cancelling a vendor payment takes it out of the cash book or bank ledger. An entry still counted '
+      + 'for a cancelled payment moves that balance with nothing to justify it.',
+    severity: 'critical',
+    sql: `
+      SELECT * FROM (
+        SELECT 'bank' AS ledger, ble.id, ble.entry_date, ble.amount, ble.narration
+        FROM bank_ledger_entries ble
+        WHERE ble.deleted_at IS NULL
+          AND ble.source_type = 'vendor_bulk_payment'
+          AND NOT EXISTS (SELECT 1 FROM vendor_payments vp WHERE vp.id = ble.source_id AND vp.deleted_at IS NULL)
+        UNION ALL
+        SELECT 'cash', cle.id, cle.entry_date, cle.amount, cle.narration
+        FROM cash_ledger_entries cle
+        WHERE cle.deleted_at IS NULL
+          AND cle.source_type = 'vendor_bulk_payment'
+          AND NOT EXISTS (SELECT 1 FROM vendor_payments vp WHERE vp.id = cle.source_id AND vp.deleted_at IS NULL)
+      ) orphans
       WHERE $1::numeric IS NOT NULL
       ORDER BY entry_date DESC`,
   },

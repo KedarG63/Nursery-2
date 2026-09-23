@@ -22,6 +22,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import PaymentsIcon2 from '@mui/icons-material/Payments';
 import PaidIcon from '@mui/icons-material/Paid';
+import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import InsightsIcon from '@mui/icons-material/Insights';
@@ -203,6 +204,14 @@ const menuGroups = [
         labelKey: 'nav.expenses',
         icon: ReceiptLongIcon,
         path: '/accounting/expenses',
+        roles: ['Admin', 'Manager', 'Accountant'],
+      },
+      {
+        id: 'accounting-vendor-payments',
+        label: 'Vendor Payments',
+        labelKey: 'nav.vendorPayments',
+        icon: CurrencyRupeeIcon,
+        path: '/accounting/vendor-payments',
         roles: ['Admin', 'Manager', 'Accountant'],
       },
       {

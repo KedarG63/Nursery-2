@@ -186,14 +186,20 @@ const getVendorById = async (req, res) => {
       });
     }
 
-    // Get purchase statistics
+    // Get purchase statistics — seed and supplies bills together. Return
+    // credit already offset against a bill is settled, so not outstanding.
     const statsResult = await pool.query(
       `SELECT
         COUNT(*) as total_purchases,
         COALESCE(SUM(grand_total), 0) as total_spent,
-        COALESCE(SUM(grand_total - amount_paid), 0) as outstanding_amount
-      FROM seed_purchases
-      WHERE vendor_id = $1 AND deleted_at IS NULL`,
+        COALESCE(SUM(grand_total - amount_paid - credit), 0) as outstanding_amount
+      FROM (
+        SELECT grand_total, amount_paid, COALESCE(vendor_credit_applied, 0) AS credit
+        FROM seed_purchases WHERE vendor_id = $1 AND deleted_at IS NULL
+        UNION ALL
+        SELECT grand_total, amount_paid, 0
+        FROM material_purchases WHERE vendor_id = $1 AND deleted_at IS NULL
+      ) b`,
       [id]
     );
 

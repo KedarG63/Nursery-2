@@ -8,10 +8,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Grid, Typography,
   Box, Chip, Divider, Table, TableHead, TableRow, TableCell, TableBody, IconButton,
-  TextField, MenuItem, InputAdornment, CircularProgress, Paper, Tooltip,
+  TextField, MenuItem, InputAdornment, CircularProgress, Paper, Tooltip, Link,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import { Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import materialPurchaseService from '../../services/materialPurchaseService';
 import { getCashAccounts } from '../../services/cashLedgerService';
@@ -214,15 +215,24 @@ const MaterialPurchaseDetails = ({ open, purchaseId, onClose, onChanged, canWrit
                         color={p.payment_source === 'cash' ? 'warning' : 'info'}
                         label={p.payment_source === 'cash' ? (p.cash_account_name || 'Cash') : (p.bank_account_name || 'Bank')} />
                     </TableCell>
-                    <TableCell>{p.reference_number || '—'}</TableCell>
+                    <TableCell>
+                      {p.vendor_payment_number ? (
+                        <Link component={RouterLink} to={`/accounting/vendor-payments/${p.vendor_payment_id}`}>
+                          via {p.vendor_payment_number}
+                        </Link>
+                      ) : (p.reference_number || '—')}
+                    </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtINR(p.amount)}</TableCell>
                     {canWrite && (
                       <TableCell align="right">
-                        <Tooltip title="Remove payment (reverses ledger debit)">
-                          <IconButton size="small" color="error" onClick={() => handleDeletePayment(p.id)}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        {/* Part of a combined vendor payment: changed from that payment's page. */}
+                        {!p.vendor_payment_id && (
+                          <Tooltip title="Remove payment (reverses ledger debit)">
+                            <IconButton size="small" color="error" onClick={() => handleDeletePayment(p.id)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </TableCell>
                     )}
                   </TableRow>

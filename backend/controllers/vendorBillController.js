@@ -141,9 +141,11 @@ const getVendorBill = async (req, res, next) => {
 
     // Fetch payment history
     const payments = await db.query(
-      `SELECT spp.*, u.full_name AS recorded_by_name
+      `SELECT spp.*, u.full_name AS recorded_by_name,
+              vp.payment_number AS vendor_payment_number
        FROM seed_purchase_payments spp
        LEFT JOIN users u ON u.id = spp.created_by
+       LEFT JOIN vendor_payments vp ON vp.id = spp.vendor_payment_id
        WHERE spp.seed_purchase_id = $1
        ORDER BY spp.payment_date DESC`,
       [id]

@@ -93,6 +93,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const vendorRoutes = require('./routes/vendors'); // Phase 22
 const purchaseRoutes = require('./routes/purchases'); // Phase 22
 const materialPurchaseRoutes = require('./routes/materialPurchases'); // Supplies & Materials purchases
+const vendorPaymentRoutes = require('./routes/vendorPayments'); // Bulk vendor payments
 const invoiceRoutes = require('./routes/invoices'); // Phase 23: Billing
 const vendorBillRoutes   = require('./routes/vendorBills');   // Phase 23: Billing
 const vendorReturnRoutes = require('./routes/vendorReturns'); // Feature: Seed returns
@@ -132,6 +133,7 @@ app.use('/api/purchases', purchaseRoutes); // Phase 22
 app.use('/api/material-purchases', materialPurchaseRoutes); // Supplies & Materials purchases
 app.use('/api/invoices', invoiceRoutes); // Phase 23: Billing
 app.use('/api/vendor-bills', vendorBillRoutes);     // Phase 23: Billing
+app.use('/api/vendor-payments', vendorPaymentRoutes); // Bulk vendor payments (one payment, many bills)
 app.use('/api/vendor-returns', vendorReturnRoutes); // Feature: Seed returns
 app.use('/api/customer-returns', customerReturnRoutes); // Feature: Seedling returns from customers
 app.use('/api/reconciliation', reconciliationRoutes); // Feature: Returns/credit reconciliation

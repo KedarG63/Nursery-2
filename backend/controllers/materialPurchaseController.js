@@ -206,8 +206,10 @@ const getPurchaseById = async (req, res, next) => {
          p.bank_account_id, p.cash_account_id, p.reference_number, p.notes, p.created_at,
          ba.account_name AS bank_account_name,
          ca.account_name AS cash_account_name,
-         u.full_name AS created_by_name
+         u.full_name AS created_by_name,
+         p.vendor_payment_id, vp.payment_number AS vendor_payment_number
        FROM material_purchase_payments p
+       LEFT JOIN vendor_payments vp ON vp.id = p.vendor_payment_id
        LEFT JOIN bank_accounts ba ON ba.id = p.bank_account_id
        LEFT JOIN cash_accounts ca ON ca.id = p.cash_account_id
        LEFT JOIN users u ON u.id = p.created_by
@@ -237,11 +239,26 @@ const updatePurchase = async (req, res, next) => {
     await client.query('BEGIN');
 
     const existing = await client.query(
-      `SELECT amount_paid FROM material_purchases WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]
+      `SELECT amount_paid, vendor_id FROM material_purchases WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]
     );
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Purchase not found' });
+    }
+
+    // Money from a bulk vendor payment can only settle that vendor's bills.
+    if (vendor_id && vendor_id !== existing.rows[0].vendor_id) {
+      const bulkAlloc = await client.query(
+        `SELECT 1 FROM material_purchase_payments WHERE material_purchase_id = $1 AND vendor_payment_id IS NOT NULL LIMIT 1`,
+        [id]
+      );
+      if (bulkAlloc.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot change the vendor: this purchase has money allocated from a vendor payment',
+        });
+      }
     }
 
     if (!(Number(amount) > 0)) {
@@ -459,13 +476,24 @@ const deletePayment = async (req, res, next) => {
     await client.query('BEGIN');
 
     const payment = await client.query(
-      `SELECT id FROM material_purchase_payments
-       WHERE id = $1 AND material_purchase_id = $2 FOR UPDATE`,
+      `SELECT p.id, vp.payment_number AS vendor_payment_number
+       FROM material_purchase_payments p
+       LEFT JOIN vendor_payments vp ON vp.id = p.vendor_payment_id
+       WHERE p.id = $1 AND p.material_purchase_id = $2 FOR UPDATE OF p`,
       [paymentId, id]
     );
     if (payment.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+    // Part of a bulk vendor payment: it has no ledger entry of its own, so
+    // deleting it here would leave the voucher's debit unexplained.
+    if (payment.rows[0].vendor_payment_number) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: `This payment is part of ${payment.rows[0].vendor_payment_number}; change it from Vendor Payments`,
+      });
     }
 
     // Reverse the ledger debit first, then remove the tranche

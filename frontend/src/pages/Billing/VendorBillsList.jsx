@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, TextField, Chip, Stack,
   TablePagination, InputAdornment, FormControlLabel, Switch,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Skeleton,
+  Skeleton, Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { useNavigate } from 'react-router-dom';
@@ -59,8 +59,11 @@ const VendorBillsList = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" fontWeight={700}>Vendor Bills</Typography>
+        <Button variant="contained" onClick={() => navigate('/accounting/vendor-payments/new')}>
+          Pay Vendor (several bills)
+        </Button>
       </Box>
 
       {/* Filters */}

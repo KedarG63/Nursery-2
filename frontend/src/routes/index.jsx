@@ -51,6 +51,9 @@ import ProfitLossPage from '../pages/Accounting/ProfitLossPage';
 import CashBookPage from '../pages/Accounting/CashBookPage';
 import DepositsPage from '../pages/Accounting/DepositsPage';
 import ReconciliationPage from '../pages/Accounting/ReconciliationPage';
+import VendorPaymentsList from '../pages/Accounting/VendorPaymentsList';
+import VendorPaymentForm from '../pages/Accounting/VendorPaymentForm';
+import VendorPaymentDetails from '../pages/Accounting/VendorPaymentDetails';
 import CustomerReturnsList from '../pages/Returns/CustomerReturnsList';
 import EmployeesPage from '../pages/Payroll/EmployeesPage';
 import EmployeeDetails from '../pages/Payroll/EmployeeDetails';
@@ -157,6 +160,9 @@ const AppRoutes = () => {
         <Route path="accounting/cash-book" element={<CashBookPage />} />
         <Route path="accounting/deposits" element={<DepositsPage />} />
         <Route path="accounting/reconciliation" element={<ReconciliationPage />} />
+        <Route path="accounting/vendor-payments" element={<VendorPaymentsList />} />
+        <Route path="accounting/vendor-payments/new" element={<VendorPaymentForm />} />
+        <Route path="accounting/vendor-payments/:id" element={<VendorPaymentDetails />} />
 
         {/* Payroll */}
         <Route path="payroll" element={<Navigate to="/payroll/runs" replace />} />

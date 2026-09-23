@@ -25,6 +25,9 @@ const SOURCE_LABELS = {
   advance: ['finance.srcAdvances', 'Staff Advances'],
   material_purchase: ['finance.srcSupplies', 'Supplies & Materials'],
   seed_purchase: ['finance.srcSeeds', 'Seed Purchases'],
+  vendor_payment: ['finance.srcSeeds', 'Seed Purchases'],
+  vendor_bulk_payment: ['finance.srcVendorBulk', 'Vendor Payments (several bills)'],
+  customer_return_refund: ['finance.srcCustomerRefunds', 'Customer Refunds'],
   manual: ['finance.srcManual', 'Manual Entries'],
 };
 
@@ -138,7 +141,10 @@ const FinanceOverviewPage = () => {
             </Grid>
             <Grid item xs={12} sm={4}>
               <StatCard label={t('finance.payables', 'To Pay (Vendors)')} value={data.payables.total} color={RED}
-                sub={`${t('finance.payablesSeeds', 'Seeds')} ${formatCurrency(data.payables.seed_purchases ?? 0)} · ${t('finance.payablesSupplies', 'Supplies')} ${formatCurrency(data.payables.supplies ?? 0)}`} />
+                sub={`${t('finance.payablesSeeds', 'Seeds')} ${formatCurrency(data.payables.seed_purchases ?? 0)} · ${t('finance.payablesSupplies', 'Supplies')} ${formatCurrency(data.payables.supplies ?? 0)}${
+                  (data.vendor_advances?.total ?? 0) > 0.005
+                    ? ` · ${t('finance.vendorAdvances', 'Advance with vendors')} ${formatCurrency(data.vendor_advances.total)}`
+                    : ''}`} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <StatCard label={t('finance.staffAdvances', 'Staff Advances Outstanding')} value={data.staff_advances.total}

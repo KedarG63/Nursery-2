@@ -287,9 +287,11 @@ const getPurchaseById = async (req, res) => {
 
     // Get payment history
     const paymentsResult = await pool.query(
-      `SELECT * FROM seed_purchase_payments
-       WHERE seed_purchase_id = $1
-       ORDER BY payment_date DESC`,
+      `SELECT spp.*, vp.payment_number AS vendor_payment_number
+       FROM seed_purchase_payments spp
+       LEFT JOIN vendor_payments vp ON vp.id = spp.vendor_payment_id
+       WHERE spp.seed_purchase_id = $1
+       ORDER BY spp.payment_date DESC`,
       [id]
     );
 
@@ -351,6 +353,21 @@ const updatePurchase = async (req, res) => {
         success: false,
         message: 'Purchase not found',
       });
+    }
+
+    // Money from a bulk vendor payment can only settle that vendor's bills.
+    if (updateFields.vendor_id && updateFields.vendor_id !== existingPurchase.rows[0].vendor_id) {
+      const bulkAlloc = await client.query(
+        `SELECT 1 FROM seed_purchase_payments WHERE seed_purchase_id = $1 AND vendor_payment_id IS NOT NULL LIMIT 1`,
+        [id]
+      );
+      if (bulkAlloc.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot change the vendor: this bill has money allocated from a vendor payment',
+        });
+      }
     }
 
     // Cannot modify if seeds already used
@@ -468,6 +485,25 @@ const deletePurchase = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Cannot delete purchase with seeds already allocated to lots',
+      });
+    }
+
+    // Money from a bulk vendor payment is allocated here. Soft delete never
+    // fires CASCADE, so the allocation would keep counting against a bill that
+    // no longer exists. Take it back into advance first.
+    const bulkAlloc = await client.query(
+      `SELECT vp.payment_number
+       FROM seed_purchase_payments spp
+       JOIN vendor_payments vp ON vp.id = spp.vendor_payment_id
+       WHERE spp.seed_purchase_id = $1
+       LIMIT 1`,
+      [id]
+    );
+    if (bulkAlloc.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `This bill has money allocated from ${bulkAlloc.rows[0].payment_number}. Remove that allocation in Vendor Payments first.`,
       });
     }
 
