@@ -46,7 +46,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     orderId: '',
     amount: '',
-    paymentMethod: 'cash',
+    paymentMethod: '', // no default: a preselected 'Cash' is how UPI receipts got recorded as cash
     transactionRef: '',
     paymentDate: format(new Date(), 'yyyy-MM-dd'),
     notes: '',
@@ -128,6 +128,10 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
         formData.paymentMethod === 'cash'
           ? 'Receipt number is required'
           : 'Transaction reference is required';
+    }
+
+    if (!formData.paymentMethod) {
+      newErrors.paymentMethod = 'Choose how the money was received';
     }
 
     // Without a bank account the payment posts to no ledger at all, so the
@@ -214,7 +218,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
     setFormData({
       orderId: '',
       amount: '',
-      paymentMethod: 'cash',
+      paymentMethod: '', // no default: a preselected 'Cash' is how UPI receipts got recorded as cash
       transactionRef: '',
       paymentDate: format(new Date(), 'yyyy-MM-dd'),
       notes: '',
@@ -311,6 +315,8 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
                 select
                 label="Payment Method"
                 required
+                error={!!errors.paymentMethod}
+                helperText={errors.paymentMethod || ' '}
                 value={formData.paymentMethod}
                 onChange={(e) =>
                   setFormData({ ...formData, paymentMethod: e.target.value })
@@ -324,7 +330,7 @@ const RecordPaymentForm = ({ open, onClose, onSuccess }) => {
               </TextField>
             </Grid>
 
-            {bankAccounts.length > 0 && formData.paymentMethod !== 'cash' && (
+            {bankAccounts.length > 0 && BANK_METHODS.includes(formData.paymentMethod) && (
               <Grid item xs={12}>
                 <TextField
                   fullWidth

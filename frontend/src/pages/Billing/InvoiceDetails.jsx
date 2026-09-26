@@ -34,7 +34,9 @@ const InvoiceDetails = () => {
   const [error, setError] = useState('');
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
-  const [recordPaymentForm, setRecordPaymentForm] = useState({ amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '', bank_account_id: '', cash_account_id: '' });
+  // No default method: a preselected "Cash" meant UPI receipts left unchanged
+  // were recorded as cash — the bank got the money, the Cash Book was credited.
+  const [recordPaymentForm, setRecordPaymentForm] = useState({ amount: '', payment_method: '', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '', bank_account_id: '', cash_account_id: '' });
   const [bankAccounts, setBankAccounts] = useState([]);
   const [cashAccounts, setCashAccounts] = useState([]);
   const [recordPaymentError, setRecordPaymentError] = useState('');
@@ -175,7 +177,7 @@ const InvoiceDetails = () => {
       });
       toast.success('Payment recorded successfully');
       setRecordPaymentOpen(false);
-      setRecordPaymentForm((f) => ({ ...f, amount: '', payment_method: 'cash', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' }));
+      setRecordPaymentForm((f) => ({ ...f, amount: '', payment_method: '', payment_date: new Date().toISOString().split('T')[0], receipt_number: '', notes: '' }));
       fetchInvoice();
     } catch (err) {
       setRecordPaymentError(err?.message || 'Failed to record payment');
@@ -566,7 +568,7 @@ const InvoiceDetails = () => {
               <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
               <MenuItem value="card">Card</MenuItem>
             </TextField>
-            {recordPaymentForm.payment_method === 'cash' ? (
+            {!recordPaymentForm.payment_method ? null : recordPaymentForm.payment_method === 'cash' ? (
               <TextField
                 label="Cash Drawer"
                 select
