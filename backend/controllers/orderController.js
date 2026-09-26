@@ -9,6 +9,7 @@ const lotAllocationService = require('../services/lotAllocationService');
 const { isValidStatusTransition } = require('../validators/orderValidator');
 const notificationEvents = require('../events/notificationEvents');
 const { postCustomerPaymentToLedger } = require('./paymentController');
+const bills = require('../services/saleBillService');
 
 // Tax rate configuration (0% - GST exempt)
 const TAX_RATE = 0.00;
@@ -65,8 +66,8 @@ const createOrder = async (req, res) => {
     );
 
     if (customerResult.rows.length === 0) {
-      return res.status(404).json({
       await client.query('ROLLBACK');
+      return res.status(404).json({
         success: false,
         message: 'Customer not found',
       });
@@ -75,8 +76,8 @@ const createOrder = async (req, res) => {
     const customer = customerResult.rows[0];
 
     if (customer.status !== 'active') {
-      return res.status(400).json({
       await client.query('ROLLBACK');
+      return res.status(400).json({
         success: false,
         message: `Customer status is ${customer.status}`,
       });
@@ -92,8 +93,8 @@ const createOrder = async (req, res) => {
       );
 
       if (addressResult.rows.length === 0) {
-        return res.status(400).json({
         await client.query('ROLLBACK');
+        return res.status(400).json({
           success: false,
           message: 'Delivery address not found or does not belong to customer',
         });
@@ -114,8 +115,8 @@ const createOrder = async (req, res) => {
       );
 
       if (skuResult.rows.length === 0) {
-        return res.status(404).json({
         await client.query('ROLLBACK');
+        return res.status(404).json({
           success: false,
           message: `SKU ${item.sku_id} not found`,
         });
@@ -124,8 +125,8 @@ const createOrder = async (req, res) => {
       const sku = skuResult.rows[0];
 
       if (!sku.active) {
-        return res.status(400).json({
         await client.query('ROLLBACK');
+        return res.status(400).json({
           success: false,
           message: `SKU ${sku.sku_code} is not active`,
         });
@@ -276,8 +277,8 @@ const createOrder = async (req, res) => {
         const availableCredit = credit_limit - credit_used;
 
         if (totalAmount > availableCredit) {
-          return res.status(409).json({
           await client.query('ROLLBACK');
+          return res.status(409).json({
             success: false,
             message: 'Credit limit exceeded',
             details: {
@@ -289,8 +290,8 @@ const createOrder = async (req, res) => {
           });
         }
       } else {
-        return res.status(400).json({
         await client.query('ROLLBACK');
+        return res.status(400).json({
           success: false,
           message: 'Customer does not have credit facility',
         });
@@ -360,7 +361,19 @@ const createOrder = async (req, res) => {
           message: 'payment_method is required when amount_paid_now is provided',
         });
       }
-      const cappedPaid = Math.min(paidNow, totalAmount);
+      // A new order has no invoice, so the order is its bill. Money beyond it
+      // used to be silently cut to the order total — the cash was in the
+      // drawer but only part of it reached the Cash Book. Now it is refused,
+      // so what is recorded is always exactly what was received.
+      if (paidNow > totalAmount + 0.005) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `₹${paidNow.toFixed(2)} received is more than this order's total of ₹${Number(totalAmount).toFixed(2)}. `
+            + 'Record the order total now. If extra charges such as transport were collected, add them on the invoice and record the rest there.',
+        });
+      }
+      const cappedPaid = paidNow;
       const entryDate = order_date || new Date().toISOString().split('T')[0];
       const payIns = await client.query(
         `INSERT INTO payments (
@@ -673,15 +686,21 @@ const getOrderById = async (orderId) => {
 
   order.allocations = allocationsResult.rows;
 
-  // Fetch payment details
+  // Fetch payment details — deleted payments are not money received and must
+  // not be listed alongside real ones.
   const paymentsResult = await pool.query(
     `SELECT * FROM payments
-     WHERE order_id = $1
+     WHERE order_id = $1 AND deleted_at IS NULL
      ORDER BY payment_date DESC`,
     [orderId]
   );
 
   order.payments = paymentsResult.rows;
+
+  // The sale's ONE bill (its invoice if issued, otherwise the order) and every
+  // payment actually received. The order's own paid/balance columns are a
+  // capped mirror that can never show an over-collection.
+  order.sale = await bills.getSaleBill(pool, orderId);
 
   // Fetch order status history
   const statusHistoryResult = await pool.query(
@@ -724,6 +743,7 @@ const updateOrderStatus = async (req, res) => {
     );
 
     if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Order not found',
@@ -734,6 +754,7 @@ const updateOrderStatus = async (req, res) => {
 
     // Validate status transition
     if (!isValidStatusTransition(order.status, status)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Cannot transition from ${order.status} to ${status}`,
@@ -743,7 +764,6 @@ const updateOrderStatus = async (req, res) => {
     // An order with an accepted customer return was genuinely sold and partly
     // given back; cancelling it would erase that sale. The return module is the
     // way to un-sell units. (trg_guard_order_item_with_returns enforces this in
-      await client.query('ROLLBACK');
     // the database too — checked here first so the user gets a clear message.)
     if (status === 'cancelled') {
       const blocked = await orderHasAcceptedReturns(client, id);
@@ -754,7 +774,6 @@ const updateOrderStatus = async (req, res) => {
           message: 'This order has an accepted customer return and cannot be cancelled. Record a return for the remaining items instead.',
         });
       }
-      await client.query('ROLLBACK');
     }
 
     // Update order status

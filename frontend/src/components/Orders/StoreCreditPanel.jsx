@@ -43,6 +43,10 @@ const StoreCreditPanel = ({ order, onApplied }) => {
   const canWrite = user?.roles?.some((r) => ['Admin', 'Manager'].includes(r));
 
   const [balance, setBalance] = useState(0);
+  // Store credit actually spent on THIS order. Not order.credit_applied — that
+  // also includes return offsets, which are not store credit, and made this
+  // box claim credit had been awarded and spent when none ever was.
+  const [appliedHere, setAppliedHere] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,12 +54,15 @@ const StoreCreditPanel = ({ order, onApplied }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const applied = parseFloat(order?.credit_applied || 0);
+  const applied = appliedHere;
+  // What can still be settled comes from the sale's one bill (its invoice if
+  // issued) with every payment received, not the order's capped figures.
   const outstanding = Math.max(
     0,
-    parseFloat(order?.total_amount || 0)
-      - parseFloat(order?.paid_amount || 0)
-      - applied
+    order?.sale
+      ? parseFloat(order.sale.balance)
+      : parseFloat(order?.total_amount || 0) - parseFloat(order?.paid_amount || 0)
+        - parseFloat(order?.credit_applied || 0)
   );
   // Never offer more than the order can absorb — the server enforces both
   // limits, but the button should not promise something it cannot do.
@@ -66,6 +73,11 @@ const StoreCreditPanel = ({ order, onApplied }) => {
     try {
       const res = await customerReturnService.getStoreCredit(order.customer_id);
       setBalance(parseFloat(res.data?.balance || 0));
+      setAppliedHere(
+        (res.data?.history || [])
+          .filter((h) => h.entry_type === 'applied' && h.order_id === order.id)
+          .reduce((s, h) => s + parseFloat(h.amount || 0), 0)
+      );
       setLoadFailed(false);
     } catch (err) {
       // A failed lookup must not look like "no credit" — this panel hides
@@ -75,7 +87,7 @@ const StoreCreditPanel = ({ order, onApplied }) => {
     } finally {
       setLoading(false);
     }
-  }, [order?.customer_id]);
+  }, [order?.customer_id, order?.id]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
 

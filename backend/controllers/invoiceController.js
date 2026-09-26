@@ -10,6 +10,7 @@ const db = require('../utils/db');
 const logger = require('../config/logger');
 const { generateInvoiceHTML } = require('../services/invoiceService');
 const { postCustomerPaymentToLedger } = require('./paymentController');
+const bills = require('../services/saleBillService');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST INVOICES
@@ -164,6 +165,7 @@ const getInvoice = async (req, res, next) => {
       `SELECT
          ip.id, ip.invoice_id, ip.payment_id, ip.amount_applied, ip.applied_at, ip.notes,
          p.transaction_id, p.payment_method, p.payment_date, p.amount AS payment_total,
+         p.order_id AS payment_order_id,
          u.full_name AS applied_by_name
        FROM invoice_payments ip
        JOIN payments p ON p.id = ip.payment_id
@@ -173,12 +175,35 @@ const getInvoice = async (req, res, next) => {
       [id]
     );
 
+    // The sale's true position: every payment received on the order, not only
+    // those applied to this invoice. A payment recorded from the Payments page
+    // before this change never reached the invoice, so the invoice alone could
+    // show as due money that had already been received.
+    let bill = null;
+    let unappliedPayments = [];
+    if (invoice.order_id) {
+      bill = await bills.getSaleBill(db, invoice.order_id);
+      const un = await db.query(
+        `SELECT p.id, p.payment_date, p.payment_method, p.amount, p.receipt_number,
+                p.amount - COALESCE(p.refund_amount, 0)
+                  - COALESCE((SELECT SUM(amount_applied) FROM invoice_payments x WHERE x.payment_id = p.id), 0) AS unapplied
+         FROM payments p
+         WHERE p.order_id = $1 AND p.deleted_at IS NULL AND p.status IN ('success', 'refunded')
+         ORDER BY p.payment_date, p.created_at`,
+        [invoice.order_id]
+      );
+      unappliedPayments = un.rows.filter((r) => parseFloat(r.unapplied) > bills.EPSILON);
+    }
+
     res.json({
       success: true,
       data: {
         ...invoice,
         items: itemsResult.rows,
         applied_payments: paymentsResult.rows,
+        // Present only when this invoice belongs to an order.
+        sale: bill,
+        unapplied_payments: unappliedPayments,
       },
     });
   } catch (err) {
@@ -406,33 +431,67 @@ const updateInvoice = async (req, res, next) => {
 // POST /api/invoices/:id/issue
 // ─────────────────────────────────────────────────────────────────────────────
 const issueInvoice = async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
+    await client.query('BEGIN');
 
-    const check = await db.query(
-      `SELECT id, status, total_amount FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
+    const peek = await client.query(
+      `SELECT order_id FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
-    if (check.rows.length === 0) {
+    if (peek.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
+    const orderId = peek.rows[0].order_id;
+    if (orderId) await bills.lockSale(client, orderId);
+
+    const check = await client.query(
+      `SELECT id, status, total_amount FROM invoices WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
     const inv = check.rows[0];
     if (inv.status !== 'draft') {
+      await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: `Cannot issue a ${inv.status} invoice` });
     }
     if (parseFloat(inv.total_amount) <= 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Invoice must have at least one item with a positive total before issuing' });
     }
 
-    await db.query(
+    await client.query(
       `UPDATE invoices SET status = 'issued', updated_by = $1 WHERE id = $2`,
       [req.user.id, id]
     );
 
-    logger.info('Invoice issued', { invoiceId: id, userId: req.user.id });
-    res.json({ success: true, message: 'Invoice issued successfully' });
+    // From this moment the invoice IS the bill. Money already received on the
+    // sale goes onto it now — otherwise it would show as unpaid, and be
+    // collected and recorded a second time.
+    let applied = 0;
+    let message = 'Invoice issued successfully';
+    if (orderId) {
+      applied = await bills.applyUnappliedPayments(client, orderId, id, req.user.id);
+      await bills.refreshSaleMoney(client, orderId);
+      const bill = await bills.getSaleBill(client, orderId);
+      if (applied > 0) {
+        message = `Invoice issued. ${bills.inr(applied)} already received on this order has been applied to it.`;
+      }
+      if (bill && bill.over_collected) {
+        message += ` Note: ${bills.inr(-bill.balance)} more has been received than this invoice bills — `
+          + 'check the payments for duplicates, or refund the difference.';
+      }
+    }
+
+    await client.query('COMMIT');
+    logger.info('Invoice issued', { invoiceId: id, appliedExisting: applied, userId: req.user.id });
+    res.json({ success: true, message });
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 };
 
@@ -441,34 +500,72 @@ const issueInvoice = async (req, res, next) => {
 // POST /api/invoices/:id/void
 // ─────────────────────────────────────────────────────────────────────────────
 const voidInvoice = async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
+    await client.query('BEGIN');
 
-    const check = await db.query(
-      `SELECT id, status, paid_amount FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
+    const peek = await client.query(
+      `SELECT order_id FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
-    if (check.rows.length === 0) {
+    if (peek.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
+    const orderId = peek.rows[0].order_id;
+    if (orderId) await bills.lockSale(client, orderId);
+
+    const check = await client.query(
+      `SELECT id, status, paid_amount FROM invoices WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
     const inv = check.rows[0];
 
     if (!['draft', 'issued', 'partially_paid'].includes(inv.status)) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: `Cannot void a ${inv.status} invoice` });
     }
-    if (parseFloat(inv.paid_amount) > 0) {
-      return res.status(409).json({ success: false, message: 'Cannot void an invoice with applied payments. Remove payments first.' });
-    }
 
-    await db.query(
+    // This used to refuse and tell staff to "remove payments first". Removing
+    // only unlinked them: the money stayed received, the replacement invoice
+    // showed it as due, and it was recorded again. Now the payments simply
+    // move back to the sale in the same step — they still count, nothing
+    // leaves the books — and issuing the replacement invoice picks them up.
+    // An invoice linked to no order cannot shed payments that way.
+    if (!orderId && parseFloat(inv.paid_amount) > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'This invoice is not linked to an order and has payments applied, so it cannot be voided.',
+      });
+    }
+    const moved = await client.query(
+      `DELETE FROM invoice_payments WHERE invoice_id = $1 RETURNING amount_applied`,
+      [id]
+    );
+
+    await client.query(
       `UPDATE invoices SET status = 'void', deleted_at = NOW(), updated_by = $1 WHERE id = $2`,
       [req.user.id, id]
     );
+    if (orderId) await bills.refreshSaleMoney(client, orderId);
 
-    logger.info('Invoice voided', { invoiceId: id, userId: req.user.id });
-    res.json({ success: true, message: 'Invoice voided successfully' });
+    await client.query('COMMIT');
+
+    const movedTotal = moved.rows.reduce((s, r) => s + parseFloat(r.amount_applied), 0);
+    logger.info('Invoice voided', { invoiceId: id, paymentsMovedToSale: movedTotal, userId: req.user.id });
+    res.json({
+      success: true,
+      message: movedTotal > 0
+        ? `Invoice voided. The ${bills.inr(movedTotal)} already received stays on the order and will be applied to the next invoice you issue for it.`
+        : 'Invoice voided successfully',
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 };
 
@@ -484,16 +581,22 @@ const applyPayment = async (req, res, next) => {
 
     await client.query('BEGIN');
 
-    // Lock invoice row
-    const invoiceResult = await client.query(
-      `SELECT id, customer_id, status, balance_amount, total_amount
-       FROM invoices WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+    // Sale first, then invoice — the lock order every money path uses.
+    const peek = await client.query(
+      `SELECT order_id FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
-    if (invoiceResult.rows.length === 0) {
+    if (peek.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
+    if (peek.rows[0].order_id) await bills.lockSale(client, peek.rows[0].order_id);
+
+    const invoiceResult = await client.query(
+      `SELECT id, customer_id, order_id, status, balance_amount, total_amount
+       FROM invoices WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      [id]
+    );
     const invoice = invoiceResult.rows[0];
 
     if (!['issued', 'partially_paid'].includes(invoice.status)) {
@@ -503,7 +606,10 @@ const applyPayment = async (req, res, next) => {
 
     // Validate payment
     const paymentResult = await client.query(
-      `SELECT id, customer_id, amount, status FROM payments WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT p.id, p.customer_id, p.order_id, p.amount - COALESCE(p.refund_amount, 0) AS amount, p.status,
+              o.order_number
+       FROM payments p LEFT JOIN orders o ON o.id = p.order_id
+       WHERE p.id = $1 AND p.deleted_at IS NULL`,
       [payment_id]
     );
     if (paymentResult.rows.length === 0) {
@@ -515,6 +621,19 @@ const applyPayment = async (req, res, next) => {
     if (payment.customer_id !== invoice.customer_id) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Payment does not belong to the same customer as the invoice' });
+    }
+
+    // A payment already counts towards the order it was recorded on. Applying
+    // it to a DIFFERENT order's invoice counts the same money on two sales —
+    // one of the ways receipts came to be double-counted. It can only settle
+    // its own sale's invoice.
+    if (payment.order_id !== invoice.order_id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: `This payment was recorded against order ${payment.order_number || '(unknown)'}, `
+          + 'so it can only be applied to that order\'s invoice. Record a separate payment for this one.',
+      });
     }
     if (payment.status !== 'success') {
       await client.query('ROLLBACK');
@@ -598,16 +717,31 @@ const recordInvoicePayment = async (req, res, next) => {
 
     await client.query('BEGIN');
 
-    // Lock invoice
+    // Find the sale without locking, then lock sale → invoice: the same order
+    // every other money path uses, so they cannot deadlock one another.
+    const peek = await client.query(
+      `SELECT order_id FROM invoices WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (peek.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Invoice not found' });
+    }
+    if (!peek.rows[0].order_id) {
+      // payments.order_id is NOT NULL — a payment must belong to a sale.
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'This invoice is not linked to an order, so a payment cannot be recorded against it.',
+      });
+    }
+    await bills.lockSale(client, peek.rows[0].order_id);
+
     const invResult = await client.query(
       `SELECT id, customer_id, order_id, status, balance_amount, total_amount
        FROM invoices WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
       [id]
     );
-    if (invResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, message: 'Invoice not found' });
-    }
     const invoice = invResult.rows[0];
 
     if (!['issued', 'partially_paid'].includes(invoice.status)) {
@@ -615,15 +749,16 @@ const recordInvoicePayment = async (req, res, next) => {
       return res.status(409).json({ success: false, message: `Cannot record payment on a ${invoice.status} invoice` });
     }
 
+    // Checked against the sale's ONE bill, counting every payment received on
+    // the sale — including any recorded from the Payments page that never made
+    // it onto this invoice. Checking the invoice's own balance is what let the
+    // same money be recorded twice.
     const amountNum = Math.round(parseFloat(amount) * 100) / 100;
-    const balance = parseFloat(invoice.balance_amount);
+    const bill = await bills.getSaleBill(client, invoice.order_id);
+    bills.assertCanReceive(bill, amountNum);
 
-    if (amountNum > balance + 0.005) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: `Amount (₹${amountNum}) exceeds invoice balance (₹${balance.toFixed(2)})` });
-    }
-
-    const effectiveAmount = Math.min(amountNum, balance);
+    // Recorded exactly as received — never silently capped.
+    const effectiveAmount = amountNum;
 
     // For non-cash/credit methods, gateway_transaction_id must not be null (DB constraint).
     // Use receipt_number as the reference, or generate a manual placeholder.
@@ -697,6 +832,7 @@ const recordInvoicePayment = async (req, res, next) => {
     res.status(201).json({ success: true, message: 'Payment recorded successfully', data: { payment_id: paymentId, amount_applied: effectiveAmount } });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();
@@ -720,6 +856,25 @@ const removePayment = async (req, res, next) => {
     }
     if (invoiceCheck.rows[0].status === 'void') {
       return res.status(409).json({ success: false, message: 'Cannot remove payment from a void invoice' });
+    }
+
+    // Unlinking a payment from its own sale's invoice does NOT undo it: the
+    // payment and its Cash Book / Bank entry stay, and the invoice goes back to
+    // showing the money as due — which is how it came to be recorded twice.
+    // Undoing a payment is a delete, which reverses it everywhere.
+    // (Unlinking a payment that belongs to a DIFFERENT order is still allowed:
+    // that corrects an old mis-link, and the money stays on its own sale.)
+    const own = await db.query(
+      `SELECT 1 FROM payments p JOIN invoices i ON i.id = $1
+       WHERE p.id = $2 AND p.order_id = i.order_id`,
+      [id, paymentId]
+    );
+    if (own.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Removing this payment from the invoice would leave it recorded but no longer shown here. '
+          + 'If it was recorded by mistake, delete it from the Payments page — that also reverses it in the Cash Book / Bank.',
+      });
     }
 
     const deleteResult = await db.query(

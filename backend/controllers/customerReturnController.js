@@ -37,6 +37,7 @@ const db = require('../utils/db');
 const logger = require('../config/logger');
 const { generateDocNumber } = require('../utils/financialYear');
 const { postSourceDebit } = require('./expenseController');
+const bills = require('../services/saleBillService');
 
 const r2 = (n) => Math.round(parseFloat(n) * 100) / 100;
 
@@ -47,23 +48,12 @@ const r2 = (n) => Math.round(parseFloat(n) * 100) / 100;
 // orders.credit_applied = every credit set against this order's receivable:
 // its own return offsets plus store credit carried in from earlier returns.
 async function recomputeOrderCredit(client, orderId) {
-  const res = await client.query(
-    `UPDATE orders o
-        SET credit_applied = sub.total,
-            updated_at     = NOW()
-       FROM (
-         SELECT
-           COALESCE((SELECT SUM(amount) FROM customer_return_settlements
-                      WHERE target_order_id = $1 AND settlement_type = 'order_offset'), 0)
-         + COALESCE((SELECT SUM(amount) FROM customer_store_credit_ledger
-                      WHERE order_id = $1 AND entry_type = 'applied' AND deleted_at IS NULL), 0)
-           AS total
-       ) sub
-      WHERE o.id = $1
-      RETURNING o.credit_applied, o.balance_amount`,
-    [orderId]
-  );
-  return res.rows[0];
+  // One function recomputes every cached money figure for the sale — order and
+  // invoice — from rows (migration …019). The balance returned is the sale's
+  // real one, measured against its bill.
+  await bills.refreshSaleMoney(client, orderId);
+  const bill = await bills.getSaleBill(client, orderId);
+  return { credit_applied: bill.returns_credit, balance_amount: bill.balance };
 }
 
 // How much of a return is still unsettled.
@@ -254,6 +244,7 @@ const createReturn = async (req, res, next) => {
     res.status(201).json({ success: true, data: note });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();
@@ -291,6 +282,16 @@ const acceptReturn = async (req, res, next) => {
       [note.order_id]
     );
     const order = orderRes.rows[0];
+
+    // What the customer still owes is measured against the sale's REAL bill —
+    // its invoice if it has one — using every payment received. The order's
+    // own paid figure is capped, so on an invoiced sale it could say "fully
+    // paid" when the customer still owed transport or more: the return would
+    // then be treated as owed back, and cash refunded, while they were still in
+    // debt. And if more has been recorded than billed, the payments may contain
+    // duplicates — nothing is paid out until they are reviewed.
+    const billBefore = await bills.getSaleBill(client, note.order_id);
+    bills.assertNotOverCollected(billBefore, 'accept a return');
 
     const itemsRes = await client.query(
       `SELECT cri.*, oi.lot_id AS sold_from_lot
@@ -382,9 +383,7 @@ const acceptReturn = async (req, res, next) => {
     );
 
     // ── Order offset — cancels what they still owe, before anything is owed back
-    const outstanding = r2(
-      parseFloat(order.total_amount) - parseFloat(order.paid_amount) - parseFloat(order.credit_applied)
-    );
+    const outstanding = r2(billBefore.balance);
     const offset = r2(Math.min(value, Math.max(0, outstanding)));
     if (offset > 0) {
       await client.query(
@@ -417,6 +416,7 @@ const acceptReturn = async (req, res, next) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();
@@ -471,6 +471,11 @@ const recordRefund = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'Only an accepted return can be refunded' });
     }
+
+    // Paying cash out on a sale whose recorded payments exceed its bill could
+    // be paying back money that was only ever recorded twice, never received.
+    await bills.lockSale(client, note.order_id);
+    bills.assertNotOverCollected(await bills.getSaleBill(client, note.order_id), 'refund anything');
 
     const open = await openBalance(client, id);
     if (amt > open) {
@@ -527,6 +532,7 @@ const recordRefund = async (req, res, next) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();
@@ -557,6 +563,20 @@ const issueStoreCredit = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'Only an accepted return can be converted to store credit' });
     }
+
+    // Every counter sale shares one "Walk-in Customer" record, so credit kept
+    // there could be spent by whoever is at the counter next. Walk-ins are
+    // refunded, never credited.
+    if (await bills.isWalkInCustomer(client, note.customer_id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Walk-in customers share one account, so store credit cannot be kept for them. Refund the amount instead.',
+      });
+    }
+
+    await bills.lockSale(client, note.order_id);
+    bills.assertNotOverCollected(await bills.getSaleBill(client, note.order_id), 'issue store credit');
 
     const open = await openBalance(client, id);
     if (amt > open) {
@@ -590,6 +610,7 @@ const issueStoreCredit = async (req, res, next) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();
@@ -605,7 +626,7 @@ const getStoreCredit = async (req, res, next) => {
     const balance = await storeCreditBalance(db, customerId);
     const history = await db.query(
       `SELECT scl.id, scl.entry_type, scl.amount, scl.entry_date, scl.notes, scl.created_at,
-              o.order_number, crn.return_number
+              scl.order_id, o.order_number, crn.return_number
        FROM customer_store_credit_ledger scl
        LEFT JOIN orders o ON o.id = scl.order_id
        LEFT JOIN customer_return_settlements crs ON crs.id = scl.return_settlement_id
@@ -659,10 +680,18 @@ const applyStoreCredit = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: `Customer has only ${balance.toFixed(2)} store credit (${amt.toFixed(2)} requested)` });
     }
-    const outstanding = r2(parseFloat(order.total_amount) - parseFloat(order.paid_amount) - parseFloat(order.credit_applied));
-    if (amt > outstanding) {
+    // Measured against the sale's real bill (its invoice if it has one), with
+    // every payment received — exactly like a payment, because it settles the
+    // bill exactly like one.
+    const bill = await bills.getSaleBill(client, order_id);
+    bills.assertNotOverCollected(bill, 'apply store credit');
+    const outstanding = r2(bill.balance);
+    if (amt > outstanding + bills.EPSILON) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: `Order ${order.order_number} has only ${outstanding.toFixed(2)} outstanding (${amt.toFixed(2)} requested)` });
+      return res.status(400).json({
+        success: false,
+        message: `Order ${order.order_number} has only ${outstanding.toFixed(2)} outstanding (${amt.toFixed(2)} requested). ${bills.position(bill)}`,
+      });
     }
 
     await client.query(
@@ -688,6 +717,7 @@ const applyStoreCredit = async (req, res, next) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();

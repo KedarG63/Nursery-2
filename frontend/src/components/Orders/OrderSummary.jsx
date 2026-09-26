@@ -16,7 +16,8 @@ import {
   Chip,
   Button,
   Menu,
-  MenuItem
+  MenuItem,
+  Alert
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import PropTypes from 'prop-types';
@@ -382,41 +383,69 @@ const OrderSummary = ({ order, onStatusUpdate }) => {
 
               <Divider />
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Paid Amount
-                </Typography>
-                <Typography variant="body1" color="success.main" fontWeight={500}>
-                  {formatCurrency(order.paid_amount || 0)}
-                </Typography>
-              </Box>
+              {/* Money comes from the sale's ONE bill: its invoice if issued,
+                  otherwise the order. "Received" is every payment actually
+                  recorded — the order's own paid figure is capped at its total
+                  and can never show an over-collection. */}
+              {(() => {
+                const s = order.sale;
+                const billTotal = s ? s.bill_total : parseFloat(order.total_amount || 0);
+                const received = s ? s.paid : parseFloat(order.paid_amount || 0);
+                const credit = s ? s.returns_credit : parseFloat(order.credit_applied || 0);
+                const balance = s ? s.balance : billTotal - received - credit;
+                const onInvoice = s && s.bill_source === 'invoice';
+                return (
+                  <>
+                    {onInvoice && Math.abs(s.bill_total - s.order_total) > 0.005 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Billed on invoice {s.invoice_number}
+                        </Typography>
+                        <Typography variant="body1" fontWeight={600}>
+                          {formatCurrency(billTotal)}
+                        </Typography>
+                      </Box>
+                    )}
 
-              {/* Returns and store credit settle part of an order without any
-                  money being paid, so a balance of total - paid alone would
-                  overstate what the customer owes. */}
-              {parseFloat(order.credit_applied || 0) > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Settled by Returns / Store Credit
-                  </Typography>
-                  <Typography variant="body1" color="info.main" fontWeight={500}>
-                    {formatCurrency(order.credit_applied)}
-                  </Typography>
-                </Box>
-              )}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Received
+                      </Typography>
+                      <Typography variant="body1" color="success.main" fontWeight={500}>
+                        {formatCurrency(received)}
+                      </Typography>
+                    </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Balance Due
-                </Typography>
-                <Typography variant="body1" color="error.main" fontWeight={500}>
-                  {formatCurrency(
-                    (order.total_amount || 0)
-                    - (order.paid_amount || 0)
-                    - (order.credit_applied || 0)
-                  )}
-                </Typography>
-              </Box>
+                    {credit > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Settled by Returns / Store Credit
+                        </Typography>
+                        <Typography variant="body1" color="info.main" fontWeight={500}>
+                          {formatCurrency(credit)}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {balance < -0.005 ? (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        <strong>{formatCurrency(-balance)} more has been recorded than this sale was billed.</strong>{' '}
+                        This is usually the same payment recorded twice. Check the payments below against the bank
+                        statement and cash records before collecting or refunding anything.
+                      </Alert>
+                    ) : (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Balance Due
+                        </Typography>
+                        <Typography variant="body1" color="error.main" fontWeight={500}>
+                          {formatCurrency(balance)}
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                );
+              })()}
 
               {order.payments && order.payments.length > 0 && (
                 <>

@@ -1,7 +1,8 @@
 # Plan: One Bill Per Sale
 
-Status: **proposed — nothing built yet.** Written 2026-09-26 after production data showed
-orders, invoices, payments and the Cash Book / Bank Ledger disagreeing.
+Status: **Phase 1 built and tested, not deployed** (see §7). Phase 0 scripts ready.
+Written 2026-09-26 after production data showed orders, invoices, payments and the
+Cash Book / Bank Ledger disagreeing.
 
 ---
 
@@ -136,12 +137,12 @@ Anyone who has already used earlier P&L figures (lender, CA, GST filing) should 
 
 ---
 
-## 5. Decisions needed
+## 5. Decisions
 
-1. **When an order has an invoice, is the invoice the bill?** *Recommended: yes.* Every piece
-   of evidence says that's how the business already works.
-2. **A payment larger than the bill:** refuse it *(recommended for now)*, or keep the extra as
-   a customer advance?
+1. **When an order has an invoice, the invoice is the bill.** *Settled (owner, 2026-09-26).*
+2. **A payment larger than the bill is refused.** *Taken as the default; can change later to
+   holding the extra as a customer advance.* Online gateway confirmations are the exception —
+   the money is already taken, so they are recorded and flagged.
 
 Assumed unless told otherwise: revenue stays dated by **order date**, so it doesn't move
 between months any more than it has to.
@@ -155,3 +156,90 @@ between months any more than it has to.
 - Run `scripts/one-bill-sizing.sql` before and after each phase. After Phase 2, *P&L off by* = 0 and
   *app shows owed* = *true still owed*. After Phase 3, *over-collected* = 0 or confirmed advances only.
 - The Reconciliation page must be green after every phase.
+
+---
+
+## 7. Phase 1 — as built
+
+The outline said "four places to record payment". Reading every path found **nine**, each
+checking something different or nothing. All nine now go through one module,
+`backend/services/saleBillService.js`, which reads one view, `sale_bills`.
+
+| Path | Before | Now |
+|---|---|---|
+| Payment at order creation | Silently cut to the order total — cash in the drawer, missing from the books | Refused if more than the total; recorded exactly |
+| Payments page | Checked the order; never reached the invoice | Checks the bill; applied to the invoice in the same transaction |
+| Invoice → record payment | Checked the invoice only | Checks the bill (every payment on the sale) |
+| Invoice → apply existing | Any of the customer's payments, any order | Only a payment of the same sale |
+| Invoice → remove payment | Unlinked it; money stayed recorded; invoice showed it as due again | Refused for the sale's own payments (delete instead). Old cross-order links can still be removed |
+| Void invoice | "Remove payments first" — which caused re-recording | Payments move back to the sale in one step; the next issued invoice applies them |
+| Issue invoice | Ignored money already received | Applies it automatically |
+| Edit payment | No check at all; cash → UPI dropped it from the books | Increase checked like a new payment; bank account required |
+| Delete payment | Subtracted from a capped figure → false balances | Recomputed from what remains |
+| Online payment | Connection leak; mock gateway fakes success | Checked; leak fixed; refused in production while on the mock gateway |
+
+### Database (migration `1769000000019`)
+
+- **`sale_bills` view** — the one definition of bill, paid, credit and balance.
+- **`refresh_sale_money()`** — the only thing that writes cached money on orders and invoices,
+  always by recomputing. The payment trigger now fires on insert, update **and delete**.
+- **`assert_sale_within_bill()`** — refuses any manual payment, return offset or store credit that
+  takes a sale beyond its bill. Reductions are always allowed, so over-collected sales can be
+  corrected. **Online gateway confirmations are exempt**: the gateway has already taken the money,
+  so it is recorded and flagged, never refused.
+- **Drops `chk_orders_paid_plus_credit_within_total`** (added in …017). An order-level rule cannot
+  hold once the invoice is the bill (an invoice can exceed its order). Replaced by the bill-level
+  guard above, which is strictly stronger. *This is the one non-additive change.*
+- **`sale_paid_adjustments`** — orders already marked paid with **no payment record behind the
+  amount** are backfilled here, so they still count as paid (nothing on screen changes) but are now
+  explicit and listed for review. Found locally: 1 order, ₹777. Production count: sizing query 6.
+- The migration **does not rewrite any existing row** other than that backfill.
+
+### Decisions taken during the build
+
+- **Returns are measured against the bill** (moved forward from Phase 2). The order's capped figure
+  could say "fully paid" while the invoice was still owed, so a return was treated as owed back and
+  cash refunded to a customer still in debt.
+- **Nothing is paid out on an over-collected sale** — no return accepted, no refund, no store credit
+  — until its payments are reviewed. Paying back money that may only have been recorded twice would
+  turn a bookkeeping error into a real loss.
+- **Walk-in returns are refunded, never credited** — the shared walk-in record would let anyone spend it.
+
+### Other defects found and fixed while building
+
+- **33 early returns inside open transactions** across orders, deliveries, drivers, users and
+  vehicles (e.g. "credit limit exceeded", "user already exists"). Each handed a connection back to
+  the pool mid-transaction; a later write on that connection could be silently lost. (Separate commit.)
+- The order page listed **deleted payments** as if they were real.
+- The Store Credit box counted **return offsets as store credit spent**.
+- The Reconciliation over-collection check read the **capped** figure, so it could never fire.
+- Payment edit / delete errors showed "Request failed with status code 400" instead of the reason.
+
+### Found, not fixed
+
+- `createOrder` fails with an invalid date when no `delivery_date` is sent (the validator calls it
+  optional). The screens always send one.
+
+### Tests
+
+- One-bill suite **67/67**, including the exact production state of ORD-20260910-0936 replayed and
+  cleaned to the paisa, and eight raw-SQL attacks on the database guard.
+- Returns suite **50/50** (fixtures now use real payment rows, as production does).
+- Backend unit tests 53/53 (the known pre-existing `lotAllocation` suite failure aside).
+- Migration applied, rolled back and re-applied cleanly.
+
+### What changes on deploy — tell staff
+
+- The **Reconciliation page will turn red**. That is the point: its old over-collection check could
+  never fire. What it lists is history, not new damage.
+- **Invoices and orders show a red banner** where more has been recorded than billed, and a yellow
+  one where received money isn't on the invoice yet (with an *Apply to this invoice* button).
+- Some actions are now refused with an explanation: over-payments, collecting on over-collected
+  sales, unlinking a payment from its own invoice, store credit for walk-ins.
+
+### Deploy pre-flight
+
+1. Run `scripts/one-bill-sizing.sql`; note query 6 (becomes flagged adjustments) and query 7
+   (any `mock` gateway rows are payments that never arrived).
+2. `pg_dump` backup and check its size.
+3. build → up → migrate → hard-refresh → open Reconciliation.

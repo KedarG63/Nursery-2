@@ -7,10 +7,19 @@ const pool = require('../config/database');
 const PaymentGateway = require('../services/payments');
 const notificationEvents = require('../events/notificationEvents');
 const { postSourceCredit, reverseSourceEntries } = require('./expenseController');
+const bills = require('../services/saleBillService');
 
 // Payment methods that represent money landing in a bank account vs the cash drawer.
 // (payment_method_enum: cash, card, upi, bank_transfer, credit, cod — no 'cheque'.)
 const BANK_METHODS = ['bank_transfer', 'upi', 'card'];
+
+// The mock provider reports every payment as successful (unless the amount
+// ends in 13) without any money moving. Fine for development; in production
+// it would record payments that never arrived.
+function mockGatewayInProduction() {
+  return process.env.NODE_ENV === 'production'
+    && String(PaymentGateway.getProviderName() || '').toLowerCase() === 'mock';
+}
 
 // Primary cash drawer (used when a cash payment doesn't specify one).
 async function resolvePrimaryCashAccount(client) {
@@ -199,32 +208,26 @@ const initiatePayment = async (req, res) => {
     const { order_id, amount, payment_method = 'upi' } = req.body;
     const userId = req.user?.id;
 
+    // The mock gateway reports success without any money moving. In production
+    // that would record a payment that never arrived.
+    if (mockGatewayInProduction()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Online payments are not set up. Record the payment from the Payments page instead.',
+      });
+    }
+
     await client.query('BEGIN');
 
-    // Fetch order details
-    const orderResult = await client.query(
-      `SELECT id, customer_id, total_amount, paid_amount, balance_amount, status
-       FROM orders
-       WHERE id = $1 AND deleted_at IS NULL`,
-      [order_id]
-    );
-
-    if (orderResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found',
-      });
+    // Every early return below rolls back first — returning inside an open
+    // transaction hands the connection back to the pool mid-transaction.
+    if (!(await bills.lockSale(client, order_id))) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
-
-    const order = orderResult.rows[0];
-
-    // Validate payment amount
-    if (amount > order.balance_amount) {
-      return res.status(400).json({
-        success: false,
-        message: `Payment amount cannot exceed balance amount (₹${order.balance_amount})`,
-      });
-    }
+    const bill = await bills.getSaleBill(client, order_id);
+    bills.assertCanReceive(bill, amount);
+    const order = { customer_id: bill.customer_id };
 
     // Get payment provider
     const paymentProvider = PaymentGateway.getPaymentProvider();
@@ -239,6 +242,7 @@ const initiatePayment = async (req, res) => {
     });
 
     if (!gatewayOrder.success) {
+      await client.query('ROLLBACK');
       return res.status(500).json({
         success: false,
         message: 'Failed to create payment order',
@@ -284,6 +288,7 @@ const initiatePayment = async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, error)) return;
     console.error('Error initiating payment:', error);
     res.status(500).json({
       success: false,
@@ -306,6 +311,13 @@ const verifyPayment = async (req, res) => {
     const paymentData = req.body;
     const userId = req.user?.id;
 
+    if (mockGatewayInProduction()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Online payments are not set up. Record the payment from the Payments page instead.',
+      });
+    }
+
     await client.query('BEGIN');
 
     // Get payment provider
@@ -315,6 +327,7 @@ const verifyPayment = async (req, res) => {
     const verification = await paymentProvider.verifyPayment(paymentData);
 
     if (!verification.success) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'Payment verification failed',
@@ -338,6 +351,7 @@ const verifyPayment = async (req, res) => {
     );
 
     if (paymentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Payment record not found',
@@ -345,6 +359,8 @@ const verifyPayment = async (req, res) => {
     }
 
     const payment = paymentResult.rows[0];
+    // Same lock order as every other money path: the sale first.
+    await bills.lockSale(client, payment.order_id);
 
     // Update payment record
     await client.query(
@@ -365,10 +381,27 @@ const verifyPayment = async (req, res) => {
       ]
     );
 
-    // NOTE: orders.paid_amount is maintained by the update_order_paid_amount()
-    // trigger, which fires on the pending->success UPDATE above. Updating it
-    // here would double-count the payment. balance_amount is derived by the
-    // set_balance_amount trigger.
+    // NOTE: orders.paid_amount is recomputed from rows by the trigger on the
+    // UPDATE above. Updating it here would double-count the payment.
+
+    // Money the gateway has taken is always recorded (refusing it now would
+    // leave the customer charged with nothing on file) and goes onto the
+    // invoice if there is one. Any excess over the bill is left visible for
+    // the reconciliation report rather than silently capped.
+    if (verification.status === 'success') {
+      const bill = await bills.getSaleBill(client, payment.order_id);
+      if (bill && bill.invoice_id) {
+        const room = await client.query(
+          `SELECT total_amount - COALESCE((SELECT SUM(amount_applied) FROM invoice_payments WHERE invoice_id = $1), 0) AS room
+           FROM invoices WHERE id = $1`,
+          [bill.invoice_id]
+        );
+        const apply = bills.r2(Math.min(bills.r2(payment.amount), bills.r2(room.rows[0].room)));
+        if (apply > bills.EPSILON) {
+          await bills.applyToInvoice(client, bill, payment.id, apply, userId, 'Online payment');
+        }
+      }
+    }
 
     // If installment order, mark first pending installment as paid
     await client.query(
@@ -470,35 +503,17 @@ const recordOfflinePayment = async (req, res) => {
 
     const order = orderResult.rows[0];
 
-    // Compute from source of truth (consistent with DB trigger). Credit from a
-    // customer return or store credit already reduces what is collectable —
-    // ignoring it would let a customer pay for goods they gave back.
-    const totalAmount = parseFloat(order.total_amount);
-    const currentPaid = parseFloat(order.paid_amount);
-    const creditApplied = parseFloat(order.credit_applied);
-    const orderBalance = Math.round((totalAmount - currentPaid - creditApplied) * 100) / 100;
+    // Checked against the sale's ONE bill — its invoice if it has one — using
+    // every payment actually received. Checking the order alone is what let
+    // the same money be recorded here and again on the invoice. The order row
+    // is already locked above (FOR UPDATE OF o), serialising payments.
     const paymentAmount = Math.round(parseFloat(amount) * 100) / 100;
+    const bill = await bills.getSaleBill(client, order_id);
+    bills.assertCanReceive(bill, paymentAmount);
 
-    // Validate amount is positive
-    if (paymentAmount <= 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: `Payment amount must be greater than zero. Received: ₹${amount}`,
-      });
-    }
-
-    // Validate amount against real balance (total - paid)
-    if (paymentAmount > orderBalance + 0.005) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: `Payment amount (₹${paymentAmount.toFixed(2)}) exceeds outstanding balance (₹${orderBalance.toFixed(2)})`,
-      });
-    }
-
-    // Cap effective payment to prevent floating-point overflow past total_amount
-    const effectivePayment = Math.min(paymentAmount, orderBalance);
+    // Recorded exactly as received — never silently capped. Anything beyond
+    // the bill has already been refused above.
+    const effectivePayment = paymentAmount;
 
     // Create payment record
     const paymentResult = await client.query(
@@ -526,11 +541,13 @@ const recordOfflinePayment = async (req, res) => {
       ]
     );
 
-    // NOTE: orders.paid_amount is maintained by the AFTER-INSERT trigger
-    // update_order_paid_amount() (migration 1768100000001), which adds this
-    // payment's amount capped at total_amount. Do NOT update paid_amount here —
-    // a second manual update double-counts the payment and corrupts partial /
-    // split payments. balance_amount is derived by the set_balance_amount trigger.
+    // NOTE: orders.paid_amount is recomputed from the payment rows by the
+    // trigger (migration …019). Do NOT update it here.
+
+    // If the sale has an invoice, the money goes onto it in the same
+    // transaction — otherwise the invoice keeps showing it as due, which is
+    // exactly how it came to be recorded a second time.
+    await bills.applyToInvoice(client, bill, paymentResult.rows[0].id, effectivePayment, userId);
 
     // Post the received money to the Cash Book / Bank Ledger so balances reflect it.
     await postCustomerPaymentToLedger(client, {
@@ -564,6 +581,10 @@ const recordOfflinePayment = async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
+
+    // A refusal from the one-bill check is an answer for the person at the
+    // screen, not a server fault.
+    if (bills.respondIfBillError(res, error)) return;
 
     // Enhanced error logging
     console.error('=== PAYMENT RECORDING ERROR ===');
@@ -702,6 +723,7 @@ const processRefund = async (req, res) => {
     );
 
     if (paymentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Payment not found',
@@ -713,6 +735,7 @@ const processRefund = async (req, res) => {
     // Validate refund amount
     const maxRefundable = payment.amount - payment.refund_amount;
     if (amount > maxRefundable) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Maximum refundable amount is ₹${maxRefundable}`,
@@ -728,6 +751,7 @@ const processRefund = async (req, res) => {
     });
 
     if (!refundResult.success) {
+      await client.query('ROLLBACK');
       return res.status(500).json({
         success: false,
         message: 'Refund processing failed',
@@ -1153,14 +1177,19 @@ const deletePayment = async (req, res, next) => {
     const userId = req.user?.id;
     await client.query('BEGIN');
 
+    // Lock the sale first, then the payment — the same order every other money
+    // path uses, so two people working on one sale cannot deadlock.
+    const peek = await client.query(`SELECT order_id FROM payments WHERE id = $1`, [id]);
+    if (peek.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+    await bills.lockSale(client, peek.rows[0].order_id);
+
     const payResult = await client.query(
       `SELECT id, order_id, amount, status, deleted_at FROM payments WHERE id = $1 FOR UPDATE`,
       [id]
     );
-    if (payResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, message: 'Payment not found' });
-    }
     const payment = payResult.rows[0];
     if (payment.deleted_at) {
       await client.query('ROLLBACK');
@@ -1171,25 +1200,17 @@ const deletePayment = async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'Only successful payments can be deleted' });
     }
 
-    // Remove invoice links — the trigger recalculates invoice paid_amount + status
+    // Remove invoice links — the trigger recalculates the invoice.
     await client.query(`DELETE FROM invoice_payments WHERE payment_id = $1`, [id]);
 
-    // Soft-delete the payment record
+    // Soft-delete. The order's paid figure is RECOMPUTED from the payments that
+    // remain (trigger, migration …019). It used to subtract this amount from a
+    // figure that had been capped, which could drive a paid customer's order
+    // to zero and show them owing money they had already paid.
     await client.query(
       `UPDATE payments SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
       [id]
     );
-
-    // Reverse the order paid_amount (capped at 0)
-    if (payment.order_id) {
-      await client.query(
-        `UPDATE orders
-         SET paid_amount = GREATEST(0, paid_amount - $1),
-             updated_at  = NOW()
-         WHERE id = $2`,
-        [payment.amount, payment.order_id]
-      );
-    }
 
     // Reverse the Cash Book / Bank Ledger credit this payment posted (if any).
     await reverseSourceEntries(client, 'customer_payment', id, userId);
@@ -1213,75 +1234,140 @@ const updatePayment = async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { amount, payment_method, payment_date, receipt_number, notes } = req.body;
+    const {
+      amount, payment_method, payment_date, receipt_number, notes,
+      bank_account_id, cash_account_id,
+    } = req.body;
     const userId = req.user?.id;
 
     await client.query('BEGIN');
 
-    const payResult = await client.query(
-      `SELECT id, order_id, amount, payment_method, status, deleted_at FROM payments WHERE id = $1 FOR UPDATE`,
-      [id]
-    );
-    if (payResult.rows.length === 0 || payResult.rows[0].deleted_at) {
+    // Lock the sale first, then the payment — the same order every money path uses.
+    const peek = await client.query(`SELECT order_id FROM payments WHERE id = $1`, [id]);
+    if (peek.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Payment not found' });
     }
+    await bills.lockSale(client, peek.rows[0].order_id);
+
+    const payResult = await client.query(
+      `SELECT id, order_id, amount, refund_amount, payment_method, bank_account_id, cash_account_id,
+              status, deleted_at
+       FROM payments WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
     const payment = payResult.rows[0];
+    if (payment.deleted_at) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
     if (payment.status !== 'success') {
       await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'Only successful payments can be edited' });
     }
 
-    const oldAmount = parseFloat(payment.amount);
-    const newAmount = amount != null ? Math.round(parseFloat(amount) * 100) / 100 : oldAmount;
+    const oldAmount = bills.r2(payment.amount);
+    const newAmount = amount != null ? bills.r2(amount) : oldAmount;
+    const refunded = bills.r2(payment.refund_amount);
 
     if (newAmount <= 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
     }
+    if (newAmount < refunded) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: `Amount cannot be less than the ${bills.inr(refunded)} already refunded` });
+    }
 
-    const amountDiff = newAmount - oldAmount;
+    const amountDiff = bills.r2(newAmount - oldAmount);
 
-    // Build the SET clause dynamically from whichever fields were sent
+    // Raising the amount is new money on the sale, checked exactly like a new
+    // payment. This path used to accept any amount at all.
+    if (amountDiff > bills.EPSILON) {
+      const bill = await bills.getSaleBill(client, payment.order_id);
+      bills.assertCanReceive(bill, amountDiff);
+    }
+
+    // A payment linked to ANOTHER order's invoice is an old mis-link. Changing
+    // its amount would move money between two sales invisibly, so it waits
+    // until the link is corrected.
+    const links = await client.query(
+      `SELECT ip.id, ip.amount_applied, i.order_id, i.invoice_number
+       FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id
+       WHERE ip.payment_id = $1`,
+      [id]
+    );
+    const foreign = links.rows.find((l) => l.order_id !== payment.order_id);
+    if (Math.abs(amountDiff) > bills.EPSILON && foreign) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: `This payment is also applied to invoice ${foreign.invoice_number}, which belongs to a different order. `
+          + 'Its amount cannot be changed until that link is corrected.',
+      });
+    }
+
+    // Money has to land in a named account. Changing cash → UPI used to reverse
+    // the Cash Book entry and then post nothing, because no bank account was
+    // known — the payment silently dropped out of the books.
+    const newMethod = payment_method != null ? payment_method : payment.payment_method;
+    let bankId = bank_account_id !== undefined ? (bank_account_id || null) : payment.bank_account_id;
+    let cashId = cash_account_id !== undefined ? (cash_account_id || null) : payment.cash_account_id;
+    if (BANK_METHODS.includes(newMethod)) {
+      cashId = null;
+      if (!bankId) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'Choose the bank account this payment went into — without it the payment would drop out of the Bank Ledger.',
+        });
+      }
+      const b = await client.query(`SELECT 1 FROM bank_accounts WHERE id = $1 AND is_active = true`, [bankId]);
+      if (b.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Bank account not found or inactive' });
+      }
+    } else if (newMethod === 'cash') {
+      bankId = null;   // cash with no drawer chosen posts to the primary drawer
+      if (cashId) {
+        const c = await client.query(`SELECT 1 FROM cash_accounts WHERE id = $1 AND is_active = true`, [cashId]);
+        if (c.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Cash account not found or inactive' });
+        }
+      }
+    } else {
+      bankId = null;   // credit / cod: no money moved
+      cashId = null;
+    }
+
     const setClauses = ['updated_at = NOW()'];
     const params = [];
-
-    if (amount != null)         { params.push(newAmount);        setClauses.push(`amount = $${params.length}`); }
-    if (payment_method != null) { params.push(payment_method);   setClauses.push(`payment_method = $${params.length}`); }
-    if (payment_date != null)   { params.push(payment_date);     setClauses.push(`payment_date = $${params.length}`); }
-    if (receipt_number != null) { params.push(receipt_number);   setClauses.push(`receipt_number = $${params.length}`); }
-    if (notes != null)          { params.push(notes);            setClauses.push(`notes = $${params.length}`); }
-
-    if (params.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: 'No fields to update' });
-    }
+    if (amount != null)         { params.push(newAmount);      setClauses.push(`amount = $${params.length}`); }
+    if (payment_method != null) { params.push(payment_method); setClauses.push(`payment_method = $${params.length}`); }
+    if (payment_date != null)   { params.push(payment_date);   setClauses.push(`payment_date = $${params.length}`); }
+    if (receipt_number != null) { params.push(receipt_number); setClauses.push(`receipt_number = $${params.length}`); }
+    if (notes != null)          { params.push(notes);          setClauses.push(`notes = $${params.length}`); }
+    params.push(bankId); setClauses.push(`bank_account_id = $${params.length}`);
+    params.push(cashId); setClauses.push(`cash_account_id = $${params.length}`);
 
     params.push(id);
     await client.query(
       `UPDATE payments SET ${setClauses.join(', ')} WHERE id = $${params.length}`,
       params
     );
+    // The order's paid figure is recomputed from rows by the trigger.
 
-    if (Math.abs(amountDiff) > 0.005) {
-      // Adjust order paid_amount — cap between 0 and total_amount
-      if (payment.order_id) {
-        await client.query(
-          `UPDATE orders
-           SET paid_amount = LEAST(total_amount, GREATEST(0, paid_amount + $1)),
-               updated_at  = NOW()
-           WHERE id = $2`,
-          [amountDiff, payment.order_id]
-        );
+    // The link to its own invoice follows the amount. (Foreign links were
+    // refused above whenever the amount changes.)
+    const own = links.rows.find((l) => l.order_id === payment.order_id);
+    if (own && Math.abs(amountDiff) > bills.EPSILON) {
+      const applied = bills.r2(parseFloat(own.amount_applied) + amountDiff);
+      if (applied > bills.EPSILON) {
+        await client.query(`UPDATE invoice_payments SET amount_applied = $1 WHERE id = $2`, [applied, own.id]);
+      } else {
+        await client.query(`DELETE FROM invoice_payments WHERE id = $1`, [own.id]);
       }
-
-      // Adjust invoice link — the trigger recalculates invoice totals on UPDATE
-      await client.query(
-        `UPDATE invoice_payments
-         SET amount_applied = amount_applied + $1
-         WHERE payment_id = $2`,
-        [amountDiff, id]
-      );
     }
 
     // Re-sync the Cash Book / Bank Ledger credit to the edited values: reverse
@@ -1315,6 +1401,7 @@ const updatePayment = async (req, res, next) => {
     res.json({ success: true, message: 'Payment updated successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
+    if (bills.respondIfBillError(res, err)) return;
     next(err);
   } finally {
     client.release();

@@ -387,23 +387,151 @@ const CHECKS = [
   },
 
   {
-    key: 'order_overcollected',
-    verified: 'No order has been collected beyond its total',
-    title: 'Some orders have been collected beyond their total',
+    // Reads every payment actually recorded, against the sale's real bill (its
+    // invoice if issued). The check this replaces read the order's own paid
+    // figure — which is capped at the order total, so it could never fire.
+    key: 'sale_collected_beyond_bill',
+    verified: 'No sale has more recorded against it than it was billed',
+    title: 'Some sales have more money recorded against them than they were billed',
     explain:
-      'Cash taken plus credit applied should never come to more than the order is worth. '
-      + 'Anything above that has been collected from the customer twice.',
+      'Payments recorded plus returns settled should never come to more than the bill (the invoice, if there is one). '
+      + 'Anything above that is usually the same payment recorded twice — or money that belongs to another order. '
+      + 'Check each against the bank statement and cash records before collecting or refunding anything on these sales.',
     severity: 'critical',
     sql: `
-      SELECT o.id, o.order_number, c.name AS customer_name,
-             o.total_amount, o.paid_amount, o.credit_applied,
-             o.paid_amount + o.credit_applied - o.total_amount AS excess
-      FROM orders o
+      SELECT sb.order_id AS id, sb.order_number, c.name AS customer_name,
+             COALESCE(sb.invoice_number, 'order') AS billed_on,
+             sb.bill_total, sb.paid AS amount, sb.returns_credit AS credit_applied,
+             -sb.balance AS excess, sb.payment_count AS payments
+      FROM sale_bills sb
+      JOIN customers c ON c.id = sb.customer_id
+      WHERE sb.balance < -($1::numeric)
+      ORDER BY -sb.balance DESC`,
+  },
+
+  {
+    key: 'payments_not_in_books',
+    verified: 'Every payment received appears in the cash book or bank ledger',
+    title: 'Some payments received are missing from the cash book and bank ledger',
+    explain:
+      'Money recorded as received by cash, UPI, card or bank transfer should appear once in the cash book or bank ledger. '
+      + 'A bank payment recorded without choosing the bank account lands here until it is posted.',
+    severity: 'critical',
+    sql: `
+      SELECT p.id, o.order_number, c.name AS customer_name, p.payment_date AS entry_date,
+             p.payment_method AS paid_by, p.amount, p.receipt_number
+      FROM payments p
+      JOIN orders o ON o.id = p.order_id
+      JOIN customers c ON c.id = p.customer_id
+      WHERE p.deleted_at IS NULL
+        AND p.status IN ('success', 'refunded')
+        AND p.payment_method IN ('cash', 'upi', 'card', 'bank_transfer')
+        AND NOT EXISTS (
+          SELECT 1 FROM cash_ledger_entries e
+           WHERE e.source_type = 'customer_payment' AND e.source_id = p.id AND e.deleted_at IS NULL
+          UNION ALL
+          SELECT 1 FROM bank_ledger_entries e
+           WHERE e.source_type = 'customer_payment' AND e.source_id = p.id AND e.deleted_at IS NULL
+        )
+        AND $1::numeric IS NOT NULL
+      ORDER BY p.payment_date DESC`,
+  },
+
+  {
+    key: 'payments_in_books_wrongly',
+    verified: 'No payment is in the books twice, or for the wrong amount',
+    title: 'Some payments are in the books twice, or for a different amount',
+    explain:
+      'Each payment should appear exactly once, for exactly its amount. More than once inflates the account balance; '
+      + 'a different amount means the books and the payment record disagree.',
+    severity: 'critical',
+    sql: `
+      SELECT p.id, o.order_number, c.name AS customer_name, p.payment_date AS entry_date,
+             p.amount, led.entries AS ledger_entries, led.total AS ledger_total
+      FROM payments p
+      JOIN orders o ON o.id = p.order_id
+      JOIN customers c ON c.id = p.customer_id
+      CROSS JOIN LATERAL (
+        SELECT COUNT(*) AS entries, COALESCE(SUM(amount), 0) AS total
+        FROM (
+          SELECT amount FROM cash_ledger_entries
+           WHERE source_type = 'customer_payment' AND source_id = p.id AND deleted_at IS NULL
+          UNION ALL
+          SELECT amount FROM bank_ledger_entries
+           WHERE source_type = 'customer_payment' AND source_id = p.id AND deleted_at IS NULL
+        ) x
+      ) led
+      WHERE p.deleted_at IS NULL
+        AND led.entries > 0
+        AND (led.entries > 1 OR ABS(led.total - p.amount) > $1)
+      ORDER BY p.payment_date DESC`,
+  },
+
+  {
+    key: 'book_entries_without_payment',
+    verified: 'No cash book or bank entry is left over from a deleted payment',
+    title: 'Some cash book or bank entries belong to a payment that was deleted or no longer exists',
+    explain:
+      'When a payment is deleted its entry should be reversed too. One left behind makes the account balance '
+      + 'show money that is not there.',
+    severity: 'critical',
+    sql: `
+      SELECT * FROM (
+        SELECT 'bank' AS ledger, e.id, e.entry_date, e.amount, e.narration,
+               CASE WHEN p.id IS NULL THEN 'no such payment' ELSE 'payment deleted' END AS problem
+        FROM bank_ledger_entries e
+        LEFT JOIN payments p ON p.id = e.source_id
+        WHERE e.source_type = 'customer_payment' AND e.deleted_at IS NULL
+          AND (p.id IS NULL OR p.deleted_at IS NOT NULL)
+        UNION ALL
+        SELECT 'cash' AS ledger, e.id, e.entry_date, e.amount, e.narration,
+               CASE WHEN p.id IS NULL THEN 'no such payment' ELSE 'payment deleted' END AS problem
+        FROM cash_ledger_entries e
+        LEFT JOIN payments p ON p.id = e.source_id
+        WHERE e.source_type = 'customer_payment' AND e.deleted_at IS NULL
+          AND (p.id IS NULL OR p.deleted_at IS NOT NULL)
+      ) x
+      WHERE $1::numeric IS NOT NULL
+      ORDER BY entry_date DESC`,
+  },
+
+  {
+    key: 'paid_without_payment_record',
+    verified: 'Every amount marked as paid has a payment record behind it',
+    title: 'Some orders were marked as paid with no payment record behind them',
+    explain:
+      'Before the one-bill change, an order could be marked paid without a payment being recorded. Those amounts '
+      + 'still count as paid so nothing changes on screen, but no payment, date or account backs them up. '
+      + 'Check each against the bank statement and cash records.',
+    severity: 'warning',
+    sql: `
+      SELECT a.id, o.order_number, c.name AS customer_name, a.amount,
+             o.order_date AS entry_date, a.status AS problem
+      FROM sale_paid_adjustments a
+      JOIN orders o ON o.id = a.order_id
       JOIN customers c ON c.id = o.customer_id
-      WHERE o.deleted_at IS NULL
-        AND o.status <> 'cancelled'
-        AND o.paid_amount + o.credit_applied > o.total_amount + $1
-      ORDER BY excess DESC`,
+      WHERE a.status = 'unreviewed'
+        AND $1::numeric IS NOT NULL
+      ORDER BY a.amount DESC`,
+  },
+
+  {
+    key: 'invoice_shows_less_than_received',
+    verified: 'Every invoice shows all the money received on its sale',
+    title: 'Some invoices show less than was actually received on their sale',
+    explain:
+      'Money recorded from the Payments page used not to reach the invoice, so the invoice showed it as still due. '
+      + 'Staff reading these invoices may collect the same money again. Apply the payments listed on each invoice.',
+    severity: 'warning',
+    sql: `
+      SELECT sb.order_id AS id, sb.order_number, c.name AS customer_name, sb.invoice_number,
+             sb.bill_total, sb.paid AS amount, sb.applied_to_invoice,
+             sb.paid - sb.applied_to_invoice AS difference
+      FROM sale_bills sb
+      JOIN customers c ON c.id = sb.customer_id
+      WHERE sb.invoice_id IS NOT NULL
+        AND sb.paid - sb.applied_to_invoice > $1
+      ORDER BY sb.paid - sb.applied_to_invoice DESC`,
   },
 
   {

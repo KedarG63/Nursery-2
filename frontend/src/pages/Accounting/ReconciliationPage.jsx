@@ -40,12 +40,13 @@ const MONEY_COLUMNS = new Set([
   'return_amount', 'settled', 'excess', 'stored', 'should_be', 'difference',
   'amount', 'ledger_total', 'issued', 'applied', 'balance', 'total_amount',
   'paid_amount', 'credit_applied', 'owed_back', 'open_balance',
+  'bill_total', 'applied_to_invoice',
 ]);
 
 // Internal identifiers never reach the screen — they mean nothing to the people
 // reading this page, and a raw uuid in a table just looks like something broke.
 const HIDDEN_COLUMNS = new Set([
-  'id', 'customer_id', 'return_item_id', 'source_id', 'source_type', 'ledger',
+  'id', 'customer_id', 'return_item_id', 'source_id', 'source_type',
 ]);
 
 // Column names are written for people, not copied from the database.
@@ -80,6 +81,14 @@ const COLUMN_LABELS = {
   return_date: 'Return Date',
   sku_code: 'Variety Code',
   quantity: 'Quantity',
+  billed_on: 'Billed On',
+  bill_total: 'Bill',
+  payments: 'Payments',
+  receipt_number: 'Receipt / UTR',
+  problem: 'Problem',
+  ledger: 'Book',
+  invoice_number: 'Invoice No.',
+  applied_to_invoice: 'Shown On Invoice',
 };
 
 const prettyColumn = (key) =>

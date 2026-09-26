@@ -36,6 +36,11 @@ import PaymentsTable from '../../components/Payments/PaymentsTable';
 import RecordPaymentForm from '../../components/Payments/RecordPaymentForm';
 import { getPayments, generateReceipt, exportPayments, deletePayment, updatePayment } from '../../services/paymentService';
 import { format } from 'date-fns';
+import { getBankAccounts } from '../../services/bankLedgerService';
+import { getCashAccounts } from '../../services/cashLedgerService';
+
+// Methods where the money lands in a bank account, so one must be named.
+const EDIT_BANK_METHODS = ['upi', 'card', 'bank_transfer'];
 
 const PAYMENT_METHODS_OPTIONS = [
   { value: 'cash', label: 'Cash' },
@@ -64,9 +69,17 @@ const PaymentsList = () => {
 
   // Edit state
   const [editTarget, setEditTarget] = useState(null);
-  const [editForm, setEditForm] = useState({ amount: '', payment_method: '', payment_date: '', receipt_number: '', notes: '' });
+  const [editForm, setEditForm] = useState({ amount: '', payment_method: '', payment_date: '', receipt_number: '', notes: '', bank_account_id: '', cash_account_id: '' });
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [editBankAccounts, setEditBankAccounts] = useState([]);
+  const [editCashAccounts, setEditCashAccounts] = useState([]);
+
+  // Accounts for the edit dialog, loaded once.
+  useEffect(() => {
+    getBankAccounts().then((r) => setEditBankAccounts(r.data || r.accounts || [])).catch(() => {});
+    getCashAccounts().then((r) => setEditCashAccounts(r.data || r.accounts || [])).catch(() => {});
+  }, []);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -184,7 +197,7 @@ const PaymentsList = () => {
       setDeleteTarget(null);
       fetchPayments();
     } catch (err) {
-      toast.error(err?.message || 'Failed to delete payment');
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to delete payment');
     } finally {
       setDeleteLoading(false);
     }
@@ -199,13 +212,22 @@ const PaymentsList = () => {
       payment_date: payment.payment_date ? format(new Date(payment.payment_date), 'yyyy-MM-dd') : '',
       receipt_number: payment.receipt_number || '',
       notes: payment.notes || '',
+      bank_account_id: payment.bank_account_id || '',
+      cash_account_id: payment.cash_account_id || '',
     });
   };
+
+  const editIsBank = EDIT_BANK_METHODS.includes(editForm.payment_method);
 
   const handleEditSave = async () => {
     setEditError('');
     const amt = parseFloat(editForm.amount);
     if (isNaN(amt) || amt <= 0) { setEditError('Amount must be greater than 0'); return; }
+    // Money has to land in a named account, or it drops out of the books.
+    if (editIsBank && !editForm.bank_account_id) {
+      setEditError('Choose the bank account this payment went into.');
+      return;
+    }
     setEditLoading(true);
     try {
       await updatePayment(editTarget.id, {
@@ -214,12 +236,16 @@ const PaymentsList = () => {
         payment_date: editForm.payment_date || undefined,
         receipt_number: editForm.receipt_number || undefined,
         notes: editForm.notes || undefined,
+        bank_account_id: editIsBank ? editForm.bank_account_id : null,
+        cash_account_id: editForm.payment_method === 'cash' ? (editForm.cash_account_id || null) : null,
       });
       toast.success('Payment updated successfully');
       setEditTarget(null);
       fetchPayments();
     } catch (err) {
-      setEditError(err?.message || 'Failed to update payment');
+      // This service does not unwrap errors, so read the server's reason from
+      // the response — otherwise a refusal reads "Request failed with 400".
+      setEditError(err?.response?.data?.message || err?.message || 'Failed to update payment');
     } finally {
       setEditLoading(false);
     }
@@ -414,6 +440,34 @@ const PaymentsList = () => {
                 <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
               ))}
             </TextField>
+            {editIsBank && (
+              <TextField
+                label="Bank Account"
+                select
+                fullWidth
+                required
+                value={editForm.bank_account_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, bank_account_id: e.target.value }))}
+                helperText="The account this payment went into. It is moved in the Bank Ledger if you change it."
+              >
+                {editBankAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>{a.account_name}{a.bank_name ? ` — ${a.bank_name}` : ''}</MenuItem>
+                ))}
+              </TextField>
+            )}
+            {editForm.payment_method === 'cash' && editCashAccounts.length > 1 && (
+              <TextField
+                label="Cash Drawer"
+                select
+                fullWidth
+                value={editForm.cash_account_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, cash_account_id: e.target.value }))}
+              >
+                {editCashAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>{a.account_name}</MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField
               label="Payment Date"
               type="date"

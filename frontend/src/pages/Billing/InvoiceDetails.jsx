@@ -16,7 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { getInvoice, issueInvoice, voidInvoice, removePayment, openInvoicePDF, recordInvoicePayment } from '../../services/invoiceService';
+import { getInvoice, issueInvoice, voidInvoice, removePayment, openInvoicePDF, recordInvoicePayment, applyPayment } from '../../services/invoiceService';
 import { getBankAccounts } from '../../services/bankLedgerService';
 import { getCashAccounts } from '../../services/cashLedgerService';
 import BillingStatusBadge from '../../components/Billing/BillingStatusBadge';
@@ -83,8 +83,9 @@ const InvoiceDetails = () => {
   const handleIssue = async () => {
     setActionLoading(true);
     try {
-      await issueInvoice(id);
-      toast.success('Invoice issued successfully');
+      const r = await issueInvoice(id);
+      // The server says whether money already received was applied to it.
+      toast.success(r?.message || 'Invoice issued successfully');
       setIssueDialogOpen(false);
       fetchInvoice();
     } catch (err) {
@@ -97,12 +98,36 @@ const InvoiceDetails = () => {
   const handleVoid = async () => {
     setActionLoading(true);
     try {
-      await voidInvoice(id);
-      toast.success('Invoice voided');
+      const r = await voidInvoice(id);
+      // The server says where any payments on it went (back to the order).
+      toast.success(r?.message || 'Invoice voided');
       setVoidDialogOpen(false);
       fetchInvoice();
     } catch (err) {
       toast.error(err?.message || 'Failed to void invoice');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Put money already received on this order onto the invoice. No new money is
+  // recorded — the payment exists and is in the books; this only makes the
+  // invoice show it.
+  const handleApplyUnapplied = async (p) => {
+    const room = Math.max(0, parseFloat(invoice.total_amount) - parseFloat(invoice.paid_amount)
+      - parseFloat(invoice.sale?.returns_credit || 0));
+    const amount = Math.round(Math.min(parseFloat(p.unapplied), room) * 100) / 100;
+    if (!(amount > 0)) {
+      toast.error('This invoice has no room left for that payment.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await applyPayment(id, { payment_id: p.id, amount_applied: amount });
+      toast.success(`${formatCurrency(amount)} applied to this invoice`);
+      fetchInvoice();
+    } catch (err) {
+      toast.error(err?.message || 'Failed to apply the payment');
     } finally {
       setActionLoading(false);
     }
@@ -172,6 +197,14 @@ const InvoiceDetails = () => {
   const canVoid = isAdmin && ['draft', 'issued', 'partially_paid'].includes(invoice.status);
   const canIssue = isAdmin && invoice.status === 'draft';
   const canApplyPayment = ['issued', 'partially_paid'].includes(invoice.status);
+
+  // Money received on this order that never reached the invoice.
+  const unapplied = invoice.unapplied_payments || [];
+  // What can genuinely still be collected: measured against every payment
+  // received on the sale, not just those applied here.
+  const dueNow = invoice.sale
+    ? Math.max(0, parseFloat(invoice.sale.balance))
+    : Math.max(0, parseFloat(invoice.balance_amount) || 0);
 
   return (
     <Box>
@@ -299,6 +332,13 @@ const InvoiceDetails = () => {
                   <Typography variant="body2" color="success.main">-{formatCurrency(invoice.paid_amount)}</Typography>
                 </Box>
               )}
+              {/* Plants returned reduce what is owed on this bill. */}
+              {parseFloat(invoice.sale?.returns_credit || 0) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="info.main">Less: Returns</Typography>
+                  <Typography variant="body2" color="info.main">-{formatCurrency(invoice.sale.returns_credit)}</Typography>
+                </Box>
+              )}
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="subtitle2" color={parseFloat(invoice.balance_amount) > 0 ? 'error.main' : 'text.secondary'}>
                   Balance Due
@@ -316,11 +356,47 @@ const InvoiceDetails = () => {
       <Typography variant="h6" sx={{ mb: 1 }}>Line Items</Typography>
       <InvoiceItemsTable items={invoice.items || []} editable={false} />
 
+      {/* The sale's true position — every payment received on the order, not
+          only those applied to this invoice. Before, a payment recorded from
+          the Payments page never reached the invoice, so it showed money as
+          due that had already been received, and staff collected it again. */}
+      {invoice.sale?.over_collected && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          <strong>
+            {formatCurrency(invoice.sale.paid)} has been recorded on this sale — {formatCurrency(-invoice.sale.balance)} more
+            than this invoice bills.
+          </strong>{' '}
+          This is usually the same payment recorded twice. Do not collect anything on this invoice. Check its payments
+          against the bank statement and cash records first.
+        </Alert>
+      )}
+      {!invoice.sale?.over_collected && unapplied.length > 0 && (
+        <Alert severity="warning" sx={{ mt: 3 }}>
+          <strong>Money already received on this order is not shown on this invoice yet.</strong> Apply it before
+          collecting anything, or the customer may be asked to pay twice.
+          <Box sx={{ mt: 1 }}>
+            {unapplied.map((p) => (
+              <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                <Typography variant="body2">
+                  {formatDate(p.payment_date)} · {p.payment_method?.toUpperCase()} · {formatCurrency(p.unapplied)}
+                  {p.receipt_number ? ` · ${p.receipt_number}` : ''}
+                </Typography>
+                {canApplyPayment && (
+                  <Button size="small" variant="outlined" disabled={actionLoading} onClick={() => handleApplyUnapplied(p)}>
+                    Apply to this invoice
+                  </Button>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Alert>
+      )}
+
       {/* Applied Payments */}
       <Box sx={{ mt: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="h6">Applied Payments</Typography>
-          {canApplyPayment && (
+          {canApplyPayment && !invoice.sale?.over_collected && (
             <Stack direction="row" spacing={1}>
               <Button
                 startIcon={<AddIcon />}
@@ -328,7 +404,7 @@ const InvoiceDetails = () => {
                 variant="contained"
                 color="success"
                 onClick={() => {
-                  setRecordPaymentForm((f) => ({ ...f, amount: parseFloat(invoice.balance_amount) || '' }));
+                  setRecordPaymentForm((f) => ({ ...f, amount: dueNow || '' }));
                   setRecordPaymentOpen(true);
                 }}
               >
@@ -376,8 +452,12 @@ const InvoiceDetails = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      {isAdmin && invoice.status !== 'void' && (
-                        <Tooltip title="Remove">
+                      {/* Only an old link to ANOTHER order's payment can be
+                          removed here — that corrects it. Unlinking this sale's
+                          own payment would not undo it; that is a delete, from
+                          the Payments page, which reverses it everywhere. */}
+                      {isAdmin && invoice.status !== 'void' && ap.payment_order_id !== invoice.order_id && (
+                        <Tooltip title="This payment belongs to a different order — remove it from this invoice">
                           <IconButton size="small" color="error" onClick={() => handleRemovePayment(ap.payment_id)}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
@@ -443,6 +523,10 @@ const InvoiceDetails = () => {
         <DialogContent>
           <DialogContentText>
             Are you sure you want to void <strong>{invoice.invoice_number}</strong>? This action cannot be undone.
+            {parseFloat(invoice.paid_amount) > 0 && (
+              <> Payments on it are not lost: they stay on the order and are applied automatically to the next
+              invoice you issue for it. Do not record them again.</>
+            )}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -467,7 +551,7 @@ const InvoiceDetails = () => {
               value={recordPaymentForm.amount}
               onChange={(e) => setRecordPaymentForm((f) => ({ ...f, amount: e.target.value }))}
               inputProps={{ min: 0, step: 0.01 }}
-              helperText={`Balance due: ${formatCurrency(invoice.balance_amount)}`}
+              helperText={`Still due on this sale: ${formatCurrency(dueNow)}`}
             />
             <TextField
               label="Payment Method"

@@ -55,6 +55,10 @@ const ReturnSettlementDialog = ({ open, returnNote, onClose, onSettled }) => {
   const [error, setError] = useState('');
 
   const owed = parseFloat(returnNote?.open_balance ?? 0);
+  // Every counter sale shares one "Walk-in Customer" record, so credit kept on
+  // it could be spent by whoever is at the counter next. The server refuses it
+  // too; hiding the option here saves staff from a dead end.
+  const isWalkIn = (returnNote?.customer_name || '').trim().toLowerCase() === 'walk-in customer';
 
   useEffect(() => {
     if (!open) return;
@@ -158,10 +162,15 @@ const ReturnSettlementDialog = ({ open, returnNote, onClose, onSettled }) => {
           <ToggleButton value="refund">
             <RefundIcon fontSize="small" sx={{ mr: 0.5 }} /> Pay the customer
           </ToggleButton>
-          <ToggleButton value="store_credit">
+          <ToggleButton value="store_credit" disabled={isWalkIn}>
             <CreditIcon fontSize="small" sx={{ mr: 0.5 }} /> Keep as store credit
           </ToggleButton>
         </ToggleButtonGroup>
+        {isWalkIn && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: -1, mb: 2 }}>
+            Walk-in customers share one account, so their returns are always refunded.
+          </Typography>
+        )}
 
         <Alert severity="info" sx={{ mb: 2 }}>
           {mode === 'refund'
