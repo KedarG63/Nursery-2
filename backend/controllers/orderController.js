@@ -66,6 +66,7 @@ const createOrder = async (req, res) => {
 
     if (customerResult.rows.length === 0) {
       return res.status(404).json({
+      await client.query('ROLLBACK');
         success: false,
         message: 'Customer not found',
       });
@@ -75,6 +76,7 @@ const createOrder = async (req, res) => {
 
     if (customer.status !== 'active') {
       return res.status(400).json({
+      await client.query('ROLLBACK');
         success: false,
         message: `Customer status is ${customer.status}`,
       });
@@ -91,6 +93,7 @@ const createOrder = async (req, res) => {
 
       if (addressResult.rows.length === 0) {
         return res.status(400).json({
+        await client.query('ROLLBACK');
           success: false,
           message: 'Delivery address not found or does not belong to customer',
         });
@@ -112,6 +115,7 @@ const createOrder = async (req, res) => {
 
       if (skuResult.rows.length === 0) {
         return res.status(404).json({
+        await client.query('ROLLBACK');
           success: false,
           message: `SKU ${item.sku_id} not found`,
         });
@@ -121,6 +125,7 @@ const createOrder = async (req, res) => {
 
       if (!sku.active) {
         return res.status(400).json({
+        await client.query('ROLLBACK');
           success: false,
           message: `SKU ${sku.sku_code} is not active`,
         });
@@ -272,6 +277,7 @@ const createOrder = async (req, res) => {
 
         if (totalAmount > availableCredit) {
           return res.status(409).json({
+          await client.query('ROLLBACK');
             success: false,
             message: 'Credit limit exceeded',
             details: {
@@ -284,6 +290,7 @@ const createOrder = async (req, res) => {
         }
       } else {
         return res.status(400).json({
+        await client.query('ROLLBACK');
           success: false,
           message: 'Customer does not have credit facility',
         });
@@ -736,6 +743,7 @@ const updateOrderStatus = async (req, res) => {
     // An order with an accepted customer return was genuinely sold and partly
     // given back; cancelling it would erase that sale. The return module is the
     // way to un-sell units. (trg_guard_order_item_with_returns enforces this in
+      await client.query('ROLLBACK');
     // the database too — checked here first so the user gets a clear message.)
     if (status === 'cancelled') {
       const blocked = await orderHasAcceptedReturns(client, id);
@@ -746,6 +754,7 @@ const updateOrderStatus = async (req, res) => {
           message: 'This order has an accepted customer return and cannot be cancelled. Record a return for the remaining items instead.',
         });
       }
+      await client.query('ROLLBACK');
     }
 
     // Update order status

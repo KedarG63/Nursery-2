@@ -41,6 +41,7 @@ const createVehicle = async (req, res) => {
     const checkResult = await client.query(checkQuery, [registrationNumber]);
 
     if (checkResult.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({
         success: false,
         message: 'Vehicle with this registration number already exists'
@@ -258,6 +259,7 @@ const updateVehicle = async (req, res) => {
     const checkResult = await client.query(checkQuery, [id]);
 
     if (checkResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
@@ -276,6 +278,7 @@ const updateVehicle = async (req, res) => {
       ]);
 
       if (dupCheckResult.rows.length > 0) {
+        await client.query('ROLLBACK');
         return res.status(409).json({
           success: false,
           message: 'Another vehicle with this registration number already exists'
@@ -318,6 +321,7 @@ const updateVehicle = async (req, res) => {
     });
 
     if (fields.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'No valid fields to update'
@@ -372,6 +376,7 @@ const deleteVehicle = async (req, res) => {
     const checkResult = await client.query(checkQuery, [id]);
 
     if (checkResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
@@ -380,6 +385,7 @@ const deleteVehicle = async (req, res) => {
 
     // Check if vehicle is currently in use
     if (checkResult.rows[0].status === 'in_use') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'Cannot delete vehicle that is currently in use'

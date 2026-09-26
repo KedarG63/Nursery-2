@@ -91,6 +91,7 @@ const markArrival = async (req, res) => {
     );
 
     if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Stop not found'
@@ -100,6 +101,7 @@ const markArrival = async (req, res) => {
     const stop = stopCheck.rows[0];
 
     if (stop.driver_id !== driverId) {
+      await client.query('ROLLBACK');
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this stop'
@@ -107,6 +109,7 @@ const markArrival = async (req, res) => {
     }
 
     if (stop.status !== 'pending' && stop.status !== 'in_transit') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Cannot mark arrival for stop with status: ${stop.status}`
@@ -171,6 +174,7 @@ const markDelivered = async (req, res) => {
     );
 
     if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Stop not found'
@@ -180,6 +184,7 @@ const markDelivered = async (req, res) => {
     const stop = stopCheck.rows[0];
 
     if (stop.driver_id !== driverId) {
+      await client.query('ROLLBACK');
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this stop'
@@ -187,6 +192,7 @@ const markDelivered = async (req, res) => {
     }
 
     if (stop.status === 'delivered') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'Stop already marked as delivered'
@@ -282,6 +288,7 @@ const uploadProof = async (req, res) => {
     );
 
     if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Stop not found'
@@ -291,6 +298,7 @@ const uploadProof = async (req, res) => {
     const stop = stopCheck.rows[0];
 
     if (stop.driver_id !== driverId) {
+      await client.query('ROLLBACK');
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to upload proof for this stop'

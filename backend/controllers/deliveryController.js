@@ -50,6 +50,7 @@ const createRoute = async (req, res) => {
     const ordersResult = await client.query(ordersQuery, [orderIds]);
 
     if (ordersResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'No valid orders found'
@@ -57,6 +58,7 @@ const createRoute = async (req, res) => {
     }
 
     if (ordersResult.rows.length !== orderIds.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'Some orders are invalid or already processed'
@@ -77,6 +79,7 @@ const createRoute = async (req, res) => {
     // Check if all orders have valid coordinates
     const invalidCoords = stops.filter(s => s.latitude === 0 || s.longitude === 0);
     if (invalidCoords.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Orders with missing coordinates: ${invalidCoords.map(s => s.orderId).join(', ')}`
@@ -364,6 +367,7 @@ const assignRoute = async (req, res) => {
     );
 
     if (routeCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Route not found'
@@ -373,6 +377,7 @@ const assignRoute = async (req, res) => {
     const route = routeCheck.rows[0];
 
     if (route.status !== 'planned') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Cannot assign route with status: ${route.status}`
@@ -389,6 +394,7 @@ const assignRoute = async (req, res) => {
     );
 
     if (driverCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Driver not found or not authorized for deliveries'
@@ -402,6 +408,7 @@ const assignRoute = async (req, res) => {
     );
 
     if (vehicleCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
@@ -468,6 +475,7 @@ const startRoute = async (req, res) => {
     );
 
     if (routeCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Route not found'
@@ -477,6 +485,7 @@ const startRoute = async (req, res) => {
     const route = routeCheck.rows[0];
 
     if (route.status !== 'assigned') {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `Cannot start route with status: ${route.status}`
