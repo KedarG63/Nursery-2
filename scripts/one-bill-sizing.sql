@@ -116,3 +116,20 @@ SELECT
   (SELECT COUNT(*) FROM led WHERE NOT EXISTS (SELECT 1 FROM payments q WHERE q.id = led.source_id)) AS book_entries_with_no_payment
 FROM payments p
 LEFT JOIN led ON led.source_id = p.id;
+
+\echo '=== 6. Orders marked paid with NO payment record behind the amount ==='
+\echo '    (Phase 1 keeps these as paid, records each as a flagged adjustment, and lists them for review)'
+SELECT COUNT(*) AS orders, COALESCE(SUM(o.paid_amount - rows_paid.paid), 0) AS unexplained_paid
+FROM orders o
+CROSS JOIN LATERAL (
+  SELECT COALESCE(SUM(p.amount - COALESCE(p.refund_amount, 0)), 0) AS paid
+  FROM payments p
+  WHERE p.order_id = o.id AND p.deleted_at IS NULL AND p.status IN ('success', 'refunded')
+) rows_paid
+WHERE o.deleted_at IS NULL
+  AND o.paid_amount > rows_paid.paid + 0.005;
+
+\echo '=== 7. How payments were recorded (a mock gateway in production records payments that never arrived) ==='
+SELECT payment_gateway, status, COUNT(*) AS payments, SUM(amount) AS amount
+FROM payments WHERE deleted_at IS NULL
+GROUP BY 1, 2 ORDER BY 1, 2;
