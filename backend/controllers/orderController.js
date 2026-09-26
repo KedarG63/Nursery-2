@@ -8,7 +8,7 @@ const pool = require('../config/database');
 const lotAllocationService = require('../services/lotAllocationService');
 const { isValidStatusTransition } = require('../validators/orderValidator');
 const notificationEvents = require('../events/notificationEvents');
-const { postCustomerPaymentToLedger } = require('./paymentController');
+const { postCustomerPaymentToLedger, assertAccountNamed } = require('./paymentController');
 const bills = require('../services/saleBillService');
 
 // Tax rate configuration (0% - GST exempt)
@@ -372,6 +372,15 @@ const createOrder = async (req, res) => {
           message: `₹${paidNow.toFixed(2)} received is more than this order's total of ₹${Number(totalAmount).toFixed(2)}. `
             + 'Record the order total now. If extra charges such as transport were collected, add them on the invoice and record the rest there.',
         });
+      }
+      // Money that lands in a bank must name the account, or the ledger
+      // posting skips it and it appears in no Bank Ledger.
+      try {
+        await assertAccountNamed(client, payment_method, bank_account_id, cash_account_id);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        if (bills.respondIfBillError(res, err)) return;
+        throw err;
       }
       const cappedPaid = paidNow;
       const entryDate = order_date || new Date().toISOString().split('T')[0];

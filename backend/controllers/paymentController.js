@@ -21,6 +21,25 @@ function mockGatewayInProduction() {
     && String(PaymentGateway.getProviderName() || '').toLowerCase() === 'mock';
 }
 
+/**
+ * Money received must be traceable to where it went: a bank method needs an
+ * active bank account; a named cash drawer must exist (none named = the
+ * primary drawer). Throws a SaleBillError so callers answer with a message.
+ */
+async function assertAccountNamed(client, method, bankAccountId, cashAccountId) {
+  if (BANK_METHODS.includes(method)) {
+    if (!bankAccountId) {
+      throw new bills.SaleBillError(400,
+        'Choose the bank account this payment went into — without it the payment would be counted as received but appear in no Bank Ledger.');
+    }
+    const b = await client.query(`SELECT 1 FROM bank_accounts WHERE id = $1 AND is_active = true`, [bankAccountId]);
+    if (b.rows.length === 0) throw new bills.SaleBillError(400, 'Bank account not found or inactive');
+  } else if (method === 'cash' && cashAccountId) {
+    const c = await client.query(`SELECT 1 FROM cash_accounts WHERE id = $1 AND is_active = true`, [cashAccountId]);
+    if (c.rows.length === 0) throw new bills.SaleBillError(400, 'Cash account not found or inactive');
+  }
+}
+
 // Primary cash drawer (used when a cash payment doesn't specify one).
 async function resolvePrimaryCashAccount(client) {
   const r = await client.query(
@@ -510,6 +529,13 @@ const recordOfflinePayment = async (req, res) => {
     const paymentAmount = Math.round(parseFloat(amount) * 100) / 100;
     const bill = await bills.getSaleBill(client, order_id);
     bills.assertCanReceive(bill, paymentAmount);
+
+    // Money that lands in a bank must name the account. Without one the
+    // ledger posting below skips it, and the payment counts as received while
+    // appearing in no Bank Ledger at all — how ₹10 lakh of production
+    // payments came to be missing from the books. The form already asks; this
+    // makes the server refuse too, whatever sends the request.
+    await assertAccountNamed(client, payment_method, bank_account_id, cash_account_id);
 
     // Recorded exactly as received — never silently capped. Anything beyond
     // the bill has already been refused above.
@@ -1424,4 +1450,6 @@ module.exports = {
   updatePayment,
   // Shared helper so order creation can record + post an at-sale payment atomically.
   postCustomerPaymentToLedger,
+  // Shared so every entry point applies the same "name the account" rule.
+  assertAccountNamed,
 };

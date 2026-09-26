@@ -243,3 +243,35 @@ checking something different or nothing. All nine now go through one module,
    (any `mock` gateway rows are payments that never arrived).
 2. `pg_dump` backup and check its size.
 3. build → up → migrate → hard-refresh → open Reconciliation.
+
+---
+
+## 8. Phase 0 — production measurements (2026-09-26)
+
+| Measure | Value |
+|---|---|
+| Sales / of which invoiced | 879 / 652 |
+| P&L counts (order totals) | ₹77,47,994.10 |
+| Actually billed | ₹83,56,624.80 |
+| **P&L understated by** | **₹6,08,630.70** — every month, Mar ₹66k to Aug ₹1.57 lakh |
+| **Sales over-collected** | **29, by ₹3,26,163** |
+| Same order, same amount recorded twice | 32 pairs, ₹2,74,145 |
+| **Payments not in Cash Book / Bank Ledger** | **113, ₹10,39,482.50**, latest 31 Aug — see diagnosis |
+| Payments on invoiced orders not shown on the invoice | 34 |
+| Payments applied to another order's invoice | 3 |
+| Invoices not linked to any order | 4, ₹42,620 (not in `sale_bills`; handle in Phase 2) |
+| Payments in the books twice / wrong amount / orphaned | 0 / 0 / 0 |
+| Refunds on customer payments | 0 |
+| Orders marked paid with no payment record | 0 — the backfill will insert nothing |
+| Gateway | all 1,063 payments manual — mock gateway never used |
+| Draft / void invoices among live ones | none |
+| True receivable vs app | ₹14,84,344 vs ₹14,88,271 — close in total only because errors in both directions offset |
+
+**Reading:** the books never double-post a payment; the duplicates are duplicate *payment
+records*, each posted once, so the Cash Book / Bank Ledger include them. The ₹10.4 lakh "not in
+the books" must be split before it means anything — some of it may predate the ledgers' opening
+balances, which already include it. `scripts/one-bill-diagnose.sql` does that split.
+
+**Added to Phase 1 because of this:** the Payments page and order creation now refuse a
+UPI / card / bank payment with no bank account named. The screens already asked for one; the
+server did not insist, and such a payment is counted as received but posted to no ledger.
